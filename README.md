@@ -30,8 +30,25 @@
 ### Web服务器配置
 - `Kestrel.Endpoints.Http.Url`: Web API监听地址
 
+### DICOM高级配置
+- `Advanced.ValidateCallingAE`: 是否验证调用方AE
+- `Advanced.AllowedCallingAEs`: 允许的调用方AE列表
+- `Advanced.ConcurrentStoreLimit`: 并发存储限制（0表示自动使用CPU核心数 * 2）
+- `Advanced.TempFileCleanupDelay`: 临时文件清理延迟（秒）
+
+### Swagger配置
+- `Swagger.Enabled`: 是否启用Swagger
+- `Swagger.Title`: API文档标题
+- `Swagger.Version`: API版本
+- `Swagger.Description`: API描述
+
 ## API接口
 
++ API文档可以通过Swagger UI访问：
++ ```
++ http://localhost:5000/swagger
++ ```
++ 
 ### 获取服务器状态
 ```
 GET /api/dicom/status

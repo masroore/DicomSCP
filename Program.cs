@@ -4,8 +4,13 @@ using Serilog.Events;
 using Serilog.Filters;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 获取配置
+var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
+    ?? new DicomSettings();
 
 // 配置日志
 var logSettings = builder.Configuration
@@ -47,7 +52,6 @@ if (logSettings.EnableFileLog)
 }
 
 Log.Logger = logConfig.CreateLogger();
-
 builder.Host.UseSerilog();
 
 // 添加日志服务
@@ -57,18 +61,31 @@ builder.Services.AddLogging(loggingBuilder =>
 // 添加服务
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// 配置 Swagger
+if (settings.Swagger.Enabled)
+{
+    builder.Services.AddSwaggerGen(c =>
+    {
+        c.SwaggerDoc(settings.Swagger.Version, new OpenApiInfo
+        {
+            Title = settings.Swagger.Title,
+            Version = settings.Swagger.Version,
+            Description = settings.Swagger.Description
+        });
+    });
+}
+
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
 builder.Services.AddSingleton<DicomServer>();
 
 // 配置 DICOM
-var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
-    ?? new DicomSettings();
 CStoreSCP.Configure(settings.StoragePath);
 
-// 优化线程池
-ThreadPool.SetMinThreads(Environment.ProcessorCount * 2, Environment.ProcessorCount);
-ThreadPool.SetMaxThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 2);
+// 优化线程池 - 基于CPU核心数
+int processorCount = Environment.ProcessorCount;
+ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 增加最小线程数
+ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加最大线程数
 
 var app = builder.Build();
 
@@ -78,12 +95,19 @@ await dicomServer.StartAsync();
 app.Lifetime.ApplicationStopping.Register(() => dicomServer.StopAsync().GetAwaiter().GetResult());
 
 // 配置中间件
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
 {
+    // Swagger 中间件应该在其他中间件之前
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{settings.Swagger.Title} {settings.Swagger.Version}");
+        // 可以设置为根路径
+        c.RoutePrefix = "swagger";
+    });
 }
 
+// 其他中间件
 app.UseAuthorization();
 app.MapControllers();
 

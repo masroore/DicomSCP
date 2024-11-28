@@ -4,6 +4,8 @@ using FellowOakDicom;
 using FellowOakDicom.Network;
 using Serilog;
 using ILogger = Serilog.ILogger;
+using Microsoft.Extensions.Options;
+using DicomSCP.Configuration;
 
 namespace DicomSCP.Services;
 
@@ -32,7 +34,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     private static string StoragePath = "./received_files";
 
-    // 修改为实例级别的信号量和文件锁，以便能够正确释放
+    private readonly DicomSettings _settings;
     private readonly SemaphoreSlim _concurrentLimit;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks;
     private readonly ILogger _logger = Log.ForContext<CStoreSCP>();
@@ -47,10 +49,16 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         INetworkStream stream, 
         Encoding fallbackEncoding, 
         Microsoft.Extensions.Logging.ILogger log, 
-        DicomServiceDependencies dependencies)
+        DicomServiceDependencies dependencies,
+        IOptions<DicomSettings> settings)
         : base(stream, fallbackEncoding, log, dependencies)
     {
-        _concurrentLimit = new SemaphoreSlim(Environment.ProcessorCount * 2);
+        _settings = settings.Value;
+        var advancedSettings = _settings.Advanced;
+        int concurrentLimit = advancedSettings.ConcurrentStoreLimit > 0 
+            ? advancedSettings.ConcurrentStoreLimit 
+            : Environment.ProcessorCount * 2;
+        _concurrentLimit = new SemaphoreSlim(concurrentLimit);
         _fileLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
     }
 
@@ -60,6 +68,19 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             "收到DICOM关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
             association.CalledAE, 
             association.CallingAE);
+
+        var advancedSettings = _settings.Advanced;
+        
+        // 应用验证配置
+        if (advancedSettings.ValidateCallingAE && 
+            !advancedSettings.AllowedCallingAEs.Contains(association.CallingAE))
+        {
+            _logger.Warning("拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+            return SendAssociationRejectAsync(
+                DicomRejectResult.Permanent,
+                DicomRejectSource.ServiceUser,
+                DicomRejectReason.CallingAENotRecognized);
+        }
 
         foreach (var pc in association.PresentationContexts)
         {
@@ -209,6 +230,8 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         // 移动到最终位置
                         File.Move(tempFilePath, filePath);
                         _logger.Information("文件保存成功 - 路径: {FilePath}", filePath);
+                        // 启动异步清理
+                        _ = Task.Run(() => CleanupTempFileAsync(tempFilePath));  // 使用 Task.Run 避免阻塞
                         return new DicomCStoreResponse(request, DicomStatus.Success);
                     }
                     catch (Exception ex)
@@ -331,5 +354,26 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     ~CStoreSCP()
     {
         Dispose(false);
+    }
+
+    private async Task CleanupTempFileAsync(string tempFilePath)
+    {
+        var advancedSettings = _settings.Advanced;
+        if (advancedSettings.TempFileCleanupDelay > 0)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(advancedSettings.TempFileCleanupDelay));
+                if (File.Exists(tempFilePath))
+                {
+                    File.Delete(tempFilePath);
+                    _logger.Debug("清理临时文件: {TempFile}", tempFilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "清理临时文件失败: {TempFile}", tempFilePath);
+            }
+        }
     }
 } 

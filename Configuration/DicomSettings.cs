@@ -6,7 +6,7 @@ namespace DicomSCP.Configuration;
 public class DicomSettings
 {
     [Required]
-    [RegularExpression(@"^[A-Za-z0-9\-_]{1,16}$", ErrorMessage = "AE Title must be 1-16 characters and contain only letters, numbers, hyphen and underscore")]
+    [RegularExpression(@"^[A-Za-z0-9\-_]{1,16}$")]
     public string AeTitle { get; set; } = "STORESCP";
 
     [Range(1, 65535)]
@@ -15,13 +15,11 @@ public class DicomSettings
     [Required]
     public string StoragePath { get; set; } = "./received_files";
 
-    public int MaxPDULength { get; set; } = 16384;
-
-    public bool ValidateCallingAE { get; set; } = false;
-
-    public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
-
     public LogSettings Logging { get; set; } = new();
+
+    public AdvancedSettings Advanced { get; set; } = new();
+
+    public SwaggerSettings Swagger { get; set; } = new();
 }
 
 public class LogSettings
@@ -31,4 +29,20 @@ public class LogSettings
     public LogEventLevel FileLogLevel { get; set; } = LogEventLevel.Debug;
     public int RetainedDays { get; set; } = 31;
     public string LogPath { get; set; } = "logs";
+}
+
+public class AdvancedSettings
+{
+    public bool ValidateCallingAE { get; set; } = false;
+    public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
+    public int ConcurrentStoreLimit { get; set; } = 8;
+    public int TempFileCleanupDelay { get; set; } = 300;
+}
+
+public class SwaggerSettings
+{
+    public bool Enabled { get; set; } = true;
+    public string Title { get; set; } = "DICOM SCP API";
+    public string Version { get; set; } = "v1";
+    public string Description { get; set; } = "DICOM SCP服务器的REST API";
 } 
