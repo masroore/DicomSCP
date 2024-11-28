@@ -4,13 +4,20 @@ using DicomSCP.Models;
 using FellowOakDicom;
 using Microsoft.Extensions.Logging;
 using System.IO;
+using System.Collections.Concurrent;
+using System.Threading;
+using Microsoft.Extensions.Configuration;
 
 namespace DicomSCP.Data;
 
-public class DicomRepository
+public class DicomRepository : IDisposable
 {
     private readonly string _connectionString;
     private readonly ILogger<DicomRepository> _logger;
+    private readonly ConcurrentQueue<(DicomDataset Dataset, string FilePath)> _dataQueue = new();
+    private readonly int _batchSize = 50;
+    private readonly SemaphoreSlim _processSemaphore = new(1, 1);
+    private readonly Timer _processTimer;
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
     {
@@ -18,19 +25,16 @@ public class DicomRepository
             ?? "Data Source=dicom.db";
         _logger = logger;
 
-        var dbPath = new SqliteConnectionStringBuilder(_connectionString).DataSource;
-        var dbDirectory = Path.GetDirectoryName(dbPath);
-        
-        _logger.LogInformation("数据库路径: {DbPath}", dbPath);
-        
-        if (!string.IsNullOrEmpty(dbDirectory))
-        {
-            Directory.CreateDirectory(dbDirectory);
-            _logger.LogInformation("确保数据库目录存在: {DbDirectory}", dbDirectory);
-        }
-
         InitializeDatabase();
-        _logger.LogInformation("数据库初始化完成");
+
+        // 创建定时器，每5秒检查一次队列
+        _processTimer = new Timer(async _ => 
+        {
+            if (_dataQueue.Count > 0)
+            {
+                await ProcessBatchAsync();
+            }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private void InitializeDatabase()
@@ -78,110 +82,141 @@ public class DicomRepository
         ");
     }
 
+    private static class SqlQueries
+    {
+        public const string InsertPatient = @"
+            INSERT OR IGNORE INTO Patients 
+            (PatientId, PatientName, PatientBirthDate, PatientSex, CreateTime)
+            VALUES (@PatientId, @PatientName, @PatientBirthDate, @PatientSex, @CreateTime)";
+
+        public const string InsertStudy = @"
+            INSERT OR IGNORE INTO Studies 
+            (StudyInstanceUid, PatientId, StudyDate, StudyTime, StudyDescription, AccessionNumber, CreateTime)
+            VALUES (@StudyInstanceUid, @PatientId, @StudyDate, @StudyTime, @StudyDescription, @AccessionNumber, @CreateTime)";
+
+        public const string InsertSeries = @"
+            INSERT OR IGNORE INTO Series 
+            (SeriesInstanceUid, StudyInstanceUid, Modality, SeriesNumber, SeriesDescription, CreateTime)
+            VALUES (@SeriesInstanceUid, @StudyInstanceUid, @Modality, @SeriesNumber, @SeriesDescription, @CreateTime)";
+
+        public const string InsertInstance = @"
+            INSERT OR IGNORE INTO Instances 
+            (SopInstanceUid, SeriesInstanceUid, SopClassUid, InstanceNumber, FilePath, CreateTime)
+            VALUES (@SopInstanceUid, @SeriesInstanceUid, @SopClassUid, @InstanceNumber, @FilePath, @CreateTime)";
+    }
+
     public async Task SaveDicomDataAsync(DicomDataset dataset, string filePath)
     {
-        using var connection = new SqliteConnection(_connectionString);
+        _dataQueue.Enqueue((dataset, filePath));
         
+        // 达到批量大小时立即处理
+        if (_dataQueue.Count >= _batchSize)
+        {
+            await ProcessBatchAsync();
+        }
+    }
+
+    private async Task ProcessBatchAsync()
+    {
+        await _processSemaphore.WaitAsync();
         try
         {
-            // 先打开连接
+            if (_dataQueue.IsEmpty) return;
+
+            using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
-            
-            // 然后开始事务
             using var transaction = await connection.BeginTransactionAsync();
 
             try
             {
-                // 保存Patient信息
-                var patient = new Patient
+                var batchData = new List<(DicomDataset Dataset, string FilePath)>();
+                while (_dataQueue.TryDequeue(out var item) && batchData.Count < _batchSize)
                 {
-                    PatientId = dataset.GetSingleValue<string>(DicomTag.PatientID),
-                    PatientName = dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty),
-                    PatientBirthDate = dataset.GetSingleValueOrDefault<string>(DicomTag.PatientBirthDate, string.Empty),
-                    PatientSex = dataset.GetSingleValueOrDefault<string>(DicomTag.PatientSex, string.Empty),
-                    CreateTime = DateTime.UtcNow
-                };
+                    batchData.Add(item);
+                }
 
-                _logger.LogInformation("正在保存Patient信息 - PatientId: {PatientId}", patient.PatientId);
-
-                await connection.ExecuteAsync(@"
-                    INSERT OR IGNORE INTO Patients 
-                    (PatientId, PatientName, PatientBirthDate, PatientSex, CreateTime)
-                    VALUES (@PatientId, @PatientName, @PatientBirthDate, @PatientSex, @CreateTime)",
-                    patient, transaction);
-
-                // 保存Study信息
-                var study = new Study
+                if (batchData.Count > 0)
                 {
-                    StudyInstanceUid = dataset.GetSingleValue<string>(DicomTag.StudyInstanceUID),
-                    PatientId = patient.PatientId,
-                    StudyDate = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, string.Empty),
-                    StudyTime = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyTime, string.Empty),
-                    StudyDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDescription, string.Empty),
-                    AccessionNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
-                    CreateTime = DateTime.UtcNow
-                };
+                    _logger.LogInformation("开始批量保存 - 数量: {Count}", batchData.Count);
 
-                _logger.LogInformation("正在保存Study信息 - StudyInstanceUid: {StudyInstanceUid}", study.StudyInstanceUid);
+                    var now = DateTime.UtcNow;
+                    var patients = new List<Patient>();
+                    var studies = new List<Study>();
+                    var series = new List<Series>();
+                    var instances = new List<Instance>();
 
-                await connection.ExecuteAsync(@"
-                    INSERT OR IGNORE INTO Studies 
-                    (StudyInstanceUid, PatientId, StudyDate, StudyTime, StudyDescription, AccessionNumber, CreateTime)
-                    VALUES (@StudyInstanceUid, @PatientId, @StudyDate, @StudyTime, @StudyDescription, @AccessionNumber, @CreateTime)",
-                    study, transaction);
+                    foreach (var (dataset, filePath) in batchData)
+                    {
+                        var patientId = dataset.GetSingleValue<string>(DicomTag.PatientID);
+                        var studyInstanceUid = dataset.GetSingleValue<string>(DicomTag.StudyInstanceUID);
+                        var seriesInstanceUid = dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID);
 
-                // 保存Series信息
-                var series = new Series
-                {
-                    SeriesInstanceUid = dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID),
-                    StudyInstanceUid = study.StudyInstanceUid,
-                    Modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty),
-                    SeriesNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesNumber, string.Empty),
-                    SeriesDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesDescription, string.Empty),
-                    CreateTime = DateTime.UtcNow
-                };
+                        patients.Add(new Patient
+                        {
+                            PatientId = patientId,
+                            PatientName = dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty),
+                            PatientBirthDate = dataset.GetSingleValueOrDefault<string>(DicomTag.PatientBirthDate, string.Empty),
+                            PatientSex = dataset.GetSingleValueOrDefault<string>(DicomTag.PatientSex, string.Empty),
+                            CreateTime = now
+                        });
 
-                await connection.ExecuteAsync(@"
-                    INSERT OR IGNORE INTO Series 
-                    (SeriesInstanceUid, StudyInstanceUid, Modality, SeriesNumber, SeriesDescription, CreateTime)
-                    VALUES (@SeriesInstanceUid, @StudyInstanceUid, @Modality, @SeriesNumber, @SeriesDescription, @CreateTime)",
-                    series, transaction);
+                        studies.Add(new Study
+                        {
+                            StudyInstanceUid = studyInstanceUid,
+                            PatientId = patientId,
+                            StudyDate = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, string.Empty),
+                            StudyTime = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyTime, string.Empty),
+                            StudyDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDescription, string.Empty),
+                            AccessionNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
+                            CreateTime = now
+                        });
 
-                // 保存Instance信息
-                var instance = new Instance
-                {
-                    SopInstanceUid = dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID),
-                    SeriesInstanceUid = series.SeriesInstanceUid,
-                    SopClassUid = dataset.GetSingleValue<string>(DicomTag.SOPClassUID),
-                    InstanceNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.InstanceNumber, string.Empty),
-                    FilePath = filePath,
-                    CreateTime = DateTime.UtcNow
-                };
+                        series.Add(new Series
+                        {
+                            SeriesInstanceUid = seriesInstanceUid,
+                            StudyInstanceUid = studyInstanceUid,
+                            Modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty),
+                            SeriesNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesNumber, string.Empty),
+                            SeriesDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesDescription, string.Empty),
+                            CreateTime = now
+                        });
 
-                await connection.ExecuteAsync(@"
-                    INSERT OR IGNORE INTO Instances 
-                    (SopInstanceUid, SeriesInstanceUid, SopClassUid, InstanceNumber, FilePath, CreateTime)
-                    VALUES (@SopInstanceUid, @SeriesInstanceUid, @SopClassUid, @InstanceNumber, @FilePath, @CreateTime)",
-                    instance, transaction);
+                        instances.Add(new Instance
+                        {
+                            SopInstanceUid = dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID),
+                            SeriesInstanceUid = seriesInstanceUid,
+                            SopClassUid = dataset.GetSingleValue<string>(DicomTag.SOPClassUID),
+                            InstanceNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.InstanceNumber, string.Empty),
+                            FilePath = filePath,
+                            CreateTime = now
+                        });
+                    }
 
-                await transaction.CommitAsync();
-                _logger.LogInformation("已成功保存DICOM数据到数据库 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
+                    await connection.ExecuteAsync(SqlQueries.InsertPatient, patients, transaction);
+                    await connection.ExecuteAsync(SqlQueries.InsertStudy, studies, transaction);
+                    await connection.ExecuteAsync(SqlQueries.InsertSeries, series, transaction);
+                    await connection.ExecuteAsync(SqlQueries.InsertInstance, instances, transaction);
+
+                    await transaction.CommitAsync();
+                    _logger.LogInformation("批量保存完成 - 总数: {Count}", instances.Count);
+                }
             }
-            catch (Exception innerEx)
+            catch (Exception ex)
             {
-                _logger.LogError(innerEx, "执行数据库事务失败 - 错误详情: {ErrorMessage}", innerEx.Message);
                 await transaction.RollbackAsync();
+                _logger.LogError(ex, "批量保存失败");
                 throw;
             }
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(ex, "保存DICOM数据到数据库失败 - 错误详情: {ErrorMessage}", ex.Message);
-            if (ex.InnerException != null)
-            {
-                _logger.LogError("内部错误: {InnerError}", ex.InnerException.Message);
-            }
-            throw;
+            _processSemaphore.Release();
         }
+    }
+
+    public void Dispose()
+    {
+        _processTimer?.Dispose();
+        _processSemaphore?.Dispose();
     }
 }
