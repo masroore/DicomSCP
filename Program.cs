@@ -1,5 +1,6 @@
 using FellowOakDicom;
 using Serilog;
+using System.Threading;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +28,10 @@ var dicomSettings = builder.Configuration
     .GetSection("DicomSettings")
     .Get<DicomSettings>() ?? new DicomSettings();
 CStoreSCP.Configure(dicomSettings.StoragePath, dicomSettings.AeTitle);
+
+// 配置线程池
+ThreadPool.SetMinThreads(Environment.ProcessorCount * 2, Environment.ProcessorCount);
+ThreadPool.SetMaxThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 2);
 
 var app = builder.Build();
 
