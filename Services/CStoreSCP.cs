@@ -33,6 +33,8 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     };
 
     private static string StoragePath = "./received_files";
+    private static string TempPath = "./temp_files";
+    private static DicomSettings? GlobalSettings;
 
     private readonly DicomSettings _settings;
     private readonly SemaphoreSlim _concurrentLimit;
@@ -40,9 +42,24 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     private readonly ILogger _logger = Log.ForContext<CStoreSCP>();
     private bool _disposed;
 
-    public static void Configure(string storagePath)
+    // 支持的压缩传输语法映射
+    private static readonly Dictionary<string, DicomTransferSyntax> _compressionSyntaxes = new()
+    {
+        { "JPEG2000Lossless", DicomTransferSyntax.JPEG2000Lossless },
+        { "JPEGLSLossless", DicomTransferSyntax.JPEGLSLossless },
+        { "RLELossless", DicomTransferSyntax.RLELossless },
+        { "JPEG2000Lossy", DicomTransferSyntax.JPEG2000Lossy },
+        { "JPEGProcess14", DicomTransferSyntax.JPEGProcess14SV1 }
+    };
+
+    public static void Configure(string storagePath, string tempPath, DicomSettings settings)
     {
         StoragePath = storagePath;
+        TempPath = tempPath;
+        GlobalSettings = settings;
+        
+        // 确保临时目录存在
+        Directory.CreateDirectory(tempPath);
     }
 
     public CStoreSCP(
@@ -53,8 +70,14 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         IOptions<DicomSettings> settings)
         : base(stream, fallbackEncoding, log, dependencies)
     {
-        _settings = settings.Value;
+        _settings = GlobalSettings ?? settings.Value;
         var advancedSettings = _settings.Advanced;
+
+        // 添加配置检查日志
+        _logger.Debug("加载配置 - 压缩: {Enabled}, 格式: {Format}", 
+            advancedSettings.EnableCompression,
+            advancedSettings.PreferredTransferSyntax);
+
         int concurrentLimit = advancedSettings.ConcurrentStoreLimit > 0 
             ? advancedSettings.ConcurrentStoreLimit 
             : Environment.ProcessorCount * 2;
@@ -155,17 +178,77 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         }
     }
 
+    private async Task<DicomFile> CompressImageAsync(DicomFile file)
+    {
+        try
+        {
+            var advancedSettings = _settings.Advanced;
+            if (!advancedSettings.EnableCompression)
+            {
+                return file;
+            }
+
+            // 检查是否是图像
+            if (file.Dataset.InternalTransferSyntax.IsEncapsulated ||
+                !IsImageStorage(file.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID)))
+            {
+                return file;
+            }
+
+            // 检查是否支持指定的压缩语法
+            if (!_compressionSyntaxes.TryGetValue(advancedSettings.PreferredTransferSyntax, 
+                out var targetSyntax))
+            {
+                _logger.Warning("不支持的压缩语法: {Syntax}", advancedSettings.PreferredTransferSyntax);
+                return file;
+            }
+
+            // 如果已经是目标格式，则不需要转换
+            if (file.Dataset.InternalTransferSyntax == targetSyntax)
+            {
+                return file;
+            }
+
+            // 在后台线程执行压缩操作
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    _logger.Information(
+                        "压缩图像 - 原格式: {OriginalSyntax} -> 新格式: {NewSyntax}", 
+                        file.Dataset.InternalTransferSyntax.UID.Name,
+                        targetSyntax.UID.Name);
+
+                    var compressedFile = file.Clone();
+                    compressedFile.FileMetaInfo.TransferSyntax = targetSyntax;
+                    return compressedFile;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "图像压缩失败");
+                    return file;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "图像压缩失败");
+            return file;
+        }
+    }
+
     public async Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
     {
+        string? tempFilePath = null;
         try
         {
             // 记录基本信息
             _logger.Information(
-                "接收DICOM文件 - 患者ID: {PatientId}, 研究: {StudyId}, 序列: {SeriesId}",
+                "接收DICOM文件 - 患者ID: {PatientId}, 研究: {StudyId}, 序列: {SeriesId}, 实例: {InstanceUid}",
                 request.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, "Unknown"),
                 request.Dataset.GetSingleValueOrDefault(DicomTag.StudyID, "Unknown"),
-                request.Dataset.GetSingleValueOrDefault(DicomTag.SeriesNumber, "Unknown")
-            );
+                request.Dataset.GetSingleValueOrDefault(DicomTag.SeriesNumber, "Unknown"),
+                request.SOPInstanceUID.UID);
 
             if (_disposed)
             {
@@ -173,6 +256,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             }
 
             SemaphoreSlim? fileLock = null;
+
             try
             {
                 await _concurrentLimit.WaitAsync();
@@ -196,79 +280,84 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
                 try
                 {
-                    var path = Path.Combine(StoragePath, studyUid, seriesUid);
+                    // 使用临时目录创建临时文件
+                    var tempFileName = $"{instanceUid}_temp_{Guid.NewGuid()}.dcm";
+                    tempFilePath = Path.Combine(TempPath, tempFileName);
 
-                    // 创建目录（如果不存在）
-                    if (!Directory.Exists(path))
-                    {
-                        Directory.CreateDirectory(path);
-                    }
+                    // 压缩图像
+                    var compressedFile = await CompressImageAsync(request.File);
 
-                    var filePath = Path.Combine(path, $"{instanceUid}.dcm");
-                    
-                    if (File.Exists(filePath))
+                    // 保存压缩后的文件
+                    await compressedFile.SaveAsync(tempFilePath);
+
+                    // 确保目标目录存在
+                    var targetPath = Path.Combine(StoragePath, studyUid, seriesUid);
+                    Directory.CreateDirectory(targetPath);
+                    var targetFilePath = Path.Combine(targetPath, $"{instanceUid}.dcm");
+
+                    if (File.Exists(targetFilePath))
                     {
-                        _logger.Warning("文件已存在 - 路径: {FilePath}", filePath);
+                        _logger.Warning("检测到重复图像 - 路径: {FilePath}", targetFilePath);
+                        File.Delete(tempFilePath);
                         return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
                     }
 
-                    // 使用临时文件进行写入
-                    var tempFilePath = Path.Combine(path, $"{instanceUid}_temp_{Guid.NewGuid()}.dcm");
-                    try
-                    {
-                        // 保存文件
-                        await request.File.SaveAsync(tempFilePath);
+                    // 在保存前记录目标路径
+                    _logger.Information(
+                        "开始归档 - 研究: {StudyUid}, 序列: {SeriesUid}, 实例: {InstanceUid}, 路径: {Path}",
+                        studyUid,
+                        seriesUid,
+                        instanceUid,
+                        targetFilePath);
 
-                        // 再次检查目标文件是否存在（防止并发）
-                        if (File.Exists(filePath))
-                        {
-                            File.Delete(tempFilePath);
-                            _logger.Warning("文件已被其他进程创建 - 路径: {FilePath}", filePath);
-                            return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
-                        }
+                    // 移动到最终位置
+                    File.Move(tempFilePath, targetFilePath);
 
-                        // 移动到最终位置
-                        File.Move(tempFilePath, filePath);
-                        _logger.Information("文件保存成功 - 路径: {FilePath}", filePath);
-                        // 启动异步清理
-                        _ = Task.Run(() => CleanupTempFileAsync(tempFilePath));  // 使用 Task.Run 避免阻塞
-                        return new DicomCStoreResponse(request, DicomStatus.Success);
-                    }
-                    catch (Exception ex)
-                    {
-                        // 清理临时文件
-                        if (File.Exists(tempFilePath))
-                        {
-                            File.Delete(tempFilePath);
-                        }
-                        _logger.Error(ex, "保存文件时发生错误 - 路径: {FilePath}", tempFilePath);
-                        throw;
-                    }
+                    // 保存成功后记录
+                    _logger.Information(
+                        "归档完成 - 实例: {InstanceUid}, 路径: {FilePath}, 大小: {Size:N0} 字节",
+                        instanceUid,
+                        targetFilePath,
+                        new FileInfo(targetFilePath).Length);
+
+                    return new DicomCStoreResponse(request, DicomStatus.Success);
                 }
                 finally
                 {
-                    fileLock.Release();
-                    // 清理不再使用的文件锁
-                    if (_fileLocks.TryRemove(instanceUid, out var removedLock))
+                    if (fileLock != null)
                     {
-                        removedLock.Dispose();
+                        fileLock.Release();
+                        if (_fileLocks.TryRemove(instanceUid, out var removedLock))
+                        {
+                            removedLock.Dispose();
+                        }
                     }
                 }
             }
             finally
             {
                 _concurrentLimit.Release();
-                // 确保在异常情况下也能释放文件锁
-                if (fileLock != null && _fileLocks.TryRemove(request.SOPInstanceUID.UID, out var lock2))
-                {
-                    lock2.Dispose();
-                }
             }
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "保存DICOM文件失败");
+            _logger.Error(ex, "保存DICOM文件失败 - 实例: {InstanceUid}", request.SOPInstanceUID.UID);
             throw;
+        }
+        finally
+        {
+            // 确保临时文件被清理
+            if (tempFilePath != null && File.Exists(tempFilePath))
+            {
+                try
+                {
+                    File.Delete(tempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "清理临时文件失败: {TempFile}", tempFilePath);
+                }
+            }
         }
     }
 
@@ -354,26 +443,5 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     ~CStoreSCP()
     {
         Dispose(false);
-    }
-
-    private async Task CleanupTempFileAsync(string tempFilePath)
-    {
-        var advancedSettings = _settings.Advanced;
-        if (advancedSettings.TempFileCleanupDelay > 0)
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(advancedSettings.TempFileCleanupDelay));
-                if (File.Exists(tempFilePath))
-                {
-                    File.Delete(tempFilePath);
-                    _logger.Debug("清理临时文件: {TempFile}", tempFilePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "清理临时文件失败: {TempFile}", tempFilePath);
-            }
-        }
     }
 } 

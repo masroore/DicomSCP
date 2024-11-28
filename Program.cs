@@ -76,11 +76,37 @@ if (settings.Swagger.Enabled)
     });
 }
 
-builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
+builder.Services.Configure<DicomSettings>(options =>
+{
+    options.AeTitle = settings.AeTitle;
+    options.Port = settings.Port;
+    options.StoragePath = settings.StoragePath;
+    options.TempPath = settings.TempPath;
+    options.Logging = settings.Logging;
+    options.Advanced = new AdvancedSettings
+    {
+        ValidateCallingAE = settings.Advanced.ValidateCallingAE,
+        AllowedCallingAEs = settings.Advanced.AllowedCallingAEs,
+        ConcurrentStoreLimit = settings.Advanced.ConcurrentStoreLimit,
+        EnableCompression = settings.Advanced.EnableCompression,
+        PreferredTransferSyntax = settings.Advanced.PreferredTransferSyntax
+    };
+    options.Swagger = settings.Swagger;
+});
+
+// 添加配置验证日志
+Log.Debug("配置已加载 - 压缩: {Enabled}, 格式: {Format}", 
+    settings.Advanced.EnableCompression,
+    settings.Advanced.PreferredTransferSyntax);
+
 builder.Services.AddSingleton<DicomServer>();
 
 // 配置 DICOM
-CStoreSCP.Configure(settings.StoragePath);
+CStoreSCP.Configure(
+    settings.StoragePath,
+    settings.TempPath,
+    settings  // 传递完整配置
+);
 
 // 优化线程池 - 基于CPU核心数
 int processorCount = Environment.ProcessorCount;

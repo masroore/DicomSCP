@@ -19,6 +19,7 @@
 - `AeTitle`: DICOM服务器的AE标题，长度1-16字符，只能包含字母、数字、连字符和下划线
 - `Port`: DICOM服务器监听端口，范围1-65535
 - `StoragePath`: DICOM文件存储路径，支持相对或绝对路径
+- `TempPath`: 临时文件存储路径，用于文件传输过程中的临时存储
 
 ### 日志配置
 - `Logging.EnableConsoleLog`: 是否启用控制台日志（仅显示服务状态变化和错误）
@@ -34,7 +35,8 @@
 - `Advanced.ValidateCallingAE`: 是否验证调用方AE
 - `Advanced.AllowedCallingAEs`: 允许的调用方AE列表
 - `Advanced.ConcurrentStoreLimit`: 并发存储限制（0表示自动使用CPU核心数 * 2）
-- `Advanced.TempFileCleanupDelay`: 临时文件清理延迟（秒）
+- `Advanced.EnableCompression`: 是否启用图像压缩存储
+- `Advanced.PreferredTransferSyntax`: 首选压缩格式（JPEG2000Lossless|JPEGLSLossless|RLELossless|JPEG2000Lossy|JPEGProcess14）
 
 ### Swagger配置
 - `Swagger.Enabled`: 是否启用Swagger

@@ -97,35 +97,33 @@ public class DicomController : ControllerBase
     [HttpPost("settings")]
     public IActionResult UpdateSettings([FromBody] DicomSettingsUpdate settings)
     {
-        try
+        if (_server.IsRunning)
         {
-            if (_server.IsRunning)
-            {
-                _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
-                    "更新配置", "失败", "服务器运行中");
-                return BadRequest("无法在服务器运行时更新配置");
-            }
+            _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
+                "更新配置", "失败", "服务器运行中");
+            return BadRequest("无法在服务器运行时更新配置");
+        }
 
-            if (!string.IsNullOrEmpty(settings.StoragePath))
+        if (!string.IsNullOrEmpty(settings.StoragePath))
+        {
+            try
             {
                 var path = Path.GetFullPath(settings.StoragePath);
                 Directory.CreateDirectory(path);
-                CStoreSCP.Configure(path);
+                CStoreSCP.Configure(path, _settings.TempPath, _settings);
                 _logger.Information("API操作 - 动作: {Action}, 状态: {Status}, 路径: {Path}", 
                     "更新配置", "成功", path);
                 return Ok("配置已更新");
             }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}, 路径: {Path}", 
+                    "更新配置", "异常", settings.StoragePath);
+                return BadRequest($"存储路径无效: {ex.Message}");
+            }
+        }
 
-            _logger.Information("API操作 - 动作: {Action}, 状态: {Status}", 
-                "更新配置", "无需更新");
-            return Ok("无需更新");
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}, 路径: {Path}", 
-                "更新配置", "异常", settings.StoragePath);
-            return BadRequest($"存储路径无效: {ex.Message}");
-        }
+        return Ok("无需更新");
     }
 }
 

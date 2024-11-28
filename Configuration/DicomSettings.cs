@@ -15,6 +15,9 @@ public class DicomSettings
     [Required]
     public string StoragePath { get; set; } = "./received_files";
 
+    [Required]
+    public string TempPath { get; set; } = "./temp_files";
+
     public LogSettings Logging { get; set; } = new();
 
     public AdvancedSettings Advanced { get; set; } = new();
@@ -35,8 +38,10 @@ public class AdvancedSettings
 {
     public bool ValidateCallingAE { get; set; } = false;
     public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
-    public int ConcurrentStoreLimit { get; set; } = 8;
-    public int TempFileCleanupDelay { get; set; } = 300;
+    public int ConcurrentStoreLimit { get; set; } = 0;
+    
+    public bool EnableCompression { get; set; } = false;
+    public string PreferredTransferSyntax { get; set; } = "JPEG2000Lossless";
 }
 
 public class SwaggerSettings
