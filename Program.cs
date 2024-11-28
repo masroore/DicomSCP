@@ -1,41 +1,39 @@
 using FellowOakDicom;
 using Serilog;
-using System.Threading;
+using DicomSCP.Configuration;
+using DicomSCP.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 配置Serilog
-Log.Logger = new LoggerConfiguration()
+// 配置日志
+builder.Host.UseSerilog((context, config) => config
     .WriteTo.Console()
-    .WriteTo.File("logs/dicom-scp-.txt", rollingInterval: RollingInterval.Day)
-    .CreateLogger();
-
-builder.Host.UseSerilog();
+    .WriteTo.File("logs/dicom-scp-.txt", rollingInterval: RollingInterval.Day));
 
 // 添加服务
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-// 注册DICOM服务
-builder.Services.Configure<DicomSettings>(
-    builder.Configuration.GetSection("DicomSettings"));
+builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
 builder.Services.AddSingleton<DicomServer>();
-builder.Services.AddHostedService<DicomBackgroundService>();
 
-// 配置 CStoreSCP
-var dicomSettings = builder.Configuration
-    .GetSection("DicomSettings")
-    .Get<DicomSettings>() ?? new DicomSettings();
-CStoreSCP.Configure(dicomSettings.StoragePath, dicomSettings.AeTitle);
+// 配置 DICOM
+var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
+    ?? new DicomSettings();
+CStoreSCP.Configure(settings.StoragePath);
 
-// 配置线程池
+// 优化线程池
 ThreadPool.SetMinThreads(Environment.ProcessorCount * 2, Environment.ProcessorCount);
 ThreadPool.SetMaxThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 2);
 
 var app = builder.Build();
 
-// 配置HTTP请求管道
+// 启动 DICOM 服务器
+var dicomServer = app.Services.GetRequiredService<DicomServer>();
+await dicomServer.StartAsync();
+app.Lifetime.ApplicationStopping.Register(() => dicomServer.StopAsync().GetAwaiter().GetResult());
+
+// 配置中间件
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -46,11 +44,4 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-app.Run();
-
-public class DicomSettings
-{
-    public string AeTitle { get; set; } = "STORESCP";
-    public int Port { get; set; } = 11112;
-    public string StoragePath { get; set; } = "./received_files";
-} 
+app.Run(); 
