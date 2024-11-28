@@ -2,6 +2,8 @@ using System.Text;
 using System.Collections.Concurrent;
 using FellowOakDicom;
 using FellowOakDicom.Network;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 namespace DicomSCP.Services;
 
@@ -33,6 +35,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     // 修改为实例级别的信号量和文件锁，以便能够正确释放
     private readonly SemaphoreSlim _concurrentLimit;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks;
+    private readonly ILogger _logger = Log.ForContext<CStoreSCP>();
     private bool _disposed;
 
     public static void Configure(string storagePath)
@@ -40,7 +43,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         StoragePath = storagePath;
     }
 
-    public CStoreSCP(INetworkStream stream, Encoding fallbackEncoding, ILogger log, DicomServiceDependencies dependencies)
+    public CStoreSCP(
+        INetworkStream stream, 
+        Encoding fallbackEncoding, 
+        Microsoft.Extensions.Logging.ILogger log, 
+        DicomServiceDependencies dependencies)
         : base(stream, fallbackEncoding, log, dependencies)
     {
         _concurrentLimit = new SemaphoreSlim(Environment.ProcessorCount * 2);
@@ -49,14 +56,17 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
     {
-        Logger.LogInformation($"收到关联请求 - Called AE: {association.CalledAE}, Calling AE: {association.CallingAE}");
+        _logger.Information(
+            "收到DICOM关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+            association.CalledAE, 
+            association.CallingAE);
 
         foreach (var pc in association.PresentationContexts)
         {
             if (pc.AbstractSyntax == DicomUID.Verification)
             {
                 pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                Logger.LogInformation("接受 C-ECHO 服务");
+                _logger.Information("DICOM服务 - 动作: {Action}, 类型: {Type}", "接受", "C-ECHO");
             }
             else if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)
             {
@@ -65,12 +75,14 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 if (isImageStorage)
                 {
                     pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);
-                    Logger.LogInformation($"接受图像存储服务: {pc.AbstractSyntax.Name}, 支持压缩传输");
+                    _logger.Information("DICOM服务 - 动作: {Action}, 类型: {Type}, 传输: {Transfer}", 
+                        "接受", pc.AbstractSyntax.Name, "支持压缩传输");
                 }
                 else
                 {
                     pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                    Logger.LogInformation($"接受非图像存储服务: {pc.AbstractSyntax.Name}, 仅支持基本传输");
+                    _logger.Information("接受非图像存储服务: {ServiceName}, {TransferType}", 
+                        pc.AbstractSyntax.Name, "仅支持基本传输");
                 }
             }
         }
@@ -101,123 +113,139 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public Task OnReceiveAssociationReleaseRequestAsync()
     {
-        Logger.LogInformation("收到关联释放请求");
+        _logger.Information("收到关联释放请求");
         return SendAssociationReleaseResponseAsync();
     }
 
     public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
     {
-        Logger.LogWarning($"收到中止请求 - 来源: {source}, 原因: {reason}");
+        _logger.Warning("收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
     }
 
     public void OnConnectionClosed(Exception? exception)
     {
         if (exception != null)
         {
-            Logger.LogError(exception, "连接异常关闭");
+            _logger.Error(exception, "连接异常关闭");
         }
         else
         {
-            Logger.LogInformation("连接正常关闭");
+            _logger.Information("连接正常关闭");
         }
     }
 
     public async Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
     {
-        if (_disposed)
-        {
-            return new DicomCStoreResponse(request, DicomStatus.ProcessingFailure);
-        }
-
-        SemaphoreSlim? fileLock = null;
         try
         {
-            await _concurrentLimit.WaitAsync();
+            // 记录基本信息
+            _logger.Information(
+                "接收DICOM文件 - 患者ID: {PatientId}, 研究: {StudyId}, 序列: {SeriesId}",
+                request.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, "Unknown"),
+                request.Dataset.GetSingleValueOrDefault(DicomTag.StudyID, "Unknown"),
+                request.Dataset.GetSingleValueOrDefault(DicomTag.SeriesNumber, "Unknown")
+            );
 
-            Logger.LogInformation($"收到 C-STORE 请求 - SOP Class: {request.SOPClassUID.Name}");
-
-            var validationResult = ValidateKeyDicomTags(request.Dataset);
-            if (!validationResult.IsValid)
+            if (_disposed)
             {
-                Logger.LogWarning($"DICOM标签验证失败: {validationResult.ErrorMessage}");
-                return new DicomCStoreResponse(request, DicomStatus.InvalidAttributeValue);
+                return new DicomCStoreResponse(request, DicomStatus.ProcessingFailure);
             }
 
-            var studyUid = request.Dataset.GetSingleValue<string>(DicomTag.StudyInstanceUID).Trim();
-            var seriesUid = request.Dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID).Trim();
-            var instanceUid = request.SOPInstanceUID.UID;
-
-            // 获取文件锁
-            fileLock = _fileLocks.GetOrAdd(instanceUid, _ => new SemaphoreSlim(1, 1));
-            await fileLock.WaitAsync();
-
+            SemaphoreSlim? fileLock = null;
             try
             {
-                var path = Path.Combine(StoragePath, studyUid, seriesUid);
+                await _concurrentLimit.WaitAsync();
 
-                // 创建目录（如果不存在）
-                if (!Directory.Exists(path))
+                _logger.Information("收到DICOM存储请求 - SOP Class: {SopClass}", request.SOPClassUID.Name);
+
+                var validationResult = ValidateKeyDicomTags(request.Dataset);
+                if (!validationResult.IsValid)
                 {
-                    Directory.CreateDirectory(path);
+                    _logger.Warning("DICOM标签验证失败 - 原因: {Reason}", validationResult.ErrorMessage);
+                    return new DicomCStoreResponse(request, DicomStatus.InvalidAttributeValue);
                 }
 
-                var filePath = Path.Combine(path, $"{instanceUid}.dcm");
-                
-                if (File.Exists(filePath))
-                {
-                    Logger.LogWarning($"文件已存在: {filePath}");
-                    return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
-                }
+                var studyUid = request.Dataset.GetSingleValue<string>(DicomTag.StudyInstanceUID).Trim();
+                var seriesUid = request.Dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID).Trim();
+                var instanceUid = request.SOPInstanceUID.UID;
 
-                // 使用临时文件进行写入
-                var tempFilePath = Path.Combine(path, $"{instanceUid}_temp_{Guid.NewGuid()}.dcm");
+                // 获取文件锁
+                fileLock = _fileLocks.GetOrAdd(instanceUid, _ => new SemaphoreSlim(1, 1));
+                await fileLock.WaitAsync();
+
                 try
                 {
-                    // 保存文件
-                    await request.File.SaveAsync(tempFilePath);
+                    var path = Path.Combine(StoragePath, studyUid, seriesUid);
 
-                    // 再次检查目标文件是否存在（防止并发）
+                    // 创建目录（如果不存在）
+                    if (!Directory.Exists(path))
+                    {
+                        Directory.CreateDirectory(path);
+                    }
+
+                    var filePath = Path.Combine(path, $"{instanceUid}.dcm");
+                    
                     if (File.Exists(filePath))
                     {
-                        File.Delete(tempFilePath);
-                        Logger.LogWarning($"文件已被其他进程创建: {filePath}");
+                        _logger.Warning("文件已存在 - 路径: {FilePath}", filePath);
                         return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
                     }
 
-                    // 移动到最终位置
-                    File.Move(tempFilePath, filePath);
-                    Logger.LogInformation($"文件已保存: {filePath}");
-                    return new DicomCStoreResponse(request, DicomStatus.Success);
-                }
-                catch (Exception ex)
-                {
-                    // 清理临时文件
-                    if (File.Exists(tempFilePath))
+                    // 使用临时文件进行写入
+                    var tempFilePath = Path.Combine(path, $"{instanceUid}_temp_{Guid.NewGuid()}.dcm");
+                    try
                     {
-                        File.Delete(tempFilePath);
+                        // 保存文件
+                        await request.File.SaveAsync(tempFilePath);
+
+                        // 再次检查目标文件是否存在（防止并发）
+                        if (File.Exists(filePath))
+                        {
+                            File.Delete(tempFilePath);
+                            _logger.Warning("文件已被其他进程创建 - 路径: {FilePath}", filePath);
+                            return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
+                        }
+
+                        // 移动到最终位置
+                        File.Move(tempFilePath, filePath);
+                        _logger.Information("文件保存成功 - 路径: {FilePath}", filePath);
+                        return new DicomCStoreResponse(request, DicomStatus.Success);
                     }
-                    Logger.LogError(ex, $"保存文件时发生错误: {tempFilePath}");
-                    throw;
+                    catch (Exception ex)
+                    {
+                        // 清理临时文件
+                        if (File.Exists(tempFilePath))
+                        {
+                            File.Delete(tempFilePath);
+                        }
+                        _logger.Error(ex, "保存文件时发生错误 - 路径: {FilePath}", tempFilePath);
+                        throw;
+                    }
+                }
+                finally
+                {
+                    fileLock.Release();
+                    // 清理不再使用的文件锁
+                    if (_fileLocks.TryRemove(instanceUid, out var removedLock))
+                    {
+                        removedLock.Dispose();
+                    }
                 }
             }
             finally
             {
-                fileLock.Release();
-                // 清理不再使用的文件锁
-                if (_fileLocks.TryRemove(instanceUid, out var removedLock))
+                _concurrentLimit.Release();
+                // 确保在异常情况下也能释放文件锁
+                if (fileLock != null && _fileLocks.TryRemove(request.SOPInstanceUID.UID, out var lock2))
                 {
-                    removedLock.Dispose();
+                    lock2.Dispose();
                 }
             }
         }
-        finally
+        catch (Exception ex)
         {
-            _concurrentLimit.Release();
-            // 确保在异常情况下也能释放文件锁
-            if (fileLock != null && _fileLocks.TryRemove(request.SOPInstanceUID.UID, out var lock2))
-            {
-                lock2.Dispose();
-            }
+            _logger.Error(ex, "保存DICOM文件失败");
+            throw;
         }
     }
 
@@ -240,34 +268,35 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 if (!dataset.Contains(tag))
                 {
                     missingTags.Add(name);
-                    Logger.LogWarning($"缺少必要标签: {name}");
+                    _logger.Warning("缺少必要标签: {TagName}", name);
                 }
             }
 
             if (missingTags.Any())
             {
-                var errorMessage = $"缺少必要标签: {string.Join(", ", missingTags)}";
-                return (false, errorMessage);
+                var tags = string.Join(", ", missingTags);
+                _logger.Warning("DICOM标签验证失败 - 缺失标签: {Tags}", tags);
+                return (false, $"缺少必要标签: {tags}");
             }
 
             return (true, string.Empty);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "验证DICOM标签时发生错误");
-            return (false, $"验证标签时发生错误: {ex.Message}");
+            _logger.Error(ex, "验证DICOM标签失败");
+            return (false, "验证DICOM标签失败");
         }
     }
 
     public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e)
     {
-        Logger.LogError(e, $"处理 C-STORE 请求异常 - 临时文件: {tempFileName}");
+        _logger.Error(e, "处理 C-STORE 请求异常 - 临时文件: {TempFile}", tempFileName);
         return Task.CompletedTask;
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
     {
-        Logger.LogInformation("收到 C-ECHO 请求");
+        _logger.Information("收到 C-ECHO 请求");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
 
@@ -288,7 +317,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     }
                     catch (Exception ex)
                     {
-                        Logger.LogError(ex, "释放文件锁时发生错误");
+                        _logger.Error(ex, "释放文件锁时发生错误");
                     }
                 }
                 _fileLocks.Clear();

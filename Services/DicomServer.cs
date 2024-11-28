@@ -1,20 +1,20 @@
 using FellowOakDicom;
 using FellowOakDicom.Network;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 namespace DicomSCP.Services;
 
 public sealed class DicomServer : IDisposable
 {
-    private readonly ILogger<DicomServer> _logger;
+    private static readonly ILogger _logger = Log.ForContext<DicomServer>();
     private readonly DicomSettings _settings;
     private IDicomServer? _server;
 
-    public DicomServer(ILogger<DicomServer> logger, IOptions<DicomSettings> settings)
+    public DicomServer(Microsoft.Extensions.Logging.ILogger<DicomServer> logger, IOptions<DicomSettings> settings)
     {
-        _logger = logger;
         _settings = settings.Value;
     }
 
@@ -24,7 +24,7 @@ public sealed class DicomServer : IDisposable
     {
         if (_server != null)
         {
-            _logger.LogWarning("DICOM服务器已经在运行");
+            _logger.Warning("DICOM服务器已在运行中");
             return Task.CompletedTask;
         }
 
@@ -32,12 +32,18 @@ public sealed class DicomServer : IDisposable
         {
             Directory.CreateDirectory(_settings.StoragePath);
             _server = DicomServerFactory.Create<CStoreSCP>(_settings.Port);
-            _logger.LogInformation("DICOM SCP服务器已启动 - AET: {AET}, 端口: {Port}, 路径: {Path}", 
-                _settings.AeTitle, _settings.Port, _settings.StoragePath);
+            
+            _logger.Information(
+                "DICOM服务 - 动作: {Action}, AET: {AET}, 端口: {Port}, 路径: {Path} {Area}", 
+                "启动",
+                _settings.AeTitle, 
+                _settings.Port, 
+                _settings.StoragePath,
+                new { Area = "AppState" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "启动DICOM SCP服务器失败");
+            _logger.Error(ex, "DICOM服务启动失败");
             throw;
         }
 
@@ -52,12 +58,15 @@ public sealed class DicomServer : IDisposable
             {
                 _server.Dispose();
                 _server = null;
-                _logger.LogInformation("DICOM SCP服务器已停止");
+                _logger.Information(
+                    "DICOM服务 - 动作: {Action} {Area}", 
+                    "停止",
+                    new { Area = "AppState" });
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "停止DICOM SCP服务器时发生错误");
+            _logger.Error(ex, "DICOM服务错误 - 动作: {Action}", "停止");
             throw;
         }
 

@@ -1,14 +1,58 @@
 using FellowOakDicom;
 using Serilog;
+using Serilog.Events;
+using Serilog.Filters;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 配置日志
-builder.Host.UseSerilog((context, config) => config
-    .WriteTo.Console()
-    .WriteTo.File("logs/dicom-scp-.txt", rollingInterval: RollingInterval.Day));
+var logSettings = builder.Configuration
+    .GetSection("DicomSettings:Logging")
+    .Get<LogSettings>() ?? new LogSettings();
+
+var logConfig = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning);
+
+// 控制台日志 - 只显示服务状态和错误
+if (logSettings.EnableConsoleLog)
+{
+    logConfig.WriteTo.Logger(lc => lc
+        .WriteTo.Console(
+            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:l}{NewLine}",
+            restrictedToMinimumLevel: LogEventLevel.Information
+        )
+        .Filter.ByIncludingOnly(evt => 
+            evt.Level == LogEventLevel.Error || 
+            evt.Level == LogEventLevel.Fatal || 
+            evt.Properties.ContainsKey("Area")
+        )
+    );
+}
+
+// 文件日志 - 统一记录到一个文件
+if (logSettings.EnableFileLog)
+{
+    logConfig.WriteTo.File(
+        path: Path.Combine(logSettings.LogPath, "dicom-scp-.txt"),
+        rollingInterval: RollingInterval.Day,
+        restrictedToMinimumLevel: logSettings.FileLogLevel,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+        retainedFileCountLimit: logSettings.RetainedDays,
+        shared: true
+    );
+}
+
+Log.Logger = logConfig.CreateLogger();
+
+builder.Host.UseSerilog();
+
+// 添加日志服务
+builder.Services.AddLogging(loggingBuilder =>
+    loggingBuilder.AddSerilog(dispose: true));
 
 // 添加服务
 builder.Services.AddControllers();
@@ -40,7 +84,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Serilog.Events;
 
 namespace DicomSCP.Configuration;
 
@@ -19,4 +20,15 @@ public class DicomSettings
     public bool ValidateCallingAE { get; set; } = false;
 
     public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
+
+    public LogSettings Logging { get; set; } = new();
+}
+
+public class LogSettings
+{
+    public bool EnableConsoleLog { get; set; } = true;
+    public bool EnableFileLog { get; set; } = true;
+    public LogEventLevel FileLogLevel { get; set; } = LogEventLevel.Debug;
+    public int RetainedDays { get; set; } = 31;
+    public string LogPath { get; set; } = "logs";
 } 

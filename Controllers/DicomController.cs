@@ -3,6 +3,8 @@ using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
 using System.IO;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 namespace DicomSCP.Controllers;
 
@@ -12,26 +14,35 @@ public class DicomController : ControllerBase
 {
     private readonly DicomServer _server;
     private readonly DicomSettings _settings;
-    private readonly ILogger<DicomController> _logger;
+    private readonly ILogger _logger;
 
     public DicomController(
         DicomServer server,
         IOptions<DicomSettings> settings,
-        ILogger<DicomController> logger)
+        Microsoft.Extensions.Logging.ILogger<DicomController> logger)
     {
         _server = server;
         _settings = settings.Value;
-        _logger = logger;
+        _logger = Log.ForContext<DicomController>();
     }
 
     [HttpGet("status")]
-    public IActionResult GetStatus() => Ok(new
+    public IActionResult GetStatus()
     {
-        _settings.AeTitle,
-        _settings.Port,
-        _settings.StoragePath,
-        IsRunning = _server.IsRunning
-    });
+        _logger.Debug("API操作 - 动作: {Action}, AET: {AET}, 端口: {Port}, 路径: {Path}", 
+            "查询状态",
+            _settings.AeTitle,
+            _settings.Port,
+            _settings.StoragePath);
+
+        return Ok(new
+        {
+            _settings.AeTitle,
+            _settings.Port,
+            _settings.StoragePath,
+            IsRunning = _server.IsRunning
+        });
+    }
 
     [HttpPost("start")]
     public async Task<IActionResult> Start()
@@ -39,14 +50,21 @@ public class DicomController : ControllerBase
         try
         {
             if (_server.IsRunning)
+            {
+                _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
+                    "启动服务器", "失败", "服务器已在运行");
                 return BadRequest("服务器已经在运行");
+            }
 
             await _server.StartAsync();
+            _logger.Information("API操作 - 动作: {Action}, 结果: {Result}", 
+                "启动服务器", "成功");
             return Ok("服务器已启动");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "启动服务器失败");
+            _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}", 
+                "启动服务器", "异常");
             return StatusCode(500, "启动服务器失败");
         }
     }
@@ -57,14 +75,21 @@ public class DicomController : ControllerBase
         try
         {
             if (!_server.IsRunning)
+            {
+                _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
+                    "停止服务器", "失败", "服务器未运行");
                 return BadRequest("服务器未运行");
+            }
 
             await _server.StopAsync();
+            _logger.Information("API操作 - 动作: {Action}, 结果: {Result}", 
+                "停止服务器", "成功");
             return Ok("服务器已停止");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "停止服务器失败");
+            _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}", 
+                "停止服务器", "异常");
             return StatusCode(500, "停止服务器失败");
         }
     }
@@ -72,26 +97,35 @@ public class DicomController : ControllerBase
     [HttpPost("settings")]
     public IActionResult UpdateSettings([FromBody] DicomSettingsUpdate settings)
     {
-        if (_server.IsRunning)
-            return BadRequest("无法在服务器运行时更新配置");
-
-        if (!string.IsNullOrEmpty(settings.StoragePath))
+        try
         {
-            try
+            if (_server.IsRunning)
+            {
+                _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
+                    "更新配置", "失败", "服务器运行中");
+                return BadRequest("无法在服务器运行时更新配置");
+            }
+
+            if (!string.IsNullOrEmpty(settings.StoragePath))
             {
                 var path = Path.GetFullPath(settings.StoragePath);
                 Directory.CreateDirectory(path);
                 CStoreSCP.Configure(path);
+                _logger.Information("API操作 - 动作: {Action}, 状态: {Status}, 路径: {Path}", 
+                    "更新配置", "成功", path);
                 return Ok("配置已更新");
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "更新配置失败");
-                return BadRequest($"存储路径无效: {ex.Message}");
-            }
-        }
 
-        return Ok("无需更新");
+            _logger.Information("API操作 - 动作: {Action}, 状态: {Status}", 
+                "更新配置", "无需更新");
+            return Ok("无需更新");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}, 路径: {Path}", 
+                "更新配置", "异常", settings.StoragePath);
+            return BadRequest($"存储路径无效: {ex.Message}");
+        }
     }
 }
 

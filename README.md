@@ -13,20 +13,22 @@
 
 ## 配置说明
 
-在appsettings.json中配置：
+在 appsettings.json 中可以配置以下选项：
 
-```json
-{
-  "DicomSettings": {
-    "AeTitle": "STORESCP",    // DICOM AE标题
-    "Port": 11112,            // 监听端口
-    "StoragePath": "./received_files",  // 文件存储路径
-    "MaxPDULength": 16384,    // 最大PDU长度
-    "ValidateCallingAE": false,  // 是否验证调用方AE
-    "AllowedCallingAEs": []   // 允许的调用方AE列表
-  }
-}
-```
+### DICOM服务器配置
+- `AeTitle`: DICOM服务器的AE标题，长度1-16字符，只能包含字母、数字、连字符和下划线
+- `Port`: DICOM服务器监听端口，范围1-65535
+- `StoragePath`: DICOM文件存储路径，支持相对或绝对路径
+
+### 日志配置
+- `Logging.EnableConsoleLog`: 是否启用控制台日志（仅显示服务状态变化和错误）
+- `Logging.EnableFileLog`: 是否启用文件日志
+- `Logging.FileLogLevel`: 文件日志级别（Verbose|Debug|Information|Warning|Error|Fatal）
+- `Logging.RetainedDays`: 日志文件保留天数
+- `Logging.LogPath`: 日志文件存储路径
+
+### Web服务器配置
+- `Kestrel.Endpoints.Http.Url`: Web API监听地址
 
 ## API接口
 
