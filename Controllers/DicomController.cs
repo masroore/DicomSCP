@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
+using DicomSCP.Data;
+using DicomSCP.Models;
 using System.IO;
 using Serilog;
 using ILogger = Serilog.ILogger;
@@ -14,15 +16,18 @@ public class DicomController : ControllerBase
 {
     private readonly DicomServer _server;
     private readonly DicomSettings _settings;
+    private readonly DicomRepository _repository;
     private readonly ILogger _logger;
 
     public DicomController(
         DicomServer server,
         IOptions<DicomSettings> settings,
+        DicomRepository repository,
         Microsoft.Extensions.Logging.ILogger<DicomController> logger)
     {
         _server = server;
         _settings = settings.Value;
+        _repository = repository;
         _logger = Log.ForContext<DicomController>();
     }
 
@@ -55,6 +60,13 @@ public class DicomController : ControllerBase
                     "启动服务器", "失败", "服务器已在运行");
                 return BadRequest("服务器已经在运行");
             }
+
+            CStoreSCP.Configure(
+                _settings.StoragePath,
+                _settings.TempPath,
+                _settings,
+                _repository
+            );
 
             await _server.StartAsync();
             _logger.Information("API操作 - 动作: {Action}, 结果: {Result}", 
@@ -110,7 +122,12 @@ public class DicomController : ControllerBase
             {
                 var path = Path.GetFullPath(settings.StoragePath);
                 Directory.CreateDirectory(path);
-                CStoreSCP.Configure(path, _settings.TempPath, _settings);
+                CStoreSCP.Configure(
+                    path, 
+                    _settings.TempPath, 
+                    _settings,
+                    _repository
+                );
                 _logger.Information("API操作 - 动作: {Action}, 状态: {Status}, 路径: {Path}", 
                     "更新配置", "成功", path);
                 return Ok("配置已更新");

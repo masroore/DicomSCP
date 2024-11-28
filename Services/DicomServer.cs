@@ -20,18 +20,21 @@ public sealed class DicomServer : IDisposable
 
     public bool IsRunning => _server != null;
 
-    public Task StartAsync()
+    public async Task StartAsync()
     {
         if (_server != null)
         {
             _logger.Warning("DICOM服务器已在运行中");
-            return Task.CompletedTask;
+            return;
         }
 
         try
         {
-            Directory.CreateDirectory(_settings.StoragePath);
-            _server = DicomServerFactory.Create<CStoreSCP>(_settings.Port);
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(_settings.StoragePath);
+                _server = DicomServerFactory.Create<CStoreSCP>(_settings.Port);
+            });
             
             _logger.Information(
                 "DICOM服务 - 动作: {Action}, AET: {AET}, 端口: {Port}, 路径: {Path} {Area}", 
@@ -46,8 +49,6 @@ public sealed class DicomServer : IDisposable
             _logger.Error(ex, "DICOM服务启动失败");
             throw;
         }
-
-        return Task.CompletedTask;
     }
 
     public Task StopAsync()

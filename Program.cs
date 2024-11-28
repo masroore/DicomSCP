@@ -1,9 +1,11 @@
 using FellowOakDicom;
+using FellowOakDicom.Network;
 using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
+using DicomSCP.Data;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -76,49 +78,36 @@ if (settings.Swagger.Enabled)
     });
 }
 
-builder.Services.Configure<DicomSettings>(options =>
-{
-    options.AeTitle = settings.AeTitle;
-    options.Port = settings.Port;
-    options.StoragePath = settings.StoragePath;
-    options.TempPath = settings.TempPath;
-    options.Logging = settings.Logging;
-    options.Advanced = new AdvancedSettings
-    {
-        ValidateCallingAE = settings.Advanced.ValidateCallingAE,
-        AllowedCallingAEs = settings.Advanced.AllowedCallingAEs,
-        ConcurrentStoreLimit = settings.Advanced.ConcurrentStoreLimit,
-        EnableCompression = settings.Advanced.EnableCompression,
-        PreferredTransferSyntax = settings.Advanced.PreferredTransferSyntax
-    };
-    options.Swagger = settings.Swagger;
-});
-
-// 添加配置验证日志
-Log.Debug("配置已加载 - 压缩: {Enabled}, 格式: {Format}", 
-    settings.Advanced.EnableCompression,
-    settings.Advanced.PreferredTransferSyntax);
-
+// DICOM服务注册
+builder.Services.AddFellowOakDicom();
+builder.Services.AddSingleton<DicomRepository>();
 builder.Services.AddSingleton<DicomServer>();
+
+// 确保配置服务正确注册
+builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
+
+var app = builder.Build();
+
+// 获取服务
+var dicomRepository = app.Services.GetRequiredService<DicomRepository>();
 
 // 配置 DICOM
 CStoreSCP.Configure(
     settings.StoragePath,
     settings.TempPath,
-    settings  // 传递完整配置
+    settings,
+    dicomRepository
 );
-
-// 优化线程池 - 基于CPU核心数
-int processorCount = Environment.ProcessorCount;
-ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 增加最小线程数
-ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加最大线程数
-
-var app = builder.Build();
 
 // 启动 DICOM 服务器
 var dicomServer = app.Services.GetRequiredService<DicomServer>();
 await dicomServer.StartAsync();
 app.Lifetime.ApplicationStopping.Register(() => dicomServer.StopAsync().GetAwaiter().GetResult());
+
+// 优化线程池 - 基于CPU核心数
+int processorCount = Environment.ProcessorCount;
+ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 增加最小线程数
+ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加最大线程数
 
 // 配置中间件
 if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)

@@ -6,6 +6,7 @@ using Serilog;
 using ILogger = Serilog.ILogger;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
+using DicomSCP.Data;
 
 namespace DicomSCP.Services;
 
@@ -35,6 +36,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     private static string StoragePath = "./received_files";
     private static string TempPath = "./temp_files";
     private static DicomSettings? GlobalSettings;
+    private static DicomRepository? _repository;
 
     private readonly DicomSettings _settings;
     private readonly SemaphoreSlim _concurrentLimit;
@@ -52,11 +54,12 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         { "JPEGProcess14", DicomTransferSyntax.JPEGProcess14SV1 }
     };
 
-    public static void Configure(string storagePath, string tempPath, DicomSettings settings)
+    public static void Configure(string storagePath, string tempPath, DicomSettings settings, DicomRepository repository)
     {
         StoragePath = storagePath;
         TempPath = tempPath;
         GlobalSettings = settings;
+        _repository = repository;
         
         // 确保临时目录存在
         Directory.CreateDirectory(tempPath);
@@ -319,6 +322,19 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         instanceUid,
                         targetFilePath,
                         new FileInfo(targetFilePath).Length);
+
+                    // 在文件保存成功后，保存到数据库
+                    if (_repository != null)
+                    {
+                        try 
+                        {
+                            await _repository.SaveDicomDataAsync(request.Dataset, targetFilePath);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, "保存DICOM数据到数据库失败");
+                        }
+                    }
 
                     return new DicomCStoreResponse(request, DicomStatus.Success);
                 }
