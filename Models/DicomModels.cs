@@ -39,3 +39,29 @@ public class Instance
     public string FilePath { get; set; } = null!;
     public DateTime CreateTime { get; set; }
 }
+
+public class WorklistItem
+{
+    public string WorklistId { get; set; } = string.Empty;
+    public string AccessionNumber { get; set; } = string.Empty;
+    public string PatientId { get; set; } = string.Empty;
+    public string PatientName { get; set; } = string.Empty;
+    public string PatientBirthDate { get; set; } = string.Empty;
+    public string PatientSex { get; set; } = string.Empty;
+    public string StudyInstanceUid { get; set; } = string.Empty;
+    public string StudyDescription { get; set; } = string.Empty;
+    public string Modality { get; set; } = string.Empty;
+    public string ScheduledAET { get; set; } = string.Empty;
+    public string ScheduledDateTime { get; set; } = string.Empty;
+    public string ScheduledStationName { get; set; } = string.Empty;
+    public string ScheduledProcedureStepID { get; set; } = string.Empty;
+    public string ScheduledProcedureStepDescription { get; set; } = string.Empty;
+    public string RequestedProcedureID { get; set; } = string.Empty;
+    public string RequestedProcedureDescription { get; set; } = string.Empty;
+    public string ReferringPhysicianName { get; set; } = string.Empty;
+    public string Status { get; set; } = "SCHEDULED";
+    public DateTime CreateTime { get; set; }
+    public DateTime UpdateTime { get; set; }
+    public string? BodyPartExamined { get; set; }
+    public string? ReasonForRequest { get; set; }
+}

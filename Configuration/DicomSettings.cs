@@ -10,7 +10,10 @@ public class DicomSettings
     public string AeTitle { get; set; } = "STORESCP";
 
     [Range(1, 65535)]
-    public int Port { get; set; } = 11112;
+    public int StoreSCPPort { get; set; } = 11112;
+
+    [Range(1, 65535)]
+    public int WorklistSCPPort { get; set; } = 11113;
 
     [Required]
     public string StoragePath { get; set; } = "./received_files";

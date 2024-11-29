@@ -1,13 +1,12 @@
-using Microsoft.Data.Sqlite;
 using Dapper;
 using DicomSCP.Models;
 using FellowOakDicom;
 using Microsoft.Extensions.Logging;
-using System.IO;
 using System.Collections.Concurrent;
 using System.Threading;
-using Microsoft.Extensions.Configuration;
 using System.Diagnostics;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 
 namespace DicomSCP.Data;
 
@@ -16,15 +15,16 @@ public class DicomRepository : IDisposable
     private readonly string _connectionString;
     private readonly ILogger<DicomRepository> _logger;
     private readonly ConcurrentQueue<(DicomDataset Dataset, string FilePath)> _dataQueue = new();
-    private readonly int _batchSize;
     private readonly SemaphoreSlim _processSemaphore = new(1, 1);
     private readonly Timer _processTimer;
+    private readonly int _batchSize;
     private readonly int _maxRetryAttempts = 3;
-    private DateTime _lastProcessTime = DateTime.UtcNow;
     private readonly TimeSpan _maxWaitTime = TimeSpan.FromSeconds(30);
     private readonly TimeSpan _minWaitTime = TimeSpan.FromSeconds(5);
-    private long _totalProcessed;
     private readonly Stopwatch _performanceTimer = new();
+    private DateTime _lastProcessTime = DateTime.UtcNow;
+    private long _totalProcessed;
+    private bool _initialized;
 
     private static class SqlQueries
     {
@@ -47,17 +47,54 @@ public class DicomRepository : IDisposable
             INSERT OR IGNORE INTO Instances 
             (SopInstanceUid, SeriesInstanceUid, SopClassUid, InstanceNumber, FilePath, CreateTime)
             VALUES (@SopInstanceUid, @SeriesInstanceUid, @SopClassUid, @InstanceNumber, @FilePath, @CreateTime)";
+
+        public const string CreateWorklistTable = @"
+            CREATE TABLE IF NOT EXISTS Worklist (
+                WorklistId TEXT PRIMARY KEY,
+                AccessionNumber TEXT,
+                PatientId TEXT,
+                PatientName TEXT,
+                PatientBirthDate TEXT,
+                PatientSex TEXT,
+                StudyInstanceUid TEXT,
+                StudyDescription TEXT,
+                Modality TEXT,
+                ScheduledAET TEXT,
+                ScheduledDateTime TEXT,
+                ScheduledStationName TEXT,
+                ScheduledProcedureStepID TEXT,
+                ScheduledProcedureStepDescription TEXT,
+                RequestedProcedureID TEXT,
+                RequestedProcedureDescription TEXT,
+                ReferringPhysicianName TEXT,
+                Status TEXT DEFAULT 'SCHEDULED',
+                BodyPartExamined TEXT,
+                ReasonForRequest TEXT,
+                CreateTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UpdateTime DATETIME DEFAULT CURRENT_TIMESTAMP
+            )";
+
+        public const string QueryWorklist = @"
+            SELECT * FROM Worklist 
+            WHERE (@PatientId IS NULL OR PatientId LIKE @PatientId)
+            AND (@AccessionNumber IS NULL OR AccessionNumber LIKE @AccessionNumber)
+            AND (@ScheduledDateTime IS NULL OR ScheduledDateTime LIKE @ScheduledDateTime)
+            AND (@Modality IS NULL OR Modality = @Modality)
+            AND (@ScheduledStationName IS NULL OR ScheduledStationName = @ScheduledStationName)
+            AND Status = 'SCHEDULED'";
     }
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("DicomDb") ?? "Data Source=dicom.db";
+        _connectionString = configuration.GetConnectionString("DicomDb") 
+            ?? throw new ArgumentException("Missing DicomDb connection string");
         _logger = logger;
         _batchSize = configuration.GetValue<int>("DicomSettings:BatchSize", 50);
 
+        // 初始化数据库
         InitializeDatabase();
 
-        // 创建自适应定时器
+        // 创建定时器
         _processTimer = new Timer(async _ => await ProcessQueueAsync(), 
             null, 
             _minWaitTime, 
@@ -74,7 +111,7 @@ public class DicomRepository : IDisposable
         // 判断是否需要处理
         if (queueSize < _batchSize && 
             waitTime < _maxWaitTime && 
-            queueSize < 10) // 小批量阈值
+            queueSize < 10)
         {
             return;
         }
@@ -186,47 +223,81 @@ public class DicomRepository : IDisposable
 
     private void InitializeDatabase()
     {
+        if (_initialized) return;
+
         using var connection = new SqliteConnection(_connectionString);
-        connection.Execute(@"
-            CREATE TABLE IF NOT EXISTS Patients (
-                PatientId TEXT PRIMARY KEY,
-                PatientName TEXT,
-                PatientBirthDate TEXT,
-                PatientSex TEXT,
-                CreateTime DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
 
-            CREATE TABLE IF NOT EXISTS Studies (
-                StudyInstanceUid TEXT PRIMARY KEY,
-                PatientId TEXT,
-                StudyDate TEXT,
-                StudyTime TEXT,
-                StudyDescription TEXT,
-                AccessionNumber TEXT,
-                CreateTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(PatientId) REFERENCES Patients(PatientId)
-            );
+        try
+        {
+            // 创建表
+            connection.Execute(SqlQueries.CreateWorklistTable);
+            // ... 其他表的创建 ...
 
-            CREATE TABLE IF NOT EXISTS Series (
-                SeriesInstanceUid TEXT PRIMARY KEY,
-                StudyInstanceUid TEXT,
-                Modality TEXT,
-                SeriesNumber TEXT,
-                SeriesDescription TEXT,
-                CreateTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(StudyInstanceUid) REFERENCES Studies(StudyInstanceUid)
-            );
+            // 检查是否已经有数据
+            var count = connection.ExecuteScalar<int>("SELECT COUNT(*) FROM Worklist");
+            
+            // 只在表为空时创建演示数据
+            if (count == 0)
+            {
+                var demoWorklist = new WorklistItem
+                {
+                    WorklistId = Guid.NewGuid().ToString("N"),
+                    AccessionNumber = "ACC20231129001",
+                    PatientId = "P20231129001",
+                    PatientName = "Test^Patient",
+                    PatientBirthDate = "19800101",
+                    PatientSex = "M",
+                    StudyInstanceUid = DicomUIDGenerator.GenerateDerivedFromUUID().UID,
+                    StudyDescription = "Chest X-Ray",
+                    Modality = "CR",
+                    ScheduledAET = "STORESCP",
+                    ScheduledDateTime = DateTime.Now.ToString("yyyyMMdd HHmmss"),
+                    ScheduledStationName = "ROOM1",
+                    ScheduledProcedureStepID = "SPS001",
+                    ScheduledProcedureStepDescription = "Chest PA and Lateral",
+                    RequestedProcedureID = "RP001",
+                    RequestedProcedureDescription = "Chest X-Ray PA and Lateral",
+                    ReferringPhysicianName = "Referring^Doctor",
+                    Status = "SCHEDULED",
+                    BodyPartExamined = "CHEST",
+                    ReasonForRequest = "Routine checkup",
+                    CreateTime = DateTime.Now,
+                    UpdateTime = DateTime.Now
+                };
 
-            CREATE TABLE IF NOT EXISTS Instances (
-                SopInstanceUid TEXT PRIMARY KEY,
-                SeriesInstanceUid TEXT,
-                SopClassUid TEXT,
-                InstanceNumber TEXT,
-                FilePath TEXT,
-                CreateTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(SeriesInstanceUid) REFERENCES Series(SeriesInstanceUid)
-            );
-        ");
+                connection.Execute(@"
+                    INSERT INTO Worklist (
+                        WorklistId, AccessionNumber, PatientId, PatientName, PatientBirthDate,
+                        PatientSex, StudyInstanceUid, StudyDescription, Modality, ScheduledAET,
+                        ScheduledDateTime, ScheduledStationName, ScheduledProcedureStepID,
+                        ScheduledProcedureStepDescription, RequestedProcedureID,
+                        RequestedProcedureDescription, ReferringPhysicianName, Status,
+                        BodyPartExamined, ReasonForRequest,
+                        CreateTime, UpdateTime
+                    ) VALUES (
+                        @WorklistId, @AccessionNumber, @PatientId, @PatientName, @PatientBirthDate,
+                        @PatientSex, @StudyInstanceUid, @StudyDescription, @Modality, @ScheduledAET,
+                        @ScheduledDateTime, @ScheduledStationName, @ScheduledProcedureStepID,
+                        @ScheduledProcedureStepDescription, @RequestedProcedureID,
+                        @RequestedProcedureDescription, @ReferringPhysicianName, @Status,
+                        @BodyPartExamined, @ReasonForRequest,
+                        @CreateTime, @UpdateTime
+                    )", demoWorklist);
+
+                _logger.LogInformation("已初始化 Worklist 演示数据");
+            }
+
+            transaction.Commit();
+            _initialized = true;
+        }
+        catch (Exception ex)
+        {
+            transaction.Rollback();
+            _logger.LogError(ex, "初始化数据库失败");
+            throw;
+        }
     }
 
     private void ExtractDicomData(
