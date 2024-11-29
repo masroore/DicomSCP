@@ -75,10 +75,10 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         IOptions<DicomSettings> settings)
         : base(stream, fallbackEncoding, log, dependencies)
     {
-        _settings = GlobalSettings ?? settings.Value;
+        _settings = GlobalSettings ?? settings.Value 
+            ?? throw new ArgumentNullException(nameof(settings));
         var advancedSettings = _settings.Advanced;
 
-        // 添加配置检查日志
         _logger.Debug("加载配置 - 压缩: {Enabled}, 格式: {Format}", 
             advancedSettings.EnableCompression,
             advancedSettings.PreferredTransferSyntax);

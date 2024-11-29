@@ -40,14 +40,14 @@ if (logSettings.EnableConsoleLog)
     );
 }
 
-// 文件日志 - 统一记录到一个文件
+// 文件日志 - 统一记录到一个文件，添加服务标识
 if (logSettings.EnableFileLog)
 {
     logConfig.WriteTo.File(
         path: Path.Combine(logSettings.LogPath, "dicom-scp-.txt"),
         rollingInterval: RollingInterval.Day,
         restrictedToMinimumLevel: logSettings.FileLogLevel,
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}",
         retainedFileCountLimit: logSettings.RetainedDays,
         shared: true
     );
