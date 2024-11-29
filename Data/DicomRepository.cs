@@ -18,12 +18,10 @@ public class DicomRepository : IDisposable
     private readonly SemaphoreSlim _processSemaphore = new(1, 1);
     private readonly Timer _processTimer;
     private readonly int _batchSize;
-    private readonly int _maxRetryAttempts = 3;
     private readonly TimeSpan _maxWaitTime = TimeSpan.FromSeconds(30);
     private readonly TimeSpan _minWaitTime = TimeSpan.FromSeconds(5);
     private readonly Stopwatch _performanceTimer = new();
     private DateTime _lastProcessTime = DateTime.UtcNow;
-    private long _totalProcessed;
     private bool _initialized;
 
     private static class SqlQueries
@@ -82,6 +80,49 @@ public class DicomRepository : IDisposable
             AND (@Modality IS NULL OR Modality = @Modality)
             AND (@ScheduledStationName IS NULL OR ScheduledStationName = @ScheduledStationName)
             AND Status = 'SCHEDULED'";
+
+        public const string CreatePatientsTable = @"
+            CREATE TABLE IF NOT EXISTS Patients (
+                PatientId TEXT PRIMARY KEY,
+                PatientName TEXT,
+                PatientBirthDate TEXT,
+                PatientSex TEXT,
+                CreateTime DATETIME
+            )";
+
+        public const string CreateStudiesTable = @"
+            CREATE TABLE IF NOT EXISTS Studies (
+                StudyInstanceUid TEXT PRIMARY KEY,
+                PatientId TEXT,
+                StudyDate TEXT,
+                StudyTime TEXT,
+                StudyDescription TEXT,
+                AccessionNumber TEXT,
+                CreateTime DATETIME,
+                FOREIGN KEY(PatientId) REFERENCES Patients(PatientId)
+            )";
+
+        public const string CreateSeriesTable = @"
+            CREATE TABLE IF NOT EXISTS Series (
+                SeriesInstanceUid TEXT PRIMARY KEY,
+                StudyInstanceUid TEXT,
+                Modality TEXT,
+                SeriesNumber TEXT,
+                SeriesDescription TEXT,
+                CreateTime DATETIME,
+                FOREIGN KEY(StudyInstanceUid) REFERENCES Studies(StudyInstanceUid)
+            )";
+
+        public const string CreateInstancesTable = @"
+            CREATE TABLE IF NOT EXISTS Instances (
+                SopInstanceUid TEXT PRIMARY KEY,
+                SeriesInstanceUid TEXT,
+                SopClassUid TEXT,
+                InstanceNumber TEXT,
+                FilePath TEXT,
+                CreateTime DATETIME,
+                FOREIGN KEY(SeriesInstanceUid) REFERENCES Series(SeriesInstanceUid)
+            )";
     }
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
@@ -105,34 +146,33 @@ public class DicomRepository : IDisposable
     {
         if (_dataQueue.IsEmpty) return;
 
-        var waitTime = DateTime.UtcNow - _lastProcessTime;
         var queueSize = _dataQueue.Count;
+        var waitTime = DateTime.UtcNow - _lastProcessTime;
 
-        // 判断是否需要处理
-        if (queueSize < _batchSize && 
-            waitTime < _maxWaitTime && 
-            queueSize < 10)
+        // 优化处理时机判断
+        if (queueSize >= _batchSize || // 队列达到批处理大小
+            (queueSize > 0 && waitTime >= _maxWaitTime) || // 等待时间达到上限
+            (queueSize >= 10 && waitTime >= _minWaitTime)) // 积累一定数量且达到最小等待时间
         {
-            return;
+            await ProcessBatchWithRetryAsync();
         }
-
-        await ProcessBatchWithRetryAsync();
     }
 
     private async Task ProcessBatchWithRetryAsync()
     {
         if (!await _processSemaphore.WaitAsync(TimeSpan.FromSeconds(1)))
         {
-            return; // 如果无法获取信号量，放弃本次处理
+            return;
         }
+
+        List<(DicomDataset Dataset, string FilePath)> batchItems = new();
 
         try
         {
             _performanceTimer.Restart();
-            var batchItems = new List<(DicomDataset Dataset, string FilePath)>();
             var batchSize = Math.Min(_dataQueue.Count, _batchSize);
-
-            // 收集批处理数据
+            
+            // 一次性收集批处理数据
             while (batchItems.Count < batchSize && _dataQueue.TryDequeue(out var item))
             {
                 batchItems.Add(item);
@@ -140,80 +180,63 @@ public class DicomRepository : IDisposable
 
             if (batchItems.Count == 0) return;
 
-            var attempt = 0;
-            var success = false;
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
 
-            while (!success && attempt < _maxRetryAttempts)
+            try
             {
-                try
+                var now = DateTime.UtcNow;
+                var patients = new List<Patient>();
+                var studies = new List<Study>();
+                var series = new List<Series>();
+                var instances = new List<Instance>();
+
+                // 预分配容量以提高性能
+                patients.Capacity = batchItems.Count;
+                studies.Capacity = batchItems.Count;
+                series.Capacity = batchItems.Count;
+                instances.Capacity = batchItems.Count;
+
+                foreach (var (dataset, filePath) in batchItems)
                 {
-                    await using var connection = new SqliteConnection(_connectionString);
-                    await connection.OpenAsync();
-                    await using var transaction = await connection.BeginTransactionAsync();
-
-                    try
-                    {
-                        var now = DateTime.UtcNow;
-                        var patients = new List<Patient>();
-                        var studies = new List<Study>();
-                        var series = new List<Series>();
-                        var instances = new List<Instance>();
-
-                        foreach (var (dataset, filePath) in batchItems)
-                        {
-                            // 提取数据并添加到相应的列表中
-                            ExtractDicomData(dataset, filePath, now, 
-                                patients, studies, series, instances);
-                        }
-
-                        // 批量插入数据
-                        await connection.ExecuteAsync(SqlQueries.InsertPatient, patients, transaction);
-                        await connection.ExecuteAsync(SqlQueries.InsertStudy, studies, transaction);
-                        await connection.ExecuteAsync(SqlQueries.InsertSeries, series, transaction);
-                        await connection.ExecuteAsync(SqlQueries.InsertInstance, instances, transaction);
-
-                        await transaction.CommitAsync();
-                        success = true;
-
-                        // 更新统计信息
-                        _totalProcessed += batchItems.Count;
-                        _lastProcessTime = DateTime.UtcNow;
-
-                        // 记录性能指标
-                        _performanceTimer.Stop();
-                        _logger.LogInformation(
-                            "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 总处理: {Total}, 队列剩余: {Remaining}", 
-                            batchItems.Count, 
-                            _performanceTimer.ElapsedMilliseconds,
-                            _totalProcessed,
-                            _dataQueue.Count);
-                    }
-                    catch
-                    {
-                        await transaction.RollbackAsync();
-                        throw;
-                    }
+                    ExtractDicomData(dataset, filePath, now, patients, studies, series, instances);
                 }
-                catch (Exception ex)
-                {
-                    attempt++;
-                    if (attempt >= _maxRetryAttempts)
-                    {
-                        _logger.LogError(ex, 
-                            "批量处理失败 - 重试次数: {Attempts}, 批次大小: {Size}", 
-                            attempt, batchItems.Count);
-                        // 考虑将失败的数据放入错误队列或死信队列
-                        HandleFailedBatch(batchItems);
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            "批量处理重试 - 当前次数: {Attempt}/{MaxAttempts}", 
-                            attempt, _maxRetryAttempts);
-                        await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt))); // 指数退避
-                    }
-                }
+
+                // 批量插入数据
+                await connection.ExecuteAsync(SqlQueries.InsertPatient, patients, transaction);
+                await connection.ExecuteAsync(SqlQueries.InsertStudy, studies, transaction);
+                await connection.ExecuteAsync(SqlQueries.InsertSeries, series, transaction);
+                await connection.ExecuteAsync(SqlQueries.InsertInstance, instances, transaction);
+
+                await transaction.CommitAsync();
+
+                _performanceTimer.Stop();
+                _lastProcessTime = DateTime.UtcNow;
+
+                _logger.LogInformation(
+                    "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 队列剩余: {Remaining}, 平均耗时: {AvgTime:F2}ms/条", 
+                    batchItems.Count,
+                    _performanceTimer.ElapsedMilliseconds,
+                    _dataQueue.Count,
+                    _performanceTimer.ElapsedMilliseconds / (double)batchItems.Count);
             }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "批量处理失败 - 批次大小: {Count}, 将重新入队", batchItems.Count);
+                
+                // 错误时重新入队，保持原有顺序
+                foreach (var item in batchItems)
+                {
+                    _dataQueue.Enqueue(item);
+                }
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "处理批次时发生异常");
         }
         finally
         {
@@ -231,9 +254,12 @@ public class DicomRepository : IDisposable
 
         try
         {
-            // 创建表
-            connection.Execute(SqlQueries.CreateWorklistTable);
-            // ... 其他表的创建 ...
+            // 创建所有表
+            connection.Execute(SqlQueries.CreatePatientsTable, transaction: transaction);
+            connection.Execute(SqlQueries.CreateStudiesTable, transaction: transaction);
+            connection.Execute(SqlQueries.CreateSeriesTable, transaction: transaction);
+            connection.Execute(SqlQueries.CreateInstancesTable, transaction: transaction);
+            connection.Execute(SqlQueries.CreateWorklistTable, transaction: transaction);
 
             // 检查是否已经有数据
             var count = connection.ExecuteScalar<int>("SELECT COUNT(*) FROM Worklist");
@@ -284,18 +310,19 @@ public class DicomRepository : IDisposable
                         @RequestedProcedureDescription, @ReferringPhysicianName, @Status,
                         @BodyPartExamined, @ReasonForRequest,
                         @CreateTime, @UpdateTime
-                    )", demoWorklist);
+                    )", demoWorklist, transaction);
 
                 _logger.LogInformation("已初始化 Worklist 演示数据");
             }
 
             transaction.Commit();
             _initialized = true;
+            _logger.LogInformation("数据库表初始化完成");
         }
         catch (Exception ex)
         {
             transaction.Rollback();
-            _logger.LogError(ex, "初始化数据库失败");
+            _logger.LogError(ex, "初始化数据库表失败");
             throw;
         }
     }
