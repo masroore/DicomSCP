@@ -358,4 +358,33 @@ public class DicomRepository : IDisposable
             ProcessBatchWithRetryAsync().Wait();
         }
     }
+
+    public async Task<IEnumerable<dynamic>> GetAllStudiesWithPatientInfoAsync()
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = @"
+            SELECT s.StudyInstanceUid, s.PatientId, s.StudyDate, s.StudyTime, 
+                   s.StudyDescription, s.AccessionNumber, s.CreateTime,
+                   p.PatientName, p.PatientSex, p.PatientBirthDate,
+                   (SELECT Modality FROM Series WHERE StudyInstanceUid = s.StudyInstanceUid LIMIT 1) as Modality
+            FROM Studies s
+            LEFT JOIN Patients p ON s.PatientId = p.PatientId
+            ORDER BY s.CreateTime DESC";
+
+        return await connection.QueryAsync(sql);
+    }
+
+    public async Task<IEnumerable<Series>> GetSeriesByStudyUidAsync(string studyUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = @"
+            SELECT s.*, 
+                   (SELECT COUNT(*) FROM Instances i WHERE i.SeriesInstanceUid = s.SeriesInstanceUid) as NumberOfInstances,
+                   (SELECT Modality FROM Studies WHERE StudyInstanceUid = s.StudyInstanceUid) as StudyModality
+            FROM Series s
+            WHERE s.StudyInstanceUid = @StudyUid
+            ORDER BY CAST(s.SeriesNumber as INTEGER)";
+
+        return await connection.QueryAsync<Series>(sql, new { StudyUid = studyUid });
+    }
 }

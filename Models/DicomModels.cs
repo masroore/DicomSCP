@@ -28,6 +28,8 @@ public class Series
     public string? SeriesNumber { get; set; }
     public string? SeriesDescription { get; set; }
     public DateTime CreateTime { get; set; }
+    public int NumberOfInstances { get; set; }
+    public string? StudyModality { get; set; }
 }
 
 public class Instance
@@ -65,4 +67,26 @@ public class WorklistItem
     public DateTime CreateTime { get; set; }
     public DateTime UpdateTime { get; set; }
     public string AccessionNumber { get; set; } = string.Empty;
+}
+
+public class StudyInfo
+{
+    public string StudyInstanceUid { get; set; } = string.Empty;
+    public string PatientId { get; set; } = string.Empty;
+    public string PatientName { get; set; } = string.Empty;
+    public string PatientSex { get; set; } = string.Empty;
+    public string PatientBirthDate { get; set; } = string.Empty;
+    public string AccessionNumber { get; set; } = string.Empty;
+    public string Modality { get; set; } = string.Empty;
+    public string StudyDate { get; set; } = string.Empty;
+    public string StudyDescription { get; set; } = string.Empty;
+}
+
+public class SeriesInfo
+{
+    public string SeriesInstanceUid { get; set; } = string.Empty;
+    public string SeriesNumber { get; set; } = string.Empty;
+    public string Modality { get; set; } = string.Empty;
+    public string SeriesDescription { get; set; } = string.Empty;
+    public int NumberOfInstances { get; set; }
 }

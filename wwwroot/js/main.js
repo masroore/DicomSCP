@@ -31,10 +31,14 @@ $(document).ready(function() {
 function loadPage(page) {
     switch(page) {
         case 'worklist':
+            $('#worklist-page').show();
+            $('#images-page').hide();
             loadWorklistData();
             break;
         case 'images':
-            // TODO: 加载影像管理页面
+            $('#worklist-page').hide();
+            $('#images-page').show();
+            loadImagesData();
             break;
         case 'settings':
             // TODO: 加载系统设置页面
@@ -53,11 +57,11 @@ function loadWorklistData() {
             data.forEach(item => {
                 tbody.append(`
                     <tr>
-                        <td>${item.patientId}</td>
-                        <td>${item.patientName}</td>
+                        <td title="${item.patientId}">${item.patientId}</td>
+                        <td title="${item.patientName}">${item.patientName}</td>
                         <td>${formatGender(item.patientSex)}</td>
                         <td>${item.age ? item.age + '岁' : ''}</td>
-                        <td>${item.accessionNumber}</td>
+                        <td title="${item.accessionNumber}">${item.accessionNumber}</td>
                         <td>${item.modality}</td>
                         <td>${formatDateTime(item.scheduledDateTime)}</td>
                         <td><span class="status-${item.status.toLowerCase()}">${formatStatus(item.status)}</span></td>
@@ -72,6 +76,89 @@ function loadWorklistData() {
         .catch(error => {
             console.error('获取Worklist数据失败:', error);
             alert('获取数据失败，请检查网络连接');
+        });
+}
+
+// 加载影像数据
+function loadImagesData() {
+    fetch('/api/images')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = $('#images-table-body');
+            tbody.empty();
+            
+            data.forEach(item => {
+                tbody.append(`
+                    <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleSeriesInfo(this)">
+                        <td title="${item.patientId}">${item.patientId}</td>
+                        <td title="${item.patientName}">${item.patientName}</td>
+                        <td>${formatGender(item.patientSex)}</td>
+                        <td>${calculatePatientAge(item.patientBirthDate)}</td>
+                        <td title="${item.accessionNumber}">${item.accessionNumber}</td>
+                        <td>${item.modality}</td>
+                        <td>${formatDateTime(item.studyDate)}</td>
+                        <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
+                    </tr>
+                    <tr class="series-info" style="display: none;">
+                        <td colspan="8">
+                            <div class="series-container">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 80px">序列号</th>
+                                            <th style="width: 80px">检查类型</th>
+                                            <th>序列描述</th>
+                                            <th style="width: 80px">图像数量</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                `);
+            });
+        })
+        .catch(error => {
+            console.error('获取影像数据失败:', error);
+            alert('获取数据失败，请检查网络连接');
+        });
+}
+
+// 切换序列信息显示
+function toggleSeriesInfo(row) {
+    const studyUid = $(row).data('study-uid');
+    const seriesRow = $(row).next('.series-info');
+    
+    if (seriesRow.is(':visible')) {
+        seriesRow.hide();
+        return;
+    }
+
+    // 加载序列信息
+    fetch(`/api/images/${studyUid}/series`)
+        .then(response => response.json())
+        .then(data => {
+            const tbody = seriesRow.find('tbody');
+            tbody.empty();
+            
+            data.forEach(series => {
+                tbody.append(`
+                    <tr>
+                        <td>${series.seriesNumber}</td>
+                        <td>${series.modality || '未知'}</td>
+                        <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
+                        <td>${series.numberOfInstances} 张</td>
+                    </tr>
+                `);
+            });
+            
+            seriesRow.show();
+        })
+        .catch(error => {
+            console.error('获取序列数据失败:', error);
+            alert('获取序列数据失败');
         });
 }
 
@@ -278,5 +365,31 @@ function formatGender(gender) {
         'O': '其他'
     };
     return genderMap[gender] || gender;
+}
+
+// 计算患者年龄
+function calculatePatientAge(birthDate) {
+    if (!birthDate) return '';
+    
+    try {
+        const today = new Date();
+        const birthYear = parseInt(birthDate.substring(0, 4));
+        const birthMonth = parseInt(birthDate.substring(4, 6)) - 1;
+        const birthDay = parseInt(birthDate.substring(6, 8));
+        
+        const birthDateTime = new Date(birthYear, birthMonth, birthDay);
+        let age = today.getFullYear() - birthDateTime.getFullYear();
+        
+        // 检查是否已过生日
+        if (today.getMonth() < birthDateTime.getMonth() || 
+            (today.getMonth() === birthDateTime.getMonth() && today.getDate() < birthDateTime.getDate())) {
+            age--;
+        }
+        
+        return `${age}岁`;
+    } catch (error) {
+        console.error('计算年龄失败:', error);
+        return '';
+    }
 }
 

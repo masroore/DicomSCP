@@ -8,12 +8,19 @@ body {
 
 /* 导航栏样式 */
 .navbar-nav {
-    margin-left: 2rem;  /* 增加导航栏与标题的距离 */
+    margin-left: 3rem;  /* 增加导航栏与标题的距离 */
 }
 
 .nav-link {
     position: relative;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 1.5rem;  /* 增加导航项之间的间距 */
+    margin: 0 0.5rem;  /* 添加外边距 */
+}
+
+/* 导航项悬停效果 */
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
 }
 
 .nav-link.active {
@@ -84,7 +91,7 @@ body {
 
 /* 增加容器最大宽度 */
 .container {
-    max-width: 1400px !important;
+    max-width: 1600px !important;
 }
 
 /* 调整表格样式 */
@@ -93,11 +100,80 @@ body {
 }
 
 .table td, .table th {
-    padding: 0.5rem;
+    padding: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* 影像列表和序列表格的特殊间距 */
+#images-table-body .table td, 
+#images-table-body .table th,
+.series-container .table td,
+.series-container .table th {
+    padding: 0.5rem 0.75rem;
+}
+
+/* 添加工具提示效果 */
+.table td {
+    position: relative;
+}
+
+.table td:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    z-index: 1000;
+    background: #333;
+    color: white;
+    padding: 5px;
+    border-radius: 3px;
+    white-space: normal;
+    max-width: 300px;
+    display: none;
+}
+
+.table td[title]:hover::after {
+    display: block;
 }
 
 /* 调整按钮组样式 */
 .btn-sm {
     padding: 0.25rem 0.5rem;
     font-size: 0.8rem;
+}
+
+/* 影像管理表格样式 */
+.series-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+    margin-top: 0;
+}
+
+/* 可点击的行样式 */
+.table tr[data-study-uid] {
+    cursor: pointer;
+    background-color: rgba(0,0,0,0.075);
+}
+
+/* 序列信息表格样式 */
+.series-info .table {
+    margin-bottom: 0;
+}
+
+.series-info .table th {
+    background-color: #e9ecef;
+    font-weight: 500;
+}
+
+/* 可点击行的视觉提示 */
+.table tr[data-study-uid] td:first-child {
+    border-left: 3px solid transparent;
+}
+
+.table tr[data-study-uid]:hover td:first-child {
+    border-left-color: #007bff;
 }
