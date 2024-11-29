@@ -10,6 +10,15 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 添加 Session 服务
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Session 过期时间
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
+
 // 获取配置
 var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
     ?? new DicomSettings();
@@ -123,12 +132,60 @@ if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
     });
 }
 
-// 其他中间件
+// 中间件顺序很重要
+app.UseSession();
+
+// 认证中间件
+app.Use(async (context, next) =>
+{
+    // 允许访问的路径
+    var allowedPaths = new[] 
+    {
+        "/login.html",
+        "/api/auth/login",
+        "/lib",
+        "/css",
+        "/js"
+    };
+
+    var path = context.Request.Path.Value?.ToLower();
+
+    // 如果是允许的路径，直接放行
+    if (allowedPaths.Any(p => path?.StartsWith(p) == true))
+    {
+        await next();
+        return;
+    }
+
+    // 检查登录状态
+    var username = context.Session.GetString("username");
+    if (string.IsNullOrEmpty(username))
+    {
+        // API 请求返回 401
+        if (path?.StartsWith("/api") == true)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        // 其他请求重定向到登录页
+        context.Response.Redirect("/login.html");
+        return;
+    }
+
+    await next();
+});
+
+app.UseStaticFiles();
+app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
 
-// 添加静态文件支持
-app.UseStaticFiles();
-app.UseDefaultFiles();
+// 处理根路径
+app.MapGet("/", context =>
+{
+    context.Response.Redirect("/index.html");
+    return Task.CompletedTask;
+});
 
 app.Run(); 

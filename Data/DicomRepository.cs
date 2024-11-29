@@ -123,6 +123,16 @@ public class DicomRepository : IDisposable
                 CreateTime DATETIME,
                 FOREIGN KEY(SeriesInstanceUid) REFERENCES Series(SeriesInstanceUid)
             )";
+
+        public const string CreateUsersTable = @"
+            CREATE TABLE IF NOT EXISTS Users (
+                Username TEXT PRIMARY KEY,
+                Password TEXT NOT NULL
+            )";
+
+        public const string InitializeAdminUser = @"
+            INSERT OR IGNORE INTO Users (Username, Password) 
+            VALUES ('admin', 'admin')";
     }
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
@@ -260,6 +270,8 @@ public class DicomRepository : IDisposable
             connection.Execute(SqlQueries.CreateSeriesTable, transaction: transaction);
             connection.Execute(SqlQueries.CreateInstancesTable, transaction: transaction);
             connection.Execute(SqlQueries.CreateWorklistTable, transaction: transaction);
+            connection.Execute(SqlQueries.CreateUsersTable, transaction: transaction);
+            connection.Execute(SqlQueries.InitializeAdminUser, transaction: transaction);
 
             transaction.Commit();
             _initialized = true;
@@ -386,5 +398,15 @@ public class DicomRepository : IDisposable
             ORDER BY CAST(s.SeriesNumber as INTEGER)";
 
         return await connection.QueryAsync<Series>(sql, new { StudyUid = studyUid });
+    }
+
+    public async Task<bool> ValidateUserAsync(string username, string password)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var count = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM Users WHERE Username = @Username AND Password = @Password",
+            new { Username = username, Password = password }
+        );
+        return count > 0;
     }
 }

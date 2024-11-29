@@ -25,6 +25,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#" data-page="settings">系统设置</a>
                     </li>
+                    <li class="nav-item ms-auto">
+                        <a class="nav-link" href="#" onclick="logout()">退出</a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -168,5 +171,13 @@
     <script src="lib/jquery/jquery.min.js"></script>
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
+    <script>
+        function logout() {
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(() => {
+                    window.location.href = '/login.html';
+                });
+        }
+    </script>
 </body>
 </html>
