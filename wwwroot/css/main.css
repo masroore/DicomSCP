@@ -1,0 +1,103 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    margin-bottom: 20px;
+}
+
+/* 导航栏样式 */
+.navbar-nav {
+    margin-left: 2rem;  /* 增加导航栏与标题的距离 */
+}
+
+.nav-link {
+    position: relative;
+    padding: 0.5rem 1rem;
+}
+
+.nav-link.active {
+    color: #fff !important;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 2px;
+    background-color: #fff;
+}
+
+/* 内容区域样式 */
+#content-area {
+    background-color: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.table th {
+    background-color: #f8f9fa;
+}
+
+/* 状态标签样式 */
+.status-scheduled {
+    color: #0d6efd;
+}
+
+.status-in-progress {
+    color: #ffc107;
+}
+
+.status-completed {
+    color: #198754;
+}
+
+.status-cancelled {
+    color: #dc3545;
+}
+
+/* 模态框样式 */
+.modal-dialog {
+    display: flex;
+    align-items: center;
+    min-height: calc(100vh - 60px);  /* 减去一些空间以确保不会太贴近顶部和底部 */
+}
+
+.modal-content {
+    width: 100%;
+    max-height: 90vh;  /* 最大高度为视口高度的90% */
+    overflow-y: auto;  /* 如果内容太多，允许滚动 */
+}
+
+/* 确保模态框在小屏幕上也有良好的显示效果 */
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+}
+
+/* 增加容器最大宽度 */
+.container {
+    max-width: 1400px !important;
+}
+
+/* 调整表格样式 */
+.table {
+    font-size: 0.9rem;
+}
+
+.table td, .table th {
+    padding: 0.5rem;
+}
+
+/* 调整按钮组样式 */
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}

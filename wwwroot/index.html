@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM SCP 管理系统</title>
+    <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/main.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">DICOM SCP 管理系统</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="worklist">Worklist管理</a>
+                    </li>
+                    <li class="nav-item"
+                        <a class="nav-link" href="#" data-page="images">影像管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="settings">系统设置</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div id="content-area">
+            <!-- Worklist管理页面 -->
+            <div class="d-flex justify-content-start mb-3">
+                <button class="btn btn-primary" onclick="showAddWorklistModal()">
+                    添加检查
+                </button>
+            </div>
+
+            <!-- 检查列表 -->
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>患者ID</th>
+                            <th>姓名</th>
+                            <th>性别</th>
+                            <th>年龄</th>
+                            <th>检查号</th>
+                            <th>检查类型</th>
+                            <th>预约时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="worklist-table-body">
+                        <!-- 数据将通过JavaScript动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑检查的模态框 -->
+    <div class="modal fade" id="worklistModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">添加检查</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="worklistForm">
+                        <input type="hidden" id="worklistId">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="patientName" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">患者ID</label>
+                                <input type="text" class="form-control" id="patientId" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="accessionNumber" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">性别</label>
+                                <select class="form-select" id="patientSex" required>
+                                    <option value="M" selected>男</option>
+                                    <option value="F">女</option>
+                                    <option value="O">其他</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">年龄</label>
+                                <input type="number" class="form-control" id="patientAge" min="0" max="150" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查类型</label>
+                                <select class="form-select" id="modality" required>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="US">US</option>
+                                    <option value="DR">DR</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">预约时间</label>
+                                <input type="datetime-local" class="form-control" id="scheduledDateTime" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">预约AE Title</label>
+                                <input type="text" class="form-control" id="scheduledAET" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查站名称</label>
+                                <input type="text" class="form-control" id="scheduledStationName">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label">检查部位</label>
+                                <input type="text" class="form-control" id="bodyPartExamined">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveWorklist()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="lib/jquery/jquery.min.js"></script>
+    <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

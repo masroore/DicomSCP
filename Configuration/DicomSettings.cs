@@ -21,6 +21,8 @@ public class DicomSettings
     [Required]
     public string TempPath { get; set; } = "./temp_files";
 
+    public string ConnectionString { get; set; } = "Data Source=dicom.db";
+
     public LogSettings Logging { get; set; } = new();
 
     public AdvancedSettings Advanced { get; set; } = new();

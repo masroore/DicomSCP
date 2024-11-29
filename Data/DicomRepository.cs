@@ -261,60 +261,6 @@ public class DicomRepository : IDisposable
             connection.Execute(SqlQueries.CreateInstancesTable, transaction: transaction);
             connection.Execute(SqlQueries.CreateWorklistTable, transaction: transaction);
 
-            // 检查是否已经有数据
-            var count = connection.ExecuteScalar<int>("SELECT COUNT(*) FROM Worklist");
-            
-            // 只在表为空时创建演示数据
-            if (count == 0)
-            {
-                var demoWorklist = new WorklistItem
-                {
-                    WorklistId = Guid.NewGuid().ToString("N"),
-                    AccessionNumber = "ACC20231129001",
-                    PatientId = "P20231129001",
-                    PatientName = "Test^Patient",
-                    PatientBirthDate = "19800101",
-                    PatientSex = "M",
-                    StudyInstanceUid = DicomUIDGenerator.GenerateDerivedFromUUID().UID,
-                    StudyDescription = "Chest X-Ray",
-                    Modality = "CR",
-                    ScheduledAET = "STORESCP",
-                    ScheduledDateTime = DateTime.Now.ToString("yyyyMMdd HHmmss"),
-                    ScheduledStationName = "ROOM1",
-                    ScheduledProcedureStepID = "SPS001",
-                    ScheduledProcedureStepDescription = "Chest PA and Lateral",
-                    RequestedProcedureID = "RP001",
-                    RequestedProcedureDescription = "Chest X-Ray PA and Lateral",
-                    ReferringPhysicianName = "Referring^Doctor",
-                    Status = "SCHEDULED",
-                    BodyPartExamined = "CHEST",
-                    ReasonForRequest = "Routine checkup",
-                    CreateTime = DateTime.Now,
-                    UpdateTime = DateTime.Now
-                };
-
-                connection.Execute(@"
-                    INSERT INTO Worklist (
-                        WorklistId, AccessionNumber, PatientId, PatientName, PatientBirthDate,
-                        PatientSex, StudyInstanceUid, StudyDescription, Modality, ScheduledAET,
-                        ScheduledDateTime, ScheduledStationName, ScheduledProcedureStepID,
-                        ScheduledProcedureStepDescription, RequestedProcedureID,
-                        RequestedProcedureDescription, ReferringPhysicianName, Status,
-                        BodyPartExamined, ReasonForRequest,
-                        CreateTime, UpdateTime
-                    ) VALUES (
-                        @WorklistId, @AccessionNumber, @PatientId, @PatientName, @PatientBirthDate,
-                        @PatientSex, @StudyInstanceUid, @StudyDescription, @Modality, @ScheduledAET,
-                        @ScheduledDateTime, @ScheduledStationName, @ScheduledProcedureStepID,
-                        @ScheduledProcedureStepDescription, @RequestedProcedureID,
-                        @RequestedProcedureDescription, @ReferringPhysicianName, @Status,
-                        @BodyPartExamined, @ReasonForRequest,
-                        @CreateTime, @UpdateTime
-                    )", demoWorklist, transaction);
-
-                _logger.LogInformation("已初始化 Worklist 演示数据");
-            }
-
             transaction.Commit();
             _initialized = true;
             _logger.LogInformation("数据库表初始化完成");

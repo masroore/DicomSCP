@@ -82,6 +82,7 @@ if (settings.Swagger.Enabled)
 builder.Services.AddFellowOakDicom();
 builder.Services.AddSingleton<DicomRepository>();
 builder.Services.AddSingleton<DicomServer>();
+builder.Services.AddSingleton<WorklistRepository>();
 
 // 确保配置服务正确注册
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
@@ -125,5 +126,9 @@ if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
 // 其他中间件
 app.UseAuthorization();
 app.MapControllers();
+
+// 添加静态文件支持
+app.UseStaticFiles();
+app.UseDefaultFiles();
 
 app.Run(); 

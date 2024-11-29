@@ -43,11 +43,11 @@ public class Instance
 public class WorklistItem
 {
     public string WorklistId { get; set; } = string.Empty;
-    public string AccessionNumber { get; set; } = string.Empty;
     public string PatientId { get; set; } = string.Empty;
     public string PatientName { get; set; } = string.Empty;
     public string PatientBirthDate { get; set; } = string.Empty;
     public string PatientSex { get; set; } = string.Empty;
+    public int? Age { get; set; }
     public string StudyInstanceUid { get; set; } = string.Empty;
     public string StudyDescription { get; set; } = string.Empty;
     public string Modality { get; set; } = string.Empty;
@@ -60,8 +60,9 @@ public class WorklistItem
     public string RequestedProcedureDescription { get; set; } = string.Empty;
     public string ReferringPhysicianName { get; set; } = string.Empty;
     public string Status { get; set; } = "SCHEDULED";
+    public string BodyPartExamined { get; set; } = string.Empty;
+    public string ReasonForRequest { get; set; } = string.Empty;
     public DateTime CreateTime { get; set; }
     public DateTime UpdateTime { get; set; }
-    public string? BodyPartExamined { get; set; }
-    public string? ReasonForRequest { get; set; }
+    public string AccessionNumber { get; set; } = string.Empty;
 }

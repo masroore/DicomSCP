@@ -230,7 +230,18 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             // 患者信息
             dataset.Add(DicomTag.PatientID, item.PatientId);
             dataset.Add(DicomTag.PatientName, item.PatientName);
-            dataset.Add(DicomTag.PatientBirthDate, item.PatientBirthDate);
+            // 确保出生日期格式正确
+            try
+            {
+                var birthDate = DateTime.Parse(item.PatientBirthDate);
+                dataset.Add(DicomTag.PatientBirthDate, birthDate.ToString("yyyyMMdd"));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "处理出生日期失败 - PatientId: {PatientId}, BirthDate: {BirthDate}", 
+                    item.PatientId, item.PatientBirthDate);
+                dataset.Add(DicomTag.PatientBirthDate, "19000101");  // 使用默认值
+            }
             dataset.Add(DicomTag.PatientSex, item.PatientSex);
             
             // 添加年龄信息
@@ -238,7 +249,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             {
                 try
                 {
-                    var birthDate = DateTime.ParseExact(item.PatientBirthDate, "yyyyMMdd", null);
+                    var birthDate = DateTime.Parse(item.PatientBirthDate);
                     var age = DateTime.Now.Year - birthDate.Year;
                     if (DateTime.Now.DayOfYear < birthDate.DayOfYear)
                     {
@@ -260,17 +271,32 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             dataset.Add(DicomTag.StudyDescription, item.StudyDescription);
 
             // 检查部位信息
-            dataset.Add(DicomTag.BodyPartExamined, item.BodyPartExamined ?? "");  // 需要在 WorklistItem 中添加此字段
+            dataset.Add(DicomTag.BodyPartExamined, item.BodyPartExamined ?? "");
             dataset.Add(DicomTag.RequestedProcedureDescription, item.RequestedProcedureDescription);
             dataset.Add(DicomTag.ScheduledProcedureStepDescription, item.ScheduledProcedureStepDescription);
-            dataset.Add(DicomTag.ReasonForTheRequestedProcedure, item.ReasonForRequest ?? "");  // 需要在 WorklistItem 中添加此字段
+            dataset.Add(DicomTag.ReasonForTheRequestedProcedure, item.ReasonForRequest ?? "");
 
             // 预约信息
             dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");  // UTF-8
             dataset.Add(DicomTag.Modality, item.Modality);
             dataset.Add(DicomTag.ScheduledStationAETitle, item.ScheduledAET);
-            dataset.Add(DicomTag.ScheduledProcedureStepStartDate, item.ScheduledDateTime.Split(' ')[0]);
-            dataset.Add(DicomTag.ScheduledProcedureStepStartTime, item.ScheduledDateTime.Split(' ')[1]);
+
+            // 处理预约日期时间
+            try
+            {
+                var scheduledDateTime = DateTime.Parse(item.ScheduledDateTime);
+                dataset.Add(DicomTag.ScheduledProcedureStepStartDate, scheduledDateTime.ToString("yyyyMMdd"));
+                dataset.Add(DicomTag.ScheduledProcedureStepStartTime, scheduledDateTime.ToString("HHmmss"));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "处理预约时间失败 - PatientId: {PatientId}, DateTime: {DateTime}", 
+                    item.PatientId, item.ScheduledDateTime);
+                // 使用默认值或跳过
+                dataset.Add(DicomTag.ScheduledProcedureStepStartDate, "19000101");
+                dataset.Add(DicomTag.ScheduledProcedureStepStartTime, "000000");
+            }
+
             dataset.Add(DicomTag.ScheduledStationName, item.ScheduledStationName);
             dataset.Add(DicomTag.ScheduledProcedureStepID, item.ScheduledProcedureStepID);
             dataset.Add(DicomTag.RequestedProcedureID, item.RequestedProcedureID);
