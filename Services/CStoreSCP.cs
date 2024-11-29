@@ -7,6 +7,7 @@ using ILogger = Serilog.ILogger;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
+using FellowOakDicom.Imaging;
 
 namespace DicomSCP.Services;
 
@@ -97,7 +98,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
         var advancedSettings = _settings.Advanced;
         
-        // 应用验证配置
+        // 应用验配置
         if (advancedSettings.ValidateCallingAE && 
             !advancedSettings.AllowedCallingAEs.Contains(association.CallingAE))
         {
@@ -269,7 +270,6 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 var validationResult = ValidateKeyDicomTags(request.Dataset);
                 if (!validationResult.IsValid)
                 {
-                    _logger.Warning("DICOM标签验证失败 - 原因: {Reason}", validationResult.ErrorMessage);
                     return new DicomCStoreResponse(request, DicomStatus.InvalidAttributeValue);
                 }
 
@@ -290,7 +290,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     // 压缩图像
                     var compressedFile = await CompressImageAsync(request.File);
 
-                    // 保存压缩后的文件
+                    // 保压缩后的文件
                     await compressedFile.SaveAsync(tempFilePath);
 
                     // 确保目标目录存在
@@ -323,7 +323,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         targetFilePath,
                         new FileInfo(targetFilePath).Length);
 
-                    // 在文件保存成功后，保存到数据库
+                    // 在文件保存成功，保存到数据库
                     if (_repository != null)
                     {
                         try 
@@ -381,6 +381,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     {
         try
         {
+            // 定义必需的标签
             var requiredTags = new[]
             {
                 (DicomTag.PatientID, "Patient ID"),
@@ -389,30 +390,36 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 (DicomTag.SOPInstanceUID, "SOP Instance UID")
             };
 
-            var missingTags = new List<string>();
+            // 检查必需标签
+            var missingTags = requiredTags
+                .Where(t => !dataset.Contains(t.Item1))
+                .Select(t => t.Item2)
+                .ToList();
 
-            foreach (var (tag, name) in requiredTags)
+            // 检查像素数据
+            if (IsImageStorage(dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID)))
             {
-                if (!dataset.Contains(tag))
+                if (!dataset.Contains(DicomTag.PixelData) || 
+                    dataset.GetDicomItem<DicomItem>(DicomTag.PixelData) == null)
                 {
-                    missingTags.Add(name);
-                    _logger.Warning("缺少必要标签: {TagName}", name);
+                    missingTags.Add("Pixel Data (empty or missing)");
                 }
             }
 
             if (missingTags.Any())
             {
-                var tags = string.Join(", ", missingTags);
-                _logger.Warning("DICOM标签验证失败 - 缺失标签: {Tags}", tags);
-                return (false, $"缺少必要标签: {tags}");
+                var errorMessage = $"DICOM数据验证失败: {string.Join(", ", missingTags)}";
+                _logger.Warning(errorMessage);
+                return (false, errorMessage);
             }
 
             return (true, string.Empty);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "验证DICOM标签失败");
-            return (false, "验证DICOM标签失败");
+            var errorMessage = "DICOM数据验证过程发生异常";
+            _logger.Error(ex, errorMessage);
+            return (false, errorMessage);
         }
     }
 
