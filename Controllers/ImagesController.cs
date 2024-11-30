@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Models;
 using DicomSCP.Data;
+using Microsoft.Extensions.Configuration;
+using System.IO;
 
 namespace DicomSCP.Controllers;
 
@@ -10,11 +12,13 @@ public class ImagesController : ControllerBase
 {
     private readonly DicomRepository _repository;
     private readonly ILogger<ImagesController> _logger;
+    private readonly IConfiguration _configuration;
 
-    public ImagesController(DicomRepository repository, ILogger<ImagesController> logger)
+    public ImagesController(DicomRepository repository, ILogger<ImagesController> logger, IConfiguration configuration)
     {
         _repository = repository;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -67,6 +71,43 @@ public class ImagesController : ControllerBase
         {
             _logger.LogError(ex, "获取序列列表失败 - StudyUid: {StudyUid}", studyUid);
             return StatusCode(500, "获取数据失败");
+        }
+    }
+
+    [HttpDelete("{studyInstanceUid}")]
+    public async Task<IActionResult> Delete(string studyInstanceUid)
+    {
+        if (string.IsNullOrEmpty(studyInstanceUid))
+        {
+            return BadRequest("StudyInstanceUID is required");
+        }
+
+        try
+        {
+            // 1. 从数据库删除记录
+            var study = await _repository.GetStudyAsync(studyInstanceUid);
+            if (study == null)
+            {
+                return NotFound("检查不存在");
+            }
+
+            await _repository.DeleteStudyAsync(studyInstanceUid);
+
+            // 2. 删除文件系统中的文件
+            var storagePath = _configuration["DicomSettings:StoragePath"] 
+                ?? throw new InvalidOperationException("DicomSettings:StoragePath is not configured");
+            var studyPath = Path.Combine(storagePath, studyInstanceUid);
+            if (Directory.Exists(studyPath))
+            {
+                Directory.Delete(studyPath, true);
+            }
+
+            return Ok(new { message = "删除成功" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
+            return StatusCode(500, new { error = "删除失败，请重试" });
         }
     }
 } 

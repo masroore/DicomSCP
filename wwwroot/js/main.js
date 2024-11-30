@@ -120,7 +120,7 @@ function loadImagesData() {
             tbody.empty();
             
             data.forEach(item => {
-                tbody.append(`
+                const tr = $(`
                     <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleSeriesInfo(this)">
                         <td title="${item.patientId}">${item.patientId}</td>
                         <td title="${item.patientName}">${item.patientName}</td>
@@ -130,26 +130,19 @@ function loadImagesData() {
                         <td>${item.modality}</td>
                         <td>${formatDateTime(item.studyDate)}</td>
                         <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
-                    </tr>
-                    <tr class="series-info" style="display: none;">
-                        <td colspan="8">
-                            <div class="series-container">
-                                <table class="table table-sm table-bordered series-detail-table">
-                                    <thead>
-                                        <tr>
-                                            <th style="width: 80px">序列号</th>
-                                            <th style="width: 100px">检查类型</th>
-                                            <th style="width: 300px">序列描述</th>
-                                            <th style="width: 80px">图像数量</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                    </tbody>
-                                </table>
-                            </div>
+                        <td>
+                            <button class="btn btn-danger btn-sm delete-btn">删除</button>
                         </td>
                     </tr>
                 `);
+                
+                // 添加点击事件处理
+                tr.find('.delete-btn').on('click', function(e) {
+                    e.stopPropagation();  // 阻止事件冒泡
+                    deleteStudy(item.studyInstanceUid);
+                });
+                
+                tbody.append(tr);
             });
         })
         .catch(error => {
@@ -199,7 +192,7 @@ function showAddWorklistModal() {
     currentWorklistId = null;
     document.getElementById('worklistForm').reset();
     
-    // 设置预约时间默认为当前时间
+    // 设置预约时间认为当前时间
     const now = new Date();
     const defaultDateTime = now.toISOString().slice(0, 16);
     document.getElementById('scheduledDateTime').value = defaultDateTime;
@@ -347,7 +340,7 @@ function formatDateTimeForInput(dateTimeStr) {
         
         return date.toISOString().slice(0, 16);
     } catch (error) {
-        console.error('格式化日期时间失败:', error);
+        console.error('格式化日期时间败:', error);
         return '';
     }
 }
@@ -403,7 +396,7 @@ function formatGender(gender) {
     const genderMap = {
         'M': '男',
         'F': '女',
-        'O': '其��'
+        'O': '其'
     };
     return genderMap[gender] || gender;
 }
@@ -474,7 +467,7 @@ function changePassword() {
             throw new Error(text);
         }
         // 不尝试解析 JSON，直接处理
-        alert('密码修改成功，请重新登录');
+        alert('密码修成功，请重登录');
         changePasswordModal.hide();
         window.location.href = '/login.html';
     })
@@ -496,5 +489,30 @@ function getCurrentUsername() {
     }
     // 如果没有找到用户名，可能未登录
     window.location.href = '/login.html';
+}
+
+// 删除影像数据
+function deleteStudy(studyInstanceUid) {
+    if (confirm('确定要删除这个检查吗？\n此操作将删除所有相关的序列和图像，且不可恢复。')) {
+        fetch(`/api/images/${studyInstanceUid}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || '删除失败');
+                });
+            }
+            // 删除成功后刷新列表
+            loadImagesData();
+        })
+        .catch(error => {
+            console.error('删除失败:', error);
+            alert(error.message || '删除失败，请重试');
+        });
+    }
 }
 

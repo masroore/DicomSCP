@@ -439,4 +439,69 @@ public class DicomRepository : IDisposable
         var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
         return Convert.ToBase64String(hashedBytes);
     }
+
+    public async Task DeleteStudyAsync(string studyInstanceUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+  
+        try
+        {
+            // 先检查是否存在相关记录
+            var instanceCount = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM Instances WHERE SeriesInstanceUid IN (SELECT SeriesInstanceUid FROM Series WHERE StudyInstanceUid = @StudyInstanceUid)",
+                new { StudyInstanceUid = studyInstanceUid },
+                transaction: transaction
+            );
+  
+            // 删除与 Series 相关的 Instances
+            await connection.ExecuteAsync(
+                "DELETE FROM Instances WHERE SeriesInstanceUid IN (SELECT SeriesInstanceUid FROM Series WHERE StudyInstanceUid = @StudyInstanceUid)",
+                new { StudyInstanceUid = studyInstanceUid },
+                transaction: transaction
+            );
+  
+            // 删除与 Study 相关的 Series
+            await connection.ExecuteAsync(
+                "DELETE FROM Series WHERE StudyInstanceUid = @StudyInstanceUid",
+                new { StudyInstanceUid = studyInstanceUid },
+                transaction: transaction
+            );
+  
+            // 删除 Study
+            await connection.ExecuteAsync(
+                "DELETE FROM Studies WHERE StudyInstanceUid = @StudyInstanceUid",
+                new { StudyInstanceUid = studyInstanceUid },
+                transaction: transaction
+            );
+  
+            await transaction.CommitAsync();
+            _logger.LogInformation("成功删除检查 - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
+                studyInstanceUid, instanceCount);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
+            throw;
+        }
+    }
+
+    public async Task<Study?> GetStudyAsync(string studyInstanceUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+        
+        var sql = @"
+            SELECT s.*, p.PatientName, p.PatientId, p.PatientSex, p.PatientBirthDate
+            FROM Studies s
+            LEFT JOIN Patients p ON s.PatientId = p.PatientId
+            WHERE s.StudyInstanceUid = @StudyInstanceUid";
+        
+        return await connection.QueryFirstOrDefaultAsync<Study>(
+            sql,
+            new { StudyInstanceUid = studyInstanceUid }
+        );
+    }
 }
