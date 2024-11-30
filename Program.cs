@@ -29,27 +29,15 @@ BaseRepository.ConfigureLogging(logSettings);
 // 初始化API日志
 ApiLoggingMiddleware.ConfigureLogging(logSettings);
 
-// 配置全局日志（用于其他服务）
+// 配置框架日志
 var logConfig = new LoggerConfiguration()
-    .MinimumLevel.Debug()
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .MinimumLevel.Override("System", LogEventLevel.Warning);
-
-// 控制台日志 - 只显示服务状态和错误
-if (logSettings.EnableConsoleLog)
-{
-    logConfig.WriteTo.Logger(lc => lc
+    .MinimumLevel.Warning()  // 只记录警告以上的日志
+    .WriteTo.Logger(lc => lc
         .WriteTo.Console(
-            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:l}{NewLine}",
-            restrictedToMinimumLevel: LogEventLevel.Information
-        )
-        .Filter.ByIncludingOnly(evt => 
-            evt.Level == LogEventLevel.Error || 
-            evt.Level == LogEventLevel.Fatal || 
-            evt.Properties.ContainsKey("Area")
+            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:l}{NewLine}",
+            restrictedToMinimumLevel: LogEventLevel.Warning
         )
     );
-}
 
 Log.Logger = logConfig.CreateLogger();
 builder.Host.UseSerilog();

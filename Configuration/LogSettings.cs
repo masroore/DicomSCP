@@ -4,9 +4,6 @@ namespace DicomSCP.Configuration;
 
 public class LogSettings
 {
-    public bool EnableConsoleLog { get; set; } = true;
-    public bool EnableFileLog { get; set; } = true;
-    public LogEventLevel MinimumLevel { get; set; } = LogEventLevel.Information;
     public string LogPath { get; set; } = "logs";
     public int RetainedDays { get; set; } = 31;
     public string OutputTemplate { get; set; } = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}";

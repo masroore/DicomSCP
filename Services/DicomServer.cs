@@ -39,7 +39,7 @@ public sealed class DicomServer : IDisposable
     {
         if (IsRunning)
         {
-            DicomLogger.Warning("DICOM服务器已在运行中");
+            DicomLogger.Warning("DICOM", "DICOM服务器已在运行中");
             return;
         }
 
@@ -55,7 +55,7 @@ public sealed class DicomServer : IDisposable
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(ex, "DICOM服务启动失败");
+            DicomLogger.Error("DICOM",ex, "DICOM服务启动失败");
             await StopAsync();  // 确保清理资源
             throw;
         }
@@ -68,11 +68,11 @@ public sealed class DicomServer : IDisposable
             try
             {
                 Directory.CreateDirectory(_settings.StoragePath);
-                DicomLogger.Information("创建存储目录: {Path}", _settings.StoragePath);
+                DicomLogger.Information("DICOM", "创建存储目录: {Path}", _settings.StoragePath);
             }
             catch (Exception ex)
             {
-                DicomLogger.Error(ex, "创建存储目录失败: {Path}", _settings.StoragePath);
+                DicomLogger.Error("DICOM", ex, "创建存储目录失败: {Path}", _settings.StoragePath);
                 throw;
             }
         }
@@ -82,7 +82,7 @@ public sealed class DicomServer : IDisposable
     {
         try
         {
-            DicomLogger.Information("开始启动DICOM服务...");
+            DicomLogger.Information("DICOM", "开始启动DICOM服务...");
 
             // 配置存储服务
             CStoreSCP.Configure(
@@ -105,7 +105,7 @@ public sealed class DicomServer : IDisposable
                 _loggerFactory.CreateLogger<CStoreSCP>(),
                 Options.Create(_settings));
 
-            DicomLogger.Information("C-STORE服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+            DicomLogger.Information("DICOM", "C-STORE服务已启动 - AET: {AeTitle}, 端口: {Port}", 
                 _settings.AeTitle, _settings.StoreSCPPort);
 
             // 启动工作列表服务
@@ -116,12 +116,12 @@ public sealed class DicomServer : IDisposable
                 _loggerFactory.CreateLogger<WorklistSCP>(),
                 Options.Create(_settings));
 
-            DicomLogger.Information("Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+            DicomLogger.Information("DICOM", "Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
                 _settings.AeTitle, _settings.WorklistSCPPort);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(ex, "DICOM服务启动失败 - AET: {AeTitle}", _settings.AeTitle);
+            DicomLogger.Error("DICOM", ex, "DICOM服务启动失败 - AET: {AeTitle}", _settings.AeTitle);
             _storeScp?.Dispose();
             _worklistScp?.Dispose();
             _storeScp = _worklistScp = null;
@@ -131,16 +131,7 @@ public sealed class DicomServer : IDisposable
 
     private void LogServerStartup()
     {
-        DicomLogger.Information(
-            "DICOM服务启动完成\n" +
-            "AE Title: {AeTitle}\n" +
-            "C-STORE服务端口: {StorePort}\n" +
-            "Worklist服务端口: {WorklistPort}\n" +
-            "存储路径: {StoragePath}", 
-            _settings.AeTitle,
-            _settings.StoreSCPPort,
-            _settings.WorklistSCPPort,
-            Path.GetFullPath(_settings.StoragePath));
+        DicomLogger.Information("DICOM", "DICOM服务启动完成...");
     }
 
     public async Task StopAsync()
@@ -154,16 +145,16 @@ public sealed class DicomServer : IDisposable
         {
             await Task.Run(() =>
             {
-                DicomLogger.Information("正在停止DICOM服务 - AET: {AeTitle}", _settings.AeTitle);
+                DicomLogger.Information("DICOM", "正在停止DICOM服务...");
                 _storeScp?.Dispose();
                 _worklistScp?.Dispose();
                 _storeScp = _worklistScp = null;
             });
-            DicomLogger.Information("DICOM服务已停止 - AET: {AeTitle}", _settings.AeTitle);
+            DicomLogger.Information("DICOM", "DICOM服务已停止...");
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(ex, "停止DICOM服务时发生错误 - AET: {AeTitle}", _settings.AeTitle);
+            DicomLogger.Error("DICOM", ex, "停止DICOM服务时发生错误!");
             throw;
         }
     }
