@@ -10,15 +10,6 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 添加 Session 服务
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddSession(options =>
-{
-    options.IdleTimeout = TimeSpan.FromMinutes(30); // Session 过期时间
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-});
-
 // 获取配置
 var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
     ?? new DicomSettings();
@@ -133,7 +124,6 @@ if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
 }
 
 // 中间件顺序很重要
-app.UseSession();
 
 // 认证中间件
 app.Use(async (context, next) =>
@@ -157,18 +147,14 @@ app.Use(async (context, next) =>
         return;
     }
 
-    // 检查登录状态
-    var username = context.Session.GetString("username");
-    if (string.IsNullOrEmpty(username))
+    // 使用 Cookie 验证
+    if (!context.Request.Cookies.ContainsKey("username"))
     {
-        // API 请求返回 401
         if (path?.StartsWith("/api") == true)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
-
-        // 其他请求重定向到登录页
         context.Response.Redirect("/login.html");
         return;
     }

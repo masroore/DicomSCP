@@ -23,15 +23,26 @@ public class AuthController : ControllerBase
             return Unauthorized("用户名或密码错误");
         }
 
-        HttpContext.Session.Clear();
-        HttpContext.Session.SetString("username", request.Username);
+        Response.Cookies.Append("username", request.Username, new CookieOptions
+        {
+            HttpOnly = true,  // 防止 JS 访问
+            Expires = DateTime.Now.AddMinutes(30),
+            SameSite = SameSiteMode.Strict,
+            IsEssential = true,
+            Path = "/",
+            Secure = true,
+        });
+
         return Ok();
     }
 
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        HttpContext.Session.Clear();
+        Response.Cookies.Delete("username", new CookieOptions
+        {
+            Path = "/"
+        });
         return Ok();
     }
 }
