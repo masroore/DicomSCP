@@ -2,8 +2,6 @@
 let worklistModal;
 let currentWorklistId = null;
 let changePasswordModal;
-let dwvApp = null;
-let dwvModal = null;
 
 // 页面加载完成后执行
 $(document).ready(function() {
@@ -18,58 +16,6 @@ $(document).ready(function() {
     if (changePasswordModalElement) {
         changePasswordModal = new bootstrap.Modal(changePasswordModalElement);
     }
-    
-    // 初始化 DWV 模态框
-    const dwvModalElement = document.getElementById('dwvModal');
-    if (dwvModalElement) {
-        dwvModal = new bootstrap.Modal(dwvModalElement);
-    }
-    
-    // 初始化 DWV
-    dwvApp = new dwv.App();
-    dwvApp.init({
-        "containerDivId": "dwv-viewer",
-        "tools": {
-            Scroll: {},
-            ZoomAndPan: {},
-            WindowLevel: {}
-        },
-        "toolNames": ["Scroll", "ZoomAndPan", "WindowLevel"]
-    });
-    
-    // 添加更多事件监听
-    dwvApp.addEventListener('loadstart', function(event) {
-        console.log('DWV loadstart:', event);
-    });
-
-    dwvApp.addEventListener('loadprogress', function(event) {
-        console.log('DWV loadprogress:', {
-            loaded: event.loaded,
-            total: event.total,
-            source: event.source
-        });
-    });
-
-    dwvApp.addEventListener('load', function(event) {
-        console.log('DWV load:', event);
-        // 设置默认工具
-        dwvApp.setTool("Scroll");
-    });
-
-    dwvApp.addEventListener('error', function(event) {
-        console.error('DWV error:', {
-            error: event.error,
-            source: event.source,
-            name: event.name,
-            message: event.message
-        });
-    });
-    
-    // 在模态框关闭时重置 DWV
-    $('#dwvModal').on('hidden.bs.modal', function () {
-        console.log('模态框关闭，重置 DWV');
-        dwvApp.reset();
-    });
     
     // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
     const currentPage = window.location.hash.slice(1) || 'worklist';
@@ -235,9 +181,7 @@ function toggleSeriesInfo(row) {
                         <td>${series.seriesNumber}</td>
                         <td>${series.modality || '未知'}</td>
                         <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                        <td>${series.numberOfInstances} 张
-                            <button class="btn btn-sm btn-primary ms-2" onclick="previewSeries('${series.seriesInstanceUid}')">预览</button>
-                        </td>
+                        <td>${series.numberOfInstances} 张</td>
                     </tr>
                 `);
             });
@@ -246,11 +190,11 @@ function toggleSeriesInfo(row) {
         })
         .catch(error => {
             console.error('获取序列数据失败:', error);
-            alert('获取列数据失败');
+            alert('获取序列数据失败');
         });
 }
 
-// 显添加 Worklist 模态框
+// 显示添加 Worklist 模态框
 function showAddWorklistModal() {
     currentWorklistId = null;
     document.getElementById('worklistForm').reset();
@@ -459,7 +403,7 @@ function formatGender(gender) {
     const genderMap = {
         'M': '男',
         'F': '女',
-        'O': '其它'
+        'O': '其��'
     };
     return genderMap[gender] || gender;
 }
@@ -552,41 +496,5 @@ function getCurrentUsername() {
     }
     // 如果没有找到用户名，可能未登录
     window.location.href = '/login.html';
-}
-
-// 预览序列图像
-async function previewSeries(seriesUid) {
-    try {
-        // 获取序列下的所有实例
-        const response = await fetch(`/api/images/series/${seriesUid}/instances`);
-        if (!response.ok) {
-            throw new Error('获取图像列表失败');
-        }
-        
-        const instances = await response.json();
-        if (!instances || instances.length === 0) {
-            alert('没有可用的图像');
-            return;
-        }
-
-        // 显示模态框
-        dwvModal.show();
-
-        // 重置 DWV
-        dwvApp.reset();
-
-        // 获取第一张图像的数据
-        const imageUrl = `/api/images/instances/${instances[0].sopInstanceUid}`;
-        
-        // 直接使用 loadURLs 加载
-        dwvApp.loadURLs([imageUrl], {
-            // 设置 DICOM 类型
-            mimeType: "application/dicom"
-        });
-        
-    } catch (error) {
-        console.error('预览图像失败:', error);
-        alert('预览图像失败，请重试');
-    }
 }
 
