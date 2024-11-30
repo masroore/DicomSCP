@@ -81,8 +81,18 @@ function loadPage(page) {
 // 加载 Worklist 数据
 function loadWorklistData() {
     fetch('/api/worklist')
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error('获取数据失败');
+            }
+            return response.json();
+        })
         .then(data => {
+            if (!data) return;  // 如果是401跳转，data会是undefined
             const tbody = $('#worklist-table-body');
             tbody.empty();
             
@@ -114,8 +124,18 @@ function loadWorklistData() {
 // 加载影像数据
 function loadImagesData() {
     fetch('/api/images')
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error('获取数据失败');
+            }
+            return response.json();
+        })
         .then(data => {
+            if (!data) return;  // 如果是401跳转，data会是undefined
             const tbody = $('#images-table-body');
             tbody.empty();
             
@@ -161,10 +181,19 @@ function toggleSeriesInfo(row) {
         return;
     }
 
-    // 加载序列信息
     fetch(`/api/images/${studyUid}/series`)
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error('获取数据失败');
+            }
+            return response.json();
+        })
         .then(data => {
+            if (!data) return;  // 如果是401跳转，data会是undefined
             const tbody = seriesRow.find('tbody');
             tbody.empty();
             
