@@ -14,6 +14,12 @@ let allImagesData = [];  // 存储所有影像数据
 let imagesCurrentPage = 1;
 const imagesPageSize = 10;
 
+// QR客户端相关变量
+let qrCurrentPage = 1;
+const qrPageSize = 10;
+let qrAllData = [];
+let qrSeriesModal;
+
 // 页面加载完成后执行
 $(document).ready(function() {
     // 初始化模态框
@@ -59,7 +65,7 @@ $(document).ready(function() {
 // 切换页面函数
 function switchPage(page) {
     // 隐藏所有页面
-    $('#worklist-page, #images-page, #settings-page').hide();
+    $('#worklist-page, #images-page, #settings-page, #qr-page').hide();
     
     // 移除所有导航链接的active类
     $('.nav-link').removeClass('active');
@@ -75,6 +81,8 @@ function switchPage(page) {
         loadWorklistData();
     } else if (page === 'images') {
         loadImagesData();
+    } else if (page === 'qr') {
+        loadQRNodes();
     }
 }
 
@@ -845,4 +853,282 @@ function getFilteredImagesData() {
                (!filters.stationName || (item.stationName && item.stationName.toLowerCase().includes(filters.stationName.toLowerCase())));
     });
 }
+
+// 加载QR节点列表
+async function loadQRNodes() {
+    try {
+        const response = await fetch('/api/QueryRetrieve/nodes');
+        if (!response.ok) {
+            throw new Error('获取节点列表失败');
+        }
+        
+        const nodes = await response.json();
+        const select = document.getElementById('qrNode');
+        select.innerHTML = nodes.map(node => `
+            <option value="${node.name}">${node.name} (${node.aeTitle}@${node.hostName})</option>
+        `).join('');
+        
+        // 选择默认节点
+        const defaultNode = nodes.find(n => n.isDefault);
+        if (defaultNode) {
+            select.value = defaultNode.name;
+        }
+    } catch (error) {
+        console.error('加载PACS节点失败:', error);
+        alert('加载PACS节点失败，请检查网络连接');
+    }
+}
+
+// 执行QR查询
+async function searchQR() {
+    const nodeId = document.getElementById('qrNode').value;
+    if (!nodeId) {
+        alert('请选择PACS节点');
+        return;
+    }
+
+    const queryParams = {
+        patientId: document.getElementById('qrPatientId').value,
+        patientName: document.getElementById('qrPatientName').value,
+        accessionNumber: document.getElementById('qrAccessionNumber').value,
+        modality: document.getElementById('qrModality').value,
+        studyDate: document.getElementById('qrStudyDate').value
+    };
+
+    try {
+        const response = await fetch(`/api/QueryRetrieve/${nodeId}/query/study`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(queryParams)
+        });
+
+        if (!response.ok) {
+            throw new Error('查询失败');
+        }
+
+        const result = await response.json();
+        console.log('查询结果:', result);  // 添加调试日志
+
+        // 更新数据和显示
+        qrAllData = result;
+        qrCurrentPage = 1;
+        displayQRPage(qrCurrentPage);
+        updateQRPagination(qrAllData.length);
+    } catch (error) {
+        console.error('查询失败:', error);
+        alert('查询失败，请检查网络连接');
+    }
+}
+
+// 显示QR查询结果页
+function displayQRPage(page) {
+    const start = (page - 1) * qrPageSize;
+    const end = start + qrPageSize;
+    const pageItems = qrAllData.slice(start, end);
+    
+    console.log('显示页面数据:', pageItems);  // 添加调试日志
+    
+    const tbody = document.getElementById('qr-table-body');
+    tbody.innerHTML = pageItems.map(item => `
+        <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleQRSeriesInfo(this)">
+            <td>${item.patientId || ''}</td>
+            <td>${item.patientName || ''}</td>
+            <td>${item.accessionNumber || ''}</td>
+            <td>${item.modalities || item.modality || ''}</td>
+            <td>${formatDate(item.studyDate) || ''}</td>
+            <td>${item.studyDescription || ''}</td>
+            <td>${item.seriesCount || 0}</td>
+            <td>${item.instanceCount || 0}</td>
+            <td>
+                <button class="btn btn-sm btn-success" onclick="moveQRStudy('${item.studyInstanceUid}', event)">获取</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 更新QR分页信息
+function updateQRPagination(total) {
+    const totalPages = Math.ceil(total / qrPageSize);
+    const start = (qrCurrentPage - 1) * qrPageSize + 1;
+    const end = Math.min(qrCurrentPage * qrPageSize, total);
+    
+    document.getElementById('qr-currentRange').textContent = total > 0 ? `${start}-${end}` : '0-0';
+    document.getElementById('qr-totalCount').textContent = total;
+    document.getElementById('qr-currentPage').textContent = qrCurrentPage;
+    
+    document.getElementById('qr-prevPage').disabled = qrCurrentPage === 1;
+    document.getElementById('qr-nextPage').disabled = qrCurrentPage === totalPages || total === 0;
+}
+
+// 切换序列信息显示
+async function toggleQRSeriesInfo(row) {
+    const studyUid = $(row).data('study-uid');
+    const seriesRow = $(row).next('.series-info');
+    const nodeId = document.getElementById('qrNode').value;
+    
+    if (seriesRow.is(':visible')) {
+        seriesRow.hide();
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/QueryRetrieve/${nodeId}/query/series/${studyUid}`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            throw new Error('获取序列失败');
+        }
+
+        const result = await response.json();
+        console.log('序列数据:', result);
+
+        // 创建序列信息行
+        const seriesInfoRow = $(`
+            <tr class="series-info" style="display: none;">
+                <td colspan="9">
+                    <div class="series-container">
+                        <table class="table table-sm table-bordered series-detail-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px">序列号</th>
+                                    <th style="width: 100px">检查类型</th>
+                                    <th style="width: 500px">序列描述</th>
+                                    <th style="width: 80px">图像数量</th>
+                                    <th style="width: 50px">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+        `);
+        
+        const tbody = seriesInfoRow.find('tbody');
+        result.forEach(series => {
+            tbody.append(`
+                <tr>
+                    <td>${series.seriesNumber || ''}</td>
+                    <td>${series.modality || ''}</td>
+                    <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
+                    <td>${series.instanceCount || 0} 张</td>
+                    <td>
+                        <button class="btn btn-primary btn-sm py-0" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
+                            获取
+                        </button>
+                    </td>
+                </tr>
+            `);
+        });
+        
+        // 移除已存在的序列信息行
+        $(row).siblings('.series-info').remove();
+        // 添加新的序列信息行并显示
+        $(row).after(seriesInfoRow);
+        seriesInfoRow.show();
+    } catch (error) {
+        console.error('获取序列失败:', error);
+        alert('获取序列失败，请检查网络连接');
+    }
+}
+
+// 获取检查
+async function moveQRStudy(studyUid, event) {
+    // 阻止事件冒泡，防止触发行的点击事件
+    if (event) {
+        event.stopPropagation();
+    }
+
+    const nodeId = document.getElementById('qrNode').value;
+    try {
+        const response = await fetch(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                destinationAe: 'STORESCP',
+                level: 'STUDY'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('传输失败');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+            alert('检查传输已开始');
+        } else {
+            alert(result.message || '传输失败');
+        }
+    } catch (error) {
+        console.error('传输失败:', error);
+        alert('传输失败，请检查网络连接');
+    }
+}
+
+// 获取序列
+async function moveQRSeries(studyUid, seriesUid, event) {
+    // 阻止事件冒泡
+    if (event) {
+        event.stopPropagation();
+    }
+
+    const nodeId = document.getElementById('qrNode').value;
+    try {
+        const response = await fetch(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                destinationAe: 'STORESCP',
+                level: 'SERIES',
+                seriesInstanceUid: seriesUid
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('传输失败');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+            alert('序列传输已开始');
+        } else {
+            alert(result.message || '传输失败');
+        }
+    } catch (error) {
+        console.error('传输失败:', error);
+        alert('传输失败，请检查网络连接');
+    }
+}
+
+// 格式化日期
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    return dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+}
+
+// 添加QR分页事件监听
+document.getElementById('qr-prevPage').onclick = () => {
+    if (qrCurrentPage > 1) {
+        qrCurrentPage--;
+        displayQRPage(qrCurrentPage);
+        updateQRPagination(qrAllData.length);
+    }
+};
+
+document.getElementById('qr-nextPage').onclick = () => {
+    const totalPages = Math.ceil(qrAllData.length / qrPageSize);
+    if (qrCurrentPage < totalPages) {
+        qrCurrentPage++;
+        displayQRPage(qrCurrentPage);
+        updateQRPagination(qrAllData.length);
+    }
+};
 

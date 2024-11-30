@@ -24,6 +24,9 @@
                         <a class="nav-link" href="#images" data-page="images">影像管理</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="#qr" data-page="qr">查询检索</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="#settings" data-page="settings">系统设置</a>
                     </li>
                 </ul>
@@ -183,6 +186,103 @@
                         </ul>
                     </nav>
                 </div>
+            </div>
+
+            <!-- 查询检索页面 -->
+            <div id="qr-page" style="display: none;">
+                <!-- 查询表单 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <form id="qrSearchForm" class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">PACS节点</label>
+                                <select class="form-select" id="qrNode">
+                                    <!-- 节点列表将通过JavaScript动态加载 -->
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">病人ID</label>
+                                <input type="text" class="form-control" id="qrPatientId">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">病人姓名</label>
+                                <input type="text" class="form-control" id="qrPatientName">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="qrAccessionNumber">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">检查类型</label>
+                                <select class="form-select" id="qrModality">
+                                    <option value="">全部</option>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="DR">DR</option>
+                                    <option value="US">US</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">检查日期</label>
+                                <input type="date" class="form-control" id="qrStudyDate">
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button type="button" class="btn btn-primary" onclick="searchQR()">查询</button>
+                                <button type="button" class="btn btn-secondary ms-2" onclick="resetQRSearch()">重置</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 查询结果表格 -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>病人ID</th>
+                                <th>姓名</th>
+                                <th>检查号</th>
+                                <th>检查类型</th>
+                                <th>检查日期</th>
+                                <th>检查描述</th>
+                                <th>序列数</th>
+                                <th>图像数</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qr-table-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页 -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="pagination-info">
+                        显示 <span id="qr-currentRange">1-10</span> 条，共 <span id="qr-totalCount">0</span> 条
+                    </div>
+                    <nav aria-label="分页导航">
+                        <ul class="pagination mb-0">
+                            <li class="page-item">
+                                <button class="page-link" id="qr-prevPage" aria-label="上一页">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                            </li>
+                            <li class="page-item">
+                                <span class="page-link" id="qr-currentPage">1</span>
+                            </li>
+                            <li class="page-item">
+                                <button class="page-link" id="qr-nextPage" aria-label="下一页">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- 系统设置页面 -->
+            <div id="settings-page" style="display: none;">
+                <!-- 系统设置内容 -->
             </div>
         </div>
     </div>

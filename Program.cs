@@ -6,6 +6,7 @@ using Serilog.Filters;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
 using DicomSCP.Data;
+using DicomSCP.Models;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -86,6 +87,11 @@ builder.Services.AddSingleton<WorklistRepository>();
 
 // 确保配置服务正确注册
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
+
+builder.Services.Configure<QueryRetrieveConfig>(
+    builder.Configuration.GetSection("QueryRetrieveConfig"));
+
+builder.Services.AddScoped<IQueryRetrieveSCU, QueryRetrieveSCU>();
 
 var app = builder.Build();
 
