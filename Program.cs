@@ -113,22 +113,17 @@ ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加�
 // 配置中间件
 if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
 {
-    // Swagger 中间件应该在其他中间件之前
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{settings.Swagger.Title} {settings.Swagger.Version}");
-        // 可以设置为根路径
         c.RoutePrefix = "swagger";
     });
 }
 
-// 中间件顺序很重要
-
 // 认证中间件
 app.Use(async (context, next) =>
 {
-    // 允许访问的路径
     var allowedPaths = new[] 
     {
         "/login.html",
@@ -140,15 +135,14 @@ app.Use(async (context, next) =>
 
     var path = context.Request.Path.Value?.ToLower();
 
-    // 如果是允许的路径，直接放行
     if (allowedPaths.Any(p => path?.StartsWith(p) == true))
     {
         await next();
         return;
     }
 
-    // 使用 Cookie 验证
-    if (!context.Request.Cookies.ContainsKey("username"))
+    // 检查认证 Cookie
+    if (!context.Request.Cookies.ContainsKey("auth"))
     {
         if (path?.StartsWith("/api") == true)
         {
@@ -162,6 +156,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// 其他中间件按顺序放在认证中间件后面
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();

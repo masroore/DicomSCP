@@ -1,6 +1,7 @@
 // 全局变量
 let worklistModal;
 let currentWorklistId = null;
+let changePasswordModal;
 
 // 页面加载完成后执行
 $(document).ready(function() {
@@ -8,6 +9,12 @@ $(document).ready(function() {
     const modalElement = document.getElementById('worklistModal');
     if (modalElement) {
         worklistModal = new bootstrap.Modal(modalElement);
+    }
+    
+    // 初始化修改密码模态框
+    const changePasswordModalElement = document.getElementById('changePasswordModal');
+    if (changePasswordModalElement) {
+        changePasswordModal = new bootstrap.Modal(changePasswordModalElement);
     }
     
     // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
@@ -25,6 +32,9 @@ $(document).ready(function() {
     // 加载初始数据
     loadWorklistData();
     loadImagesData();
+    
+    // 获取当前登录用户名
+    getCurrentUsername();
 });
 
 // 切换页面函数
@@ -393,7 +403,7 @@ function formatGender(gender) {
     const genderMap = {
         'M': '男',
         'F': '女',
-        'O': '其他'
+        'O': '其��'
     };
     return genderMap[gender] || gender;
 }
@@ -422,5 +432,69 @@ function calculatePatientAge(birthDate) {
         console.error('计算年龄失败:', error);
         return '';
     }
+}
+
+// 显示修改密码模态框
+function showChangePasswordModal() {
+    document.getElementById('changePasswordForm').reset();
+    changePasswordModal.show();
+}
+
+// 修改密码
+function changePassword() {
+    const oldPassword = document.getElementById('oldPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+
+    // 验证新密码
+    if (newPassword !== confirmPassword) {
+        alert('两次输入的新密码不一致');
+        return;
+    }
+
+    // 验证新密码长度
+    if (newPassword.length < 6) {
+        alert('新密码长度不能少于6位');
+        return;
+    }
+
+    fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            oldPassword: oldPassword,
+            newPassword: newPassword
+        })
+    })
+    .then(async response => {
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text);
+        }
+        // 不尝试解析 JSON，直接处理
+        alert('密码修改成功，请重新登录');
+        changePasswordModal.hide();
+        window.location.href = '/login.html';
+    })
+    .catch(error => {
+        alert(error.message || '修改密码失败，请重试');
+    });
+}
+
+// 获取当前用户名
+function getCurrentUsername() {
+    // 从 cookie 中获取用户名
+    const cookies = document.cookie.split(';');
+    for(let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if(name === 'username') {
+            document.getElementById('currentUsername').textContent = decodeURIComponent(value);
+            return;
+        }
+    }
+    // 如果没有找到用户名，可能未登录
+    window.location.href = '/login.html';
 }
 

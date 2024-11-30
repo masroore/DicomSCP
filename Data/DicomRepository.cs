@@ -7,6 +7,8 @@ using System.Threading;
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace DicomSCP.Data;
 
@@ -132,7 +134,7 @@ public class DicomRepository : IDisposable
 
         public const string InitializeAdminUser = @"
             INSERT OR IGNORE INTO Users (Username, Password) 
-            VALUES ('admin', 'admin')";
+            VALUES ('admin', 'jGl25bVBBBW96Qi9Te4V37Fnqchz/Eu4qB9vKrRIqRg=')";
     }
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
@@ -403,10 +405,38 @@ public class DicomRepository : IDisposable
     public async Task<bool> ValidateUserAsync(string username, string password)
     {
         using var connection = new SqliteConnection(_connectionString);
+        var hashedPassword = HashPassword(password);
         var count = await connection.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM Users WHERE Username = @Username AND Password = @Password",
-            new { Username = username, Password = password }
+            new { Username = username, Password = hashedPassword }
         );
         return count > 0;
+    }
+
+    public async Task<bool> ChangePasswordAsync(string username, string newPassword)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var hashedPassword = HashPassword(newPassword);
+        
+        var sql = @"
+            UPDATE Users 
+            SET Password = @Password 
+            WHERE Username = @Username";
+        
+        var result = await connection.ExecuteAsync(sql, new { 
+            Username = username, 
+            Password = hashedPassword 
+        });
+
+        return result > 0;
+    }
+
+    private string HashPassword(string password)
+    {
+        using var sha256 = SHA256.Create();
+        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+        return Convert.ToBase64String(hashedBytes);
     }
 }
