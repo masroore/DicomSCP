@@ -504,4 +504,26 @@ public class DicomRepository : IDisposable
             new { StudyInstanceUid = studyInstanceUid }
         );
     }
+
+    public async Task<IEnumerable<Instance>> GetSeriesInstancesAsync(string seriesInstanceUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = @"
+            SELECT * FROM Instances 
+            WHERE SeriesInstanceUid = @SeriesInstanceUid 
+            ORDER BY CAST(InstanceNumber as INTEGER)";
+        
+        return await connection.QueryAsync<Instance>(sql, new { SeriesInstanceUid = seriesInstanceUid });
+    }
+
+    public async Task<Instance?> GetInstanceAsync(string sopInstanceUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = "SELECT * FROM Instances WHERE SopInstanceUid = @SopInstanceUid";
+        
+        return await connection.QueryFirstOrDefaultAsync<Instance>(
+            sql, 
+            new { SopInstanceUid = sopInstanceUid }
+        );
+    }
 }

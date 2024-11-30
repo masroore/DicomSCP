@@ -194,9 +194,30 @@ function toggleSeriesInfo(row) {
         })
         .then(data => {
             if (!data) return;  // 如果是401跳转，data会是undefined
-            const tbody = seriesRow.find('tbody');
-            tbody.empty();
             
+            // 创建序列信息行
+            const seriesInfoRow = $(`
+                <tr class="series-info" style="display: none;">
+                    <td colspan="9">
+                        <div class="series-container">
+                            <table class="table table-sm table-bordered series-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px">序列号</th>
+                                        <th style="width: 100px">检查类型</th>
+                                        <th style="width: 500px">序列描述</th>
+                                        <th style="width: 80px">图像数量</th>
+                                        <th style="width: 50px">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            `);
+            
+            const tbody = seriesInfoRow.find('tbody');
             data.forEach(series => {
                 tbody.append(`
                     <tr>
@@ -204,11 +225,20 @@ function toggleSeriesInfo(row) {
                         <td>${series.modality || '未知'}</td>
                         <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
                         <td>${series.numberOfInstances} 张</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm py-0" onclick="previewSeries('${studyUid}', '${series.seriesInstanceUid}')">
+                                预览
+                            </button>
+                        </td>
                     </tr>
                 `);
             });
             
-            seriesRow.show();
+            // 移除已存在的序列信息行
+            $(row).siblings('.series-info').remove();
+            // 添加新的序列信息行并显示
+            $(row).after(seriesInfoRow);
+            seriesInfoRow.show();
         })
         .catch(error => {
             console.error('获取序列数据失败:', error);
