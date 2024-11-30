@@ -194,7 +194,7 @@ function showAddWorklistModal() {
     const defaultDateTime = now.toISOString().slice(0, 16);
     document.getElementById('scheduledDateTime').value = defaultDateTime;
     document.getElementById('patientAge').value = '';
-    document.getElementById('modalTitle').textContent = '添加检查';
+    document.getElementById('modalTitle').textContent = '添加预约';
     worklistModal.show();
 }
 
@@ -216,7 +216,7 @@ function editWorklist(id) {
             document.getElementById('scheduledStationName').value = data.scheduledStationName || '';
             document.getElementById('bodyPartExamined').value = data.bodyPartExamined || '';
             
-            document.getElementById('modalTitle').textContent = '编辑检查';
+            document.getElementById('modalTitle').textContent = '编辑预约';
             worklistModal.show();
         })
         .catch(error => {
@@ -349,9 +349,18 @@ function formatDateTime(dateTimeStr) {
             return '';
         }
         
+        // 处理 YYYYMMDD 格式
+        if (dateTimeStr.length === 8 && !isNaN(dateTimeStr)) {
+            const year = dateTimeStr.substring(0, 4);
+            const month = dateTimeStr.substring(4, 6);
+            const day = dateTimeStr.substring(6, 8);
+            return `${year}-${month}-${day}`;
+        }
+        
+        // 处理其他格式的日期
         const date = new Date(dateTimeStr);
         if (isNaN(date.getTime())) {
-            console.error('无效的日期时间:', dateTimeStr);
+            console.warn('无法解析的日期时间:', dateTimeStr);
             return dateTimeStr;
         }
         
