@@ -10,22 +10,44 @@ $(document).ready(function() {
         worklistModal = new bootstrap.Modal(modalElement);
     }
     
-    // 加载 Worklist 数据
-    loadWorklistData();
-
-    // 处理导航点击
-    $('.nav-link').click(function(e) {
+    // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
+    const currentPage = window.location.hash.slice(1) || 'worklist';
+    switchPage(currentPage);
+    
+    // 导航链接点击事件
+    $('.nav-link[data-page]').click(function(e) {
         e.preventDefault();
-        $('.nav-link').removeClass('active');
-        $(this).addClass('active');
-        
         const page = $(this).data('page');
-        loadPage(page);
+        window.location.hash = page; // 更新URL hash
+        switchPage(page);
     });
 
-    // 默认激活 Worklist 管理
-    $('.nav-link[data-page="worklist"]').addClass('active');
+    // 加载初始数据
+    loadWorklistData();
+    loadImagesData();
 });
+
+// 切换页面函数
+function switchPage(page) {
+    // 隐藏所有页面
+    $('#worklist-page, #images-page, #settings-page').hide();
+    
+    // 移除所有导航链接的active类
+    $('.nav-link').removeClass('active');
+    
+    // 显示选中的页面
+    $(`#${page}-page`).show();
+    
+    // 添加active类到当前导航链接
+    $(`.nav-link[data-page="${page}"]`).addClass('active');
+    
+    // 根据页面类型加载数据
+    if (page === 'worklist') {
+        loadWorklistData();
+    } else if (page === 'images') {
+        loadImagesData();
+    }
+}
 
 // 加载页面内容
 function loadPage(page) {
@@ -102,12 +124,12 @@ function loadImagesData() {
                     <tr class="series-info" style="display: none;">
                         <td colspan="8">
                             <div class="series-container">
-                                <table class="table table-sm">
+                                <table class="table table-sm table-bordered series-detail-table">
                                     <thead>
                                         <tr>
                                             <th style="width: 80px">序列号</th>
-                                            <th style="width: 80px">检查类型</th>
-                                            <th>序列描述</th>
+                                            <th style="width: 100px">检查类型</th>
+                                            <th style="width: 300px">序列描述</th>
                                             <th style="width: 80px">图像数量</th>
                                         </tr>
                                     </thead>

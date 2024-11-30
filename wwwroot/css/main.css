@@ -107,14 +107,6 @@ body {
     max-width: 200px;
 }
 
-/* 影像列表和序列表格的特殊间距 */
-#images-table-body .table td, 
-#images-table-body .table th,
-.series-container .table td,
-.series-container .table th {
-    padding: 0.5rem 0.75rem;
-}
-
 /* 添加工具提示效果 */
 .table td {
     position: relative;
@@ -145,35 +137,44 @@ body {
     font-size: 0.8rem;
 }
 
-/* 影像管理表格样式 */
+/* 序列详情表格样式 */
 .series-container {
-    padding: 1.5rem;
+    padding: 10px 20px;
     background-color: #f8f9fa;
-    border-radius: 0.25rem;
-    margin-top: 0;
 }
 
-/* 可点击的行样式 */
+.series-detail-table {
+    width: auto !important;
+    min-width: 560px;
+    max-width: 800px;
+    margin: 0 !important;
+    background-color: white;
+}
+
+.series-detail-table th {
+    background-color: #e9ecef;
+    font-size: 14px;
+    padding: 8px;
+    white-space: nowrap;
+}
+
+.series-detail-table td {
+    font-size: 14px;
+    padding: 6px 8px;
+}
+
+/* 让序列描述可以自动换行 */
+.series-detail-table td:nth-child(3) {
+    white-space: normal;
+    word-break: break-word;
+}
+
+/* 可点击行样式 */
 .table tr[data-study-uid] {
     cursor: pointer;
-    background-color: rgba(0,0,0,0.075);
 }
 
-/* 序列信息表格样式 */
-.series-info .table {
-    margin-bottom: 0;
-}
-
-.series-info .table th {
-    background-color: #e9ecef;
-    font-weight: 500;
-}
-
-/* 可点击行的视觉提示 */
-.table tr[data-study-uid] td:first-child {
-    border-left: 3px solid transparent;
-}
-
-.table tr[data-study-uid]:hover td:first-child {
-    border-left-color: #007bff;
+/* 可点击行悬停效果 */
+.table tr[data-study-uid]:hover {
+    background-color: rgba(0, 123, 255, 0.1);
 }
