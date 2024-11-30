@@ -103,6 +103,43 @@
 
             <!-- 影像管理页面 -->
             <div id="images-page" style="display: none;">
+                <!-- 添加查询表单 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <form id="imagesSearchForm" class="row g-3">
+                            <div class="col-md-2">
+                                <label class="form-label">患者ID</label>
+                                <input type="text" class="form-control" id="searchPatientId">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="searchPatientName">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="searchAccessionNumber">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">检查类型</label>
+                                <select class="form-select" id="searchModality">
+                                    <option value="">全部</option>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="DR">DR</option>
+                                    <option value="US">US</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">设备名称</label>
+                                <input type="text" class="form-control" id="searchStationName">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="button" class="btn btn-primary" onclick="searchImages()">查询</button>
+                                <button type="button" class="btn btn-secondary ms-2" onclick="resetImagesSearch()">重置</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table id="images-table" class="table table-hover">
                         <thead>
@@ -121,6 +158,30 @@
                         <tbody id="images-table-body">
                         </tbody>
                     </table>
+                </div>
+
+                <!-- 添加影像分页组件 -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="pagination-info">
+                        显示 <span id="images-currentRange">1-10</span> 条，共 <span id="images-totalCount">0</span> 条
+                    </div>
+                    <nav aria-label="分页导航">
+                        <ul class="pagination mb-0">
+                            <li class="page-item">
+                                <button class="page-link" id="images-prevPage" aria-label="上一页">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                            </li>
+                            <li class="page-item">
+                                <span class="page-link" id="images-currentPage">1</span>
+                            </li>
+                            <li class="page-item">
+                                <button class="page-link" id="images-nextPage" aria-label="下一页">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
                 </div>
             </div>
         </div>

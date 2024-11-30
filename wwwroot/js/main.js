@@ -9,6 +9,11 @@ let currentPage = 1;
 const pageSize = 10;
 let allWorklistItems = [];  // 存储所有数据
 
+// 影像数据分页参数
+let allImagesData = [];  // 存储所有影像数据
+let imagesCurrentPage = 1;
+const imagesPageSize = 10;
+
 // 页面加载完成后执行
 $(document).ready(function() {
     // 初始化模态框
@@ -182,54 +187,92 @@ document.getElementById('worklist-nextPage').onclick = () => {
 };
 
 // 加载影像数据
-function loadImagesData() {
-    fetch('/api/images')
-        .then(response => {
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            if (!response.ok) {
-                throw new Error('获取数据失败');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (!data) return;  // 如果是401跳转，data会是undefined
-            const tbody = $('#images-table-body');
-            tbody.empty();
-            
-            data.forEach(item => {
-                const tr = $(`
-                    <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleSeriesInfo(this)">
-                        <td title="${item.patientId}">${item.patientId}</td>
-                        <td title="${item.patientName}">${item.patientName}</td>
-                        <td>${formatGender(item.patientSex)}</td>
-                        <td>${calculatePatientAge(item.patientBirthDate)}</td>
-                        <td title="${item.accessionNumber}">${item.accessionNumber}</td>
-                        <td>${item.modality}</td>
-                        <td>${formatDateTime(item.studyDate)}</td>
-                        <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
-                        <td>
-                            <button class="btn btn-danger btn-sm delete-btn">删除</button>
-                        </td>
-                    </tr>
-                `);
-                
-                // 添加点击事件处理
-                tr.find('.delete-btn').on('click', function(e) {
-                    e.stopPropagation();  // 阻止事件冒泡
-                    deleteStudy(item.studyInstanceUid);
-                });
-                
-                tbody.append(tr);
-            });
-        })
-        .catch(error => {
-            console.error('获取影像数据失败:', error);
-            alert('获取数据失败，请检查网络连接');
-        });
+async function loadImagesData() {
+    try {
+        const response = await fetch('/api/images');
+        if (response.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
+        if (!response.ok) {
+            throw new Error('获取数据失败');
+        }
+        
+        const data = await response.json();
+        if (!data) return;  // 如果是401跳转，data会是undefined
+        
+        // 保存所有数据
+        allImagesData = data;
+        
+        // 更新分页信息
+        const total = allImagesData.length;
+        const totalPages = Math.ceil(total / imagesPageSize);
+        updateImagesPagination(total);
+        
+        // 显示当前页数据
+        displayImagesPage(imagesCurrentPage);
+    } catch (error) {
+        console.error('获取影像数据失败:', error);
+        alert('获取数据失败，请检查网络连接');
+    }
 }
+
+// 显示指定页的影像数据
+function displayImagesPage(page) {
+    const start = (page - 1) * imagesPageSize;
+    const end = start + imagesPageSize;
+    const pageItems = allImagesData.slice(start, end);
+    
+    const tbody = document.getElementById('images-table-body');
+    tbody.innerHTML = pageItems.map(item => `
+        <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleSeriesInfo(this)">
+            <td title="${item.patientId}">${item.patientId}</td>
+            <td title="${item.patientName}">${item.patientName}</td>
+            <td>${formatGender(item.patientSex)}</td>
+            <td>${calculatePatientAge(item.patientBirthDate)}</td>
+            <td title="${item.accessionNumber}">${item.accessionNumber}</td>
+            <td>${item.modality}</td>
+            <td>${formatDateTime(item.studyDate)}</td>
+            <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
+            <td>
+                <button class="btn btn-danger btn-sm" onclick="deleteStudy('${item.studyInstanceUid}', event)">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 更新影像分页信息
+function updateImagesPagination(total) {
+    const totalPages = Math.ceil(total / imagesPageSize);
+    const start = (imagesCurrentPage - 1) * imagesPageSize + 1;
+    const end = Math.min(imagesCurrentPage * imagesPageSize, total);
+    
+    document.getElementById('images-currentRange').textContent = `${start}-${end}`;
+    document.getElementById('images-totalCount').textContent = total;
+    document.getElementById('images-currentPage').textContent = imagesCurrentPage;
+    
+    // 更新按钮状态
+    document.getElementById('images-prevPage').disabled = imagesCurrentPage === 1;
+    document.getElementById('images-nextPage').disabled = imagesCurrentPage === totalPages;
+}
+
+// 添加影像分页事件监听
+document.getElementById('images-prevPage').onclick = () => {
+    if (imagesCurrentPage > 1) {
+        imagesCurrentPage--;
+        displayImagesPage(imagesCurrentPage);
+        updateImagesPagination(allImagesData.length);
+    }
+};
+
+document.getElementById('images-nextPage').onclick = () => {
+    const totalPages = Math.ceil(allImagesData.length / imagesPageSize);
+    if (imagesCurrentPage < totalPages) {
+        imagesCurrentPage++;
+        displayImagesPage(imagesCurrentPage);
+        updateImagesPagination(allImagesData.length);
+    }
+};
 
 // 切换序列信息显示
 function toggleSeriesInfo(row) {
@@ -653,7 +696,10 @@ function getCurrentUsername() {
 }
 
 // 删除影像数据
-function deleteStudy(studyInstanceUid) {
+function deleteStudy(studyInstanceUid, event) {
+        // 阻止事件冒泡，防止触发行的点击事件
+        event.stopPropagation();
+        
     if (confirm('确定要删除这个检查吗？\n此操作将删除所有相关的序列和图像，且不可恢复。')) {
         fetch(`/api/images/${studyInstanceUid}`, {
             method: 'DELETE',
@@ -690,5 +736,113 @@ function previewSeries(studyUid, seriesUid, event) {
     
     // 显示模态框
     viewerModal.show();
+}
+
+// 搜索影像数据
+function searchImages() {
+    const filters = {
+        patientId: document.getElementById('searchPatientId').value.trim(),
+        patientName: document.getElementById('searchPatientName').value.trim(),
+        accessionNumber: document.getElementById('searchAccessionNumber').value.trim(),
+        modality: document.getElementById('searchModality').value,
+        stationName: document.getElementById('searchStationName').value.trim()
+    };
+
+    // 过滤数据
+    const filteredData = allImagesData.filter(item => {
+        return (!filters.patientId || item.patientId.toLowerCase().includes(filters.patientId.toLowerCase())) &&
+               (!filters.patientName || item.patientName.toLowerCase().includes(filters.patientName.toLowerCase())) &&
+               (!filters.accessionNumber || item.accessionNumber.toLowerCase().includes(filters.accessionNumber.toLowerCase())) &&
+               (!filters.modality || item.modality === filters.modality) &&
+               (!filters.stationName || (item.stationName && item.stationName.toLowerCase().includes(filters.stationName.toLowerCase())));
+    });
+
+    // 更新分页信息
+    const total = filteredData.length;
+    const totalPages = Math.ceil(total / imagesPageSize);
+    
+    // 重置当前页为第一页
+    imagesCurrentPage = 1;
+    
+    // 显示过滤后的数据
+    displayFilteredImagesPage(filteredData);
+    updateImagesPagination(total);
+}
+
+// 重置查询条件
+function resetImagesSearch() {
+    document.getElementById('imagesSearchForm').reset();
+    imagesCurrentPage = 1;
+    displayImagesPage(imagesCurrentPage);
+    updateImagesPagination(allImagesData.length);
+}
+
+// 显示过滤后的数据
+function displayFilteredImagesPage(filteredData) {
+    const start = (imagesCurrentPage - 1) * imagesPageSize;
+    const end = start + imagesPageSize;
+    const pageItems = filteredData.slice(start, end);
+    
+    const tbody = document.getElementById('images-table-body');
+    tbody.innerHTML = pageItems.map(item => `
+        <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleSeriesInfo(this)">
+            <td title="${item.patientId}">${item.patientId}</td>
+            <td title="${item.patientName}">${item.patientName}</td>
+            <td>${formatGender(item.patientSex)}</td>
+            <td>${calculatePatientAge(item.patientBirthDate)}</td>
+            <td title="${item.accessionNumber}">${item.accessionNumber}</td>
+            <td>${item.modality}</td>
+            <td>${formatDateTime(item.studyDate)}</td>
+            <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
+            <td>
+                <button class="btn btn-danger btn-sm" onclick="deleteStudy('${item.studyInstanceUid}', event)">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 修改分页事件监听，支持过滤后的数据
+document.getElementById('images-prevPage').onclick = () => {
+    if (imagesCurrentPage > 1) {
+        imagesCurrentPage--;
+        const filteredData = getFilteredImagesData();
+        displayFilteredImagesPage(filteredData);
+        updateImagesPagination(filteredData.length);
+    }
+};
+
+document.getElementById('images-nextPage').onclick = () => {
+    const filteredData = getFilteredImagesData();
+    const totalPages = Math.ceil(filteredData.length / imagesPageSize);
+    if (imagesCurrentPage < totalPages) {
+        imagesCurrentPage++;
+        displayFilteredImagesPage(filteredData);
+        updateImagesPagination(filteredData.length);
+    }
+};
+
+// 获取当前过滤后的数据
+function getFilteredImagesData() {
+    const filters = {
+        patientId: document.getElementById('searchPatientId').value.trim(),
+        patientName: document.getElementById('searchPatientName').value.trim(),
+        accessionNumber: document.getElementById('searchAccessionNumber').value.trim(),
+        modality: document.getElementById('searchModality').value,
+        stationName: document.getElementById('searchStationName').value.trim()
+    };
+
+    // 如果没有设置任何过滤条件，返回所有数据
+    if (!Object.values(filters).some(v => v)) {
+        return allImagesData;
+    }
+
+    // 返回过滤后的数据
+    return allImagesData.filter(item => {
+        return (!filters.patientId || item.patientId.toLowerCase().includes(filters.patientId.toLowerCase())) &&
+               (!filters.patientName || item.patientName.toLowerCase().includes(filters.patientName.toLowerCase())) &&
+               (!filters.accessionNumber || item.accessionNumber.toLowerCase().includes(filters.accessionNumber.toLowerCase())) &&
+               (!filters.modality || item.modality === filters.modality) &&
+               (!filters.stationName || (item.stationName && item.stationName.toLowerCase().includes(filters.stationName.toLowerCase())));
+    });
 }
 
