@@ -227,6 +227,25 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         {
             var dataset = new DicomDataset();
             
+            // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
+            var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+            _logger.Debug("请求的字符集: {CharacterSet}", requestedCharacterSet);
+            
+            // 根据请求的字符集设置响应的字符集
+            switch (requestedCharacterSet.ToUpperInvariant())
+            {
+                case "ISO_IR 100":  // Latin1
+                    dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
+                    break;
+                case "GB18030":     // 中文简体
+                    dataset.Add(DicomTag.SpecificCharacterSet, "GB18030");
+                    break;
+                case "ISO_IR 192":  // UTF-8
+                default:
+                    dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+                    break;
+            }
+
             // 患者信息
             dataset.Add(DicomTag.PatientID, item.PatientId);
             dataset.Add(DicomTag.PatientName, item.PatientName);
@@ -277,7 +296,6 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             dataset.Add(DicomTag.ReasonForTheRequestedProcedure, item.ReasonForRequest ?? "");
 
             // 预约信息
-            dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");  // UTF-8
             dataset.Add(DicomTag.Modality, item.Modality);
             dataset.Add(DicomTag.ScheduledStationAETitle, item.ScheduledAET);
 
