@@ -2,8 +2,6 @@ using System.Text;
 using System.Collections.Concurrent;
 using FellowOakDicom;
 using FellowOakDicom.Network;
-using Serilog;
-using ILogger = Serilog.ILogger;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
@@ -43,7 +41,6 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     private readonly DicomSettings _settings;
     private readonly SemaphoreSlim _concurrentLimit;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks;
-    private readonly ILogger _logger = Log.ForContext<CStoreSCP>();
     private bool _disposed;
 
     // 支持的压缩传输语法映射
@@ -98,7 +95,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         
         var advancedSettings = _settings.Advanced;
 
-        _logger.Debug("加载配置 - 压缩: {Enabled}, 格式: {Format}", 
+        DicomLogger.Debug("StoreSCP", "加载配置 - 压缩: {Enabled}, 格式: {Format}", 
             advancedSettings.EnableCompression,
             advancedSettings.PreferredTransferSyntax);
 
@@ -111,7 +108,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
     {
-        _logger.Information(
+        DicomLogger.Information("StoreSCP",
             "收到DICOM关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
             association.CalledAE, 
             association.CallingAE);
@@ -122,7 +119,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         if (advancedSettings.ValidateCallingAE && 
             !advancedSettings.AllowedCallingAEs.Contains(association.CallingAE))
         {
-            _logger.Warning("拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+            DicomLogger.Warning("StoreSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
             return SendAssociationRejectAsync(
                 DicomRejectResult.Permanent,
                 DicomRejectSource.ServiceUser,
@@ -134,7 +131,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             if (pc.AbstractSyntax == DicomUID.Verification)
             {
                 pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                _logger.Information("DICOM服务 - 动作: {Action}, 类型: {Type}", "接受", "C-ECHO");
+                DicomLogger.Information("StoreSCP", "DICOM服务 - 动作: {Action}, 类型: {Type}", "接受", "C-ECHO");
             }
             else if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)
             {
@@ -143,13 +140,13 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 if (isImageStorage)
                 {
                     pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);
-                    _logger.Information("DICOM服务 - 动作: {Action}, 类型: {Type}, 传: {Transfer}", 
+                    DicomLogger.Information("StoreSCP", "DICOM服务 - 动作: {Action}, 类型: {Type}, 传: {Transfer}", 
                         "接受", pc.AbstractSyntax.Name, "支持压缩传输");
                 }
                 else
                 {
                     pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                    _logger.Information("接受非图像存储服务: {ServiceName}, {TransferType}", 
+                    DicomLogger.Information("StoreSCP", "接受非图像存储服务: {ServiceName}, {TransferType}", 
                         pc.AbstractSyntax.Name, "仅支持基本传输");
                 }
             }
@@ -181,24 +178,24 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public Task OnReceiveAssociationReleaseRequestAsync()
     {
-        _logger.Information("收到关联释放请求");
+        DicomLogger.Information("StoreSCP", "收到关联释放请求");
         return SendAssociationReleaseResponseAsync();
     }
 
     public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
     {
-        _logger.Warning("收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
+        DicomLogger.Warning("StoreSCP", "收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
     }
 
     public void OnConnectionClosed(Exception? exception)
     {
         if (exception != null)
         {
-            _logger.Error(exception, "连接异常关闭");
+            DicomLogger.Error("StoreSCP", exception, "连接异常关闭");
         }
         else
         {
-            _logger.Information("连接正常关闭");
+            DicomLogger.Information("StoreSCP", "连接正常关闭");
         }
     }
 
@@ -223,7 +220,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             if (!_compressionSyntaxes.TryGetValue(advancedSettings.PreferredTransferSyntax, 
                 out var targetSyntax))
             {
-                _logger.Warning("不支持的压缩语法: {Syntax}", advancedSettings.PreferredTransferSyntax);
+                DicomLogger.Warning("StoreSCP", "不支持的压缩语法: {Syntax}", advancedSettings.PreferredTransferSyntax);
                 return file;
             }
 
@@ -238,7 +235,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             {
                 try
                 {
-                    _logger.Information(
+                    DicomLogger.Information("StoreSCP",
                         "压缩图像 - 原格式: {OriginalSyntax} -> 新格式: {NewSyntax}", 
                         file.Dataset.InternalTransferSyntax.UID.Name,
                         targetSyntax.UID.Name);
@@ -249,14 +246,14 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "图像压缩失败");
+                    DicomLogger.Error("StoreSCP", ex, "图像压缩失败");
                     return file;
                 }
             });
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "图像压缩失败");
+            DicomLogger.Error("StoreSCP", ex, "压缩处理失败");
             return file;
         }
     }
@@ -267,7 +264,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         try
         {
             // 记录基本信息
-            _logger.Information(
+            DicomLogger.Information("StoreSCP",
                 "接收DICOM文件 - 患者ID: {PatientId}, 研究: {StudyId}, 序列: {SeriesId}, 实例: {InstanceUid}",
                 request.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, "Unknown"),
                 request.Dataset.GetSingleValueOrDefault(DicomTag.StudyID, "Unknown"),
@@ -285,7 +282,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             {
                 await _concurrentLimit.WaitAsync();
 
-                _logger.Information("收到DICOM存储请求 - SOP Class: {SopClass}", request.SOPClassUID.Name);
+                DicomLogger.Information("StoreSCP", "收到DICOM存储请求 - SOP Class: {SopClass}", request.SOPClassUID.Name);
 
                 var validationResult = ValidateKeyDicomTags(request.Dataset);
                 if (!validationResult.IsValid)
@@ -331,13 +328,13 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
                     if (File.Exists(targetFilePath))
                     {
-                        _logger.Warning("检测到重复图像 - 路径: {FilePath}", targetFilePath);
+                        DicomLogger.Warning("StoreSCP", "检测到重复图像 - 路径: {FilePath}", targetFilePath);
                         File.Delete(tempFilePath);
                         return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
                     }
 
                     // 在保存前记录目标路径
-                    _logger.Information(
+                    DicomLogger.Information("StoreSCP",
                         "开始归档 - 研究: {StudyUid}, 序列: {SeriesUid}, 实例: {InstanceUid}, 路径: {Path}",
                         studyUid,
                         seriesUid,
@@ -348,7 +345,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     File.Move(tempFilePath, targetFilePath);
 
                     // 保存成功后记录
-                    _logger.Information(
+                    DicomLogger.Information("StoreSCP",
                         "归档完成 - 实例: {InstanceUid}, 路径: {FilePath}, 大小: {Size:N0} 字节",
                         instanceUid,
                         targetFilePath,
@@ -363,7 +360,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         }
                         catch (Exception ex)
                         {
-                            _logger.Error(ex, "保存DICOM数据到数据库失败");
+                            DicomLogger.Error("StoreSCP", ex, "保存DICOM数据到数据库失败");
                         }
                     }
 
@@ -388,7 +385,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "保存DICOM文件失败 - 实例: {InstanceUid}", request.SOPInstanceUID.UID);
+            DicomLogger.Error("StoreSCP", ex, "保存DICOM文件失败 - 实例: {InstanceUid}", request.SOPInstanceUID.UID);
             throw;
         }
         finally
@@ -402,7 +399,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "清理临时文件失败: {TempFile}", tempFilePath);
+                    DicomLogger.Error("StoreSCP", ex, "清理临时文件失败: {TempFile}", tempFilePath);
                 }
             }
         }
@@ -440,7 +437,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             if (missingTags.Any())
             {
                 var errorMessage = $"DICOM数据验证失败: {string.Join(", ", missingTags)}";
-                _logger.Warning(errorMessage);
+                DicomLogger.Warning("StoreSCP", "{ErrorMessage}", errorMessage);
                 return (false, errorMessage);
             }
 
@@ -449,20 +446,20 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         catch (Exception ex)
         {
             var errorMessage = "DICOM数据验证过程发生异常";
-            _logger.Error(ex, errorMessage);
+            DicomLogger.Error("StoreSCP", ex, "{ErrorMessage}", errorMessage);
             return (false, errorMessage);
         }
     }
 
     public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e)
     {
-        _logger.Error(e, "处理 C-STORE 请求异常 - 临时文件: {TempFile}", tempFileName);
+        DicomLogger.Error("StoreSCP", e, "处理 C-STORE 请求异常 - 临时文件: {TempFile}", tempFileName);
         return Task.CompletedTask;
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
     {
-        _logger.Information("收到 C-ECHO 请求");
+        DicomLogger.Information("StoreSCP", "收到 C-ECHO 请求");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
 
@@ -483,7 +480,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, "释放文件锁时发生错误");
+                        DicomLogger.Error("StoreSCP", ex, "释放文件锁时发生错误");
                     }
                 }
                 _fileLocks.Clear();

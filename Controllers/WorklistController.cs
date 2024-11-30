@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Models;
-using DicomSCP.Services;
+using DicomSCP.Data;
+using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Controllers;
 

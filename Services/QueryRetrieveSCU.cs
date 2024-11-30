@@ -5,8 +5,6 @@ using FellowOakDicom.Network.Client;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Models;
-using Serilog;
-using ILogger = Serilog.ILogger;
 
 namespace DicomSCP.Services;
 
@@ -20,7 +18,6 @@ public interface IQueryRetrieveSCU
 
 public class QueryRetrieveSCU : IQueryRetrieveSCU
 {
-    private static readonly ILogger _logger = Log.ForContext<QueryRetrieveSCU>();
     private readonly DicomSettings _settings;
     private readonly QueryRetrieveConfig _config;
 
@@ -34,6 +31,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
     {
         var results = new List<DicomDataset>();
         
+        DicomLogger.Information("开始执行Study级别C-FIND查询 - AET: {AeTitle}, Host: {Host}:{Port}", 
+            node.AeTitle, node.HostName, node.Port);
+        
         var client = CreateClient(node);
         var request = new DicomCFindRequest(DicomQueryRetrieveLevel.Study);
         
@@ -45,6 +45,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             if (response.Status == DicomStatus.Pending)
             {
                 results.Add(response.Dataset);
+                DicomLogger.Debug("收到Study查询结果 - PatientId: {PatientId}, StudyInstanceUid: {StudyUid}",
+                    response.Dataset.GetString(DicomTag.PatientID),
+                    response.Dataset.GetString(DicomTag.StudyInstanceUID));
             }
         };
 
@@ -52,10 +55,12 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
         {
             await client.AddRequestAsync(request);
             await client.SendAsync();
+            
+            DicomLogger.Information("Study查询完成 - 共找到 {Count} 条结果", results.Count);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "执行C-FIND查询时发生错误");
+            DicomLogger.Error(ex, "执行C-FIND查询时发生错误 - AET: {AeTitle}", node.AeTitle);
             throw;
         }
 
@@ -66,6 +71,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
     {
         var results = new List<DicomDataset>();
         
+        DicomLogger.Information("开始执行Series级别C-FIND查询 - AET: {AeTitle}, StudyInstanceUid: {StudyUid}", 
+            node.AeTitle, query.GetString(DicomTag.StudyInstanceUID));
+        
         var client = CreateClient(node);
         var request = new DicomCFindRequest(DicomQueryRetrieveLevel.Series);
         request.Dataset = query;
@@ -75,6 +83,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             if (response.Status == DicomStatus.Pending)
             {
                 results.Add(response.Dataset);
+                DicomLogger.Debug("收到Series查询结果 - SeriesInstanceUid: {SeriesUid}, Modality: {Modality}",
+                    response.Dataset.GetString(DicomTag.SeriesInstanceUID),
+                    response.Dataset.GetString(DicomTag.Modality));
             }
         };
 
@@ -82,10 +93,12 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
         {
             await client.AddRequestAsync(request);
             await client.SendAsync();
+            
+            DicomLogger.Information("Series查询完成 - 共找到 {Count} 条结果", results.Count);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "执行C-FIND Series查询时发生错误");
+            DicomLogger.Error(ex, "执行C-FIND Series查询时发生错误 - AET: {AeTitle}", node.AeTitle);
             throw;
         }
 
@@ -96,6 +109,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
     {
         var results = new List<DicomDataset>();
         
+        DicomLogger.Information("开始执行Image级别C-FIND查询 - AET: {AeTitle}, SeriesInstanceUid: {SeriesUid}", 
+            node.AeTitle, query.GetString(DicomTag.SeriesInstanceUID));
+        
         var client = CreateClient(node);
         var request = new DicomCFindRequest(DicomQueryRetrieveLevel.Image);
         request.Dataset = query;
@@ -105,6 +121,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             if (response.Status == DicomStatus.Pending)
             {
                 results.Add(response.Dataset);
+                DicomLogger.Debug("收到Image查询结果 - SopInstanceUid: {SopInstanceUid}, InstanceNumber: {Number}",
+                    response.Dataset.GetString(DicomTag.SOPInstanceUID),
+                    response.Dataset.GetString(DicomTag.InstanceNumber));
             }
         };
 
@@ -112,10 +131,12 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
         {
             await client.AddRequestAsync(request);
             await client.SendAsync();
+            
+            DicomLogger.Information("Image查询完成 - 共找到 {Count} 条结果", results.Count);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "执行C-FIND Image查询时发生错误");
+            DicomLogger.Error(ex, "执行C-FIND Image查询时发生错误 - AET: {AeTitle}", node.AeTitle);
             throw;
         }
 
@@ -124,6 +145,9 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
 
     public async Task<bool> MoveStudyAsync(DicomNodeConfig node, string studyInstanceUid, string destinationAe)
     {
+        DicomLogger.Information("开始执行C-MOVE - 源AET: {SourceAet}, 目标AET: {DestinationAe}, StudyInstanceUid: {StudyUid}", 
+            node.AeTitle, destinationAe, studyInstanceUid);
+            
         var client = CreateClient(node);
         var request = new DicomCMoveRequest(destinationAe, studyInstanceUid);
 
@@ -132,15 +156,16 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
         {
             if (response.Status == DicomStatus.Success)
             {
-                _logger.Information("C-MOVE成功完成");
+                DicomLogger.Information("C-MOVE成功完成 - StudyInstanceUid: {StudyUid}", studyInstanceUid);
             }
             else if (response.Status == DicomStatus.Pending)
             {
-                _logger.Information("C-MOVE进行中: {Status}", response.Status);
+                DicomLogger.Information("C-MOVE进行中 - Status: {Status}", response.Status);
             }
             else
             {
-                _logger.Warning("C-MOVE失败: {Status}", response.Status);
+                DicomLogger.Warning("C-MOVE失败 - Status: {Status}, StudyInstanceUid: {StudyUid}", 
+                    response.Status, studyInstanceUid);
                 success = false;
             }
         };
@@ -153,13 +178,16 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "执行C-MOVE时发生错误");
+            DicomLogger.Error(ex, "执行C-MOVE时发生错误 - StudyInstanceUid: {StudyUid}", studyInstanceUid);
             throw;
         }
     }
 
     private IDicomClient CreateClient(DicomNodeConfig node)
     {
+        DicomLogger.Debug("创建DICOM客户端连接 - LocalAE: {LocalAE}, RemoteAE: {RemoteAE}, Host: {Host}:{Port}",
+            _config.LocalAeTitle, node.AeTitle, node.HostName, node.Port);
+            
         var client = DicomClientFactory.Create(node.HostName, node.Port, false, _config.LocalAeTitle, node.AeTitle);
         client.NegotiateAsyncOps();
         return client;

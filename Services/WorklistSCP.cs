@@ -4,13 +4,10 @@ using FellowOakDicom.Network;
 using DicomSCP.Data;
 using DicomSCP.Models;
 using DicomSCP.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Data.Sqlite;
 using Dapper;
-using Serilog;
-using ILogger = Serilog.ILogger;
 
 namespace DicomSCP.Services;
 
@@ -19,7 +16,6 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
     private static DicomSettings? _settings;
     private static string? _connectionString;
     private static DicomRepository? _repository;
-    private readonly ILogger _logger = Log.ForContext<WorklistSCP>();
 
     public static void Configure(
         DicomSettings settings,
@@ -45,6 +41,19 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         }
 
         _settings = settings.Value;
+        DicomLogger.Information("[Worklist] 服务初始化完成");
+    }
+
+    public void OnConnectionClosed(Exception? exception)
+    {
+        if (exception != null)
+        {
+            DicomLogger.Error("WorklistSCP", exception, "[Worklist] 连接异常关闭");
+        }
+        else
+        {
+            DicomLogger.Information("WorklistSCP", "[Worklist] 连接正常关闭");
+        }
     }
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
@@ -58,13 +67,13 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
                     DicomTransferSyntax.ImplicitVRLittleEndian,
                     DicomTransferSyntax.ExplicitVRLittleEndian,
                     DicomTransferSyntax.ExplicitVRBigEndian);
-                _logger.Information("接受服务 - AET: {CallingAE}, 服务: {Service}", 
+                DicomLogger.Information("WorklistSCP", "[Worklist] 接受服务 - AET: {CallingAE}, 服务: {Service}", 
                     association.CallingAE, pc.AbstractSyntax.Name);
             }
             else
             {
                 pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
-                _logger.Warning("拒绝不支持的服务 - AET: {CallingAE}, AbstractSyntax: {AbstractSyntax}", 
+                DicomLogger.Warning("WorklistSCP", "[Worklist] 拒绝不支持的服务 - AET: {CallingAE}, AbstractSyntax: {AbstractSyntax}", 
                     association.CallingAE, pc.AbstractSyntax);
             }
         }
@@ -74,31 +83,19 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
     public Task OnReceiveAssociationReleaseRequestAsync()
     {
-        _logger.Information("接收到关联释放请求");
+        DicomLogger.Information("[Worklist] 接收到关联释放请求");
         return SendAssociationReleaseResponseAsync();
     }
 
     public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
     {
-        _logger.Warning("接收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
-    }
-
-    public void OnConnectionClosed(Exception? exception)
-    {
-        if (exception != null)
-        {
-            _logger.Error(exception, "连接异常关闭");
-        }
-        else
-        {
-            _logger.Information("连接正常关闭");
-        }
+        DicomLogger.Warning("[Worklist] 接收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
     }
 
     public async IAsyncEnumerable<DicomCFindResponse> OnCFindRequestAsync(DicomCFindRequest request)
     {
-        _logger.Information(
-            "收到 Worklist 查询请求 - 请求数据集: {@Dataset}", 
+        DicomLogger.Information("WorklistSCP",
+            "[Worklist] 收到查询请求 - 请求数据集: {@Dataset}", 
             new 
             { 
                 PatientId = request.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, ""),
@@ -109,7 +106,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
         // 从请求中提取查询条件
         var filters = ExtractFilters(request.Dataset);
-        _logger.Information("查询条件 - {@Filters}", filters);
+        DicomLogger.Debug("WorklistSCP", "[Worklist] 查询条件 - {@Filters}", filters);
 
         // 查询数据库
         List<WorklistItem>? worklistItems = null;
@@ -121,7 +118,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "数据库查询失败");
+            DicomLogger.Error("WorklistSCP", ex, "[Worklist] 数据库查询失败");
             status = DicomStatus.ProcessingFailure;
         }
 
@@ -133,12 +130,12 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
         if (worklistItems == null || worklistItems.Count == 0)
         {
-            _logger.Warning("未找到匹配的预约记录");
+            DicomLogger.Warning("WorklistSCP", "[Worklist] 未找到匹配的预约记录");
             yield return new DicomCFindResponse(request, DicomStatus.Success);
             yield break;
         }
 
-        _logger.Information("查询到 {Count} 条预约记录", worklistItems.Count);
+        DicomLogger.Information("WorklistSCP", "[Worklist] 查询到 {Count} 条预约记录", worklistItems.Count);
 
         // 返回查询结果
         foreach (var item in worklistItems)
@@ -146,25 +143,25 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             DicomCFindResponse? response = null;
             try
             {
-                _logger.Debug("处理预约记录 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}", 
+                DicomLogger.Debug("WorklistSCP", "[Worklist] 处理预约记录 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}", 
                     item.PatientId, item.AccessionNumber);
 
                 response = CreateWorklistResponse(request, item);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "创建响应失败 - PatientId: {PatientId}", item.PatientId);
+                DicomLogger.Error("WorklistSCP", ex, "[Worklist] 创建响应失败 - PatientId: {PatientId}", item.PatientId);
                 continue;
             }
 
             if (response != null)
             {
-                _logger.Debug("发送响应 - PatientId: {PatientId}", item.PatientId);
+                DicomLogger.Debug("WorklistSCP", "[Worklist] 发送响应 - PatientId: {PatientId}", item.PatientId);
                 yield return response;
             }
         }
 
-        _logger.Information("Worklist查询完成 - 总记录数: {Count}", worklistItems.Count);
+        DicomLogger.Information("WorklistSCP", "[Worklist] Worklist查询完成 - 总记录数: {Count}", worklistItems.Count);
         yield return new DicomCFindResponse(request, DicomStatus.Success);
     }
 
@@ -173,13 +170,13 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
     {
         if (_connectionString == null)
         {
-            _logger.Error("数据库连接字符串未配置");
+            DicomLogger.Error("WorklistSCP", null, "[Worklist] 数据库连接字符串未配置");
             throw new InvalidOperationException("Database connection string not configured");
         }
 
         try
         {
-            _logger.Debug("执行数据库查询 - 连接字符串: {ConnectionString}", _connectionString);
+            DicomLogger.Debug("WorklistSCP", "[Worklist] 执行数据库查询 - 连接字符串: {ConnectionString}", _connectionString);
             using var connection = new SqliteConnection(_connectionString);
 
             // 修改 SQL 查询，当参数为空时返回所有记录
@@ -191,7 +188,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
                 AND (@ScheduledStationName IS NULL OR @ScheduledStationName = '' OR ScheduledStationName = @ScheduledStationName)
                 AND Status = 'SCHEDULED'";
 
-            _logger.Debug("SQL查询: {Sql} - 参数: {@Parameters}", sql, new
+            DicomLogger.Debug("WorklistSCP", "[Worklist] SQL查询: {Sql} - 参数: {@Parameters}", sql, new
             {
                 PatientId = filters.PatientId,
                 AccessionNumber = filters.AccessionNumber,
@@ -211,12 +208,12 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
                 });
 
             var result = items?.ToList() ?? new List<WorklistItem>();
-            _logger.Information("数据库查询完成 - 返回记录数: {Count}", result.Count);
+            DicomLogger.Information("WorklistSCP", "[Worklist] 数据库查询完成 - 返回记录数: {Count}", result.Count);
             return result;
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "数据库查询失败 - 参数: {@Parameters}", filters);
+            DicomLogger.Error("WorklistSCP", ex, "[Worklist] 数据库查询失败 - 参数: {@Parameters}", filters);
             throw;
         }
     }
@@ -229,7 +226,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             
             // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
             var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
-            _logger.Debug("请求的字符集: {CharacterSet}", requestedCharacterSet);
+            DicomLogger.Debug("WorklistSCP", "[Worklist] 请求的字符集: {CharacterSet}", requestedCharacterSet);
             
             // 根据请求的字符集设置响应的字符集
             switch (requestedCharacterSet.ToUpperInvariant())
@@ -252,13 +249,13 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             // 确保出生日期格式正确
             try
             {
-                var birthDate = DateTime.Parse(item.PatientBirthDate);
+                var birthDate = DateTime.ParseExact(item.PatientBirthDate, "yyyyMMdd", null);
                 dataset.Add(DicomTag.PatientBirthDate, birthDate.ToString("yyyyMMdd"));
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "处理出生日期失败 - PatientId: {PatientId}, BirthDate: {BirthDate}", 
-                    item.PatientId, item.PatientBirthDate);
+                DicomLogger.Warning("WorklistSCP", "[Worklist] 处理出生日期失败 - PatientId: {PatientId}, BirthDate: {BirthDate}, Error: {Error}", 
+                    item.PatientId, item.PatientBirthDate, ex.Message);
                 dataset.Add(DicomTag.PatientBirthDate, "19000101");  // 使用默认值
             }
             dataset.Add(DicomTag.PatientSex, item.PatientSex);
@@ -268,7 +265,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             {
                 try
                 {
-                    var birthDate = DateTime.Parse(item.PatientBirthDate);
+                    var birthDate = DateTime.ParseExact(item.PatientBirthDate, "yyyyMMdd", null);
                     var age = DateTime.Now.Year - birthDate.Year;
                     if (DateTime.Now.DayOfYear < birthDate.DayOfYear)
                     {
@@ -278,8 +275,8 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "计算年龄失败 - PatientId: {PatientId}, BirthDate: {BirthDate}", 
-                        item.PatientId, item.PatientBirthDate);
+                    DicomLogger.Warning("WorklistSCP", "[Worklist] 计算年龄失败 - PatientId: {PatientId}, BirthDate: {BirthDate}, Error: {Error}", 
+                        item.PatientId, item.PatientBirthDate, ex.Message);
                 }
             }
 
@@ -308,8 +305,8 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "处理预约时间失败 - PatientId: {PatientId}, DateTime: {DateTime}", 
-                    item.PatientId, item.ScheduledDateTime);
+                DicomLogger.Warning("WorklistSCP", "[Worklist] 处理预约时间失败 - PatientId: {PatientId}, DateTime: {DateTime}, Error: {Error}", 
+                    item.PatientId, item.ScheduledDateTime, ex.Message);
                 // 使用默认值或跳过
                 dataset.Add(DicomTag.ScheduledProcedureStepStartDate, "19000101");
                 dataset.Add(DicomTag.ScheduledProcedureStepStartTime, "000000");
@@ -323,8 +320,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "处理单条记录失败 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}", 
-                item.PatientId, item.AccessionNumber);
+            DicomLogger.Error("WorklistSCP", ex, "[Worklist] 创建响应数据集失败");
             return null;
         }
     }
@@ -343,7 +339,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
     {
-        _logger.Information("收到 C-ECHO 请求");
+        DicomLogger.Information("[Worklist] 收到 C-ECHO 请求");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
 } 

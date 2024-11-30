@@ -9,13 +9,12 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text;
+using DicomSCP.Data;
 
 namespace DicomSCP.Data;
 
-public class DicomRepository : IDisposable
+public class DicomRepository : BaseRepository, IDisposable
 {
-    private readonly string _connectionString;
-    private readonly ILogger<DicomRepository> _logger;
     private readonly ConcurrentQueue<(DicomDataset Dataset, string FilePath)> _dataQueue = new();
     private readonly SemaphoreSlim _processSemaphore = new(1, 1);
     private readonly Timer _processTimer;
@@ -138,20 +137,13 @@ public class DicomRepository : IDisposable
     }
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
+        : base(configuration.GetConnectionString("DicomDb") ?? throw new ArgumentException("Missing DicomDb connection string"), logger)
     {
-        _connectionString = configuration.GetConnectionString("DicomDb") 
-            ?? throw new ArgumentException("Missing DicomDb connection string");
-        _logger = logger;
         _batchSize = configuration.GetValue<int>("DicomSettings:BatchSize", 50);
 
         // 初始化数据库
         InitializeDatabase();
-
-        // 创建定时器
-        _processTimer = new Timer(async _ => await ProcessQueueAsync(), 
-            null, 
-            _minWaitTime, 
-            _minWaitTime);
+        _processTimer = new Timer(async _ => await ProcessQueueAsync(), null, _minWaitTime, _minWaitTime);
     }
 
     private async Task ProcessQueueAsync()
@@ -226,7 +218,7 @@ public class DicomRepository : IDisposable
                 _performanceTimer.Stop();
                 _lastProcessTime = DateTime.UtcNow;
 
-                _logger.LogInformation(
+                LogInformation(
                     "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 队列剩余: {Remaining}, 平均耗时: {AvgTime:F2}ms/条", 
                     batchItems.Count,
                     _performanceTimer.ElapsedMilliseconds,
@@ -236,7 +228,7 @@ public class DicomRepository : IDisposable
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                _logger.LogError(ex, "批量处理失败 - 批次大小: {Count}, 将重新入队", batchItems.Count);
+                LogError(ex, "批量处理失败 - 批次大小: {Count}, 将重新入队", batchItems.Count);
                 
                 // 错误时重新入队，保持原有顺序
                 foreach (var item in batchItems)
@@ -248,7 +240,7 @@ public class DicomRepository : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理批次时发生异常");
+            LogError(ex, "处理批次时发生异常");
         }
         finally
         {
@@ -277,12 +269,12 @@ public class DicomRepository : IDisposable
 
             transaction.Commit();
             _initialized = true;
-            _logger.LogInformation("数据库表初始化完成");
+            LogInformation("数据库表初始化完成");
         }
         catch (Exception ex)
         {
             transaction.Rollback();
-            _logger.LogError(ex, "初始化数据库表失败");
+            LogError(ex, "初始化数据库表失败");
             throw;
         }
     }
@@ -477,13 +469,13 @@ public class DicomRepository : IDisposable
             );
   
             await transaction.CommitAsync();
-            _logger.LogInformation("成功删除检查 - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
+            LogInformation("成功删除检查 - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
                 studyInstanceUid, instanceCount);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            _logger.LogError(ex, "删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
+            LogError(ex, "删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
             throw;
         }
     }

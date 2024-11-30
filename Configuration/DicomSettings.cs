@@ -23,20 +23,9 @@ public class DicomSettings
 
     public string ConnectionString { get; set; } = "Data Source=dicom.db";
 
-    public LogSettings Logging { get; set; } = new();
-
     public AdvancedSettings Advanced { get; set; } = new();
 
     public SwaggerSettings Swagger { get; set; } = new();
-}
-
-public class LogSettings
-{
-    public bool EnableConsoleLog { get; set; } = true;
-    public bool EnableFileLog { get; set; } = true;
-    public LogEventLevel FileLogLevel { get; set; } = LogEventLevel.Debug;
-    public int RetainedDays { get; set; } = 31;
-    public string LogPath { get; set; } = "logs";
 }
 
 public class AdvancedSettings

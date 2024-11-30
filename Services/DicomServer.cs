@@ -4,8 +4,6 @@ using FellowOakDicom.Network;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
-using Serilog;
-using ILogger = Serilog.ILogger;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using FellowOakDicom.Imaging.Codec;
@@ -14,7 +12,6 @@ namespace DicomSCP.Services;
 
 public sealed class DicomServer : IDisposable
 {
-    private static readonly ILogger _logger = Log.ForContext<DicomServer>();
     private readonly DicomSettings _settings;
     private readonly IConfiguration _configuration;
     private readonly ILoggerFactory _loggerFactory;
@@ -42,7 +39,7 @@ public sealed class DicomServer : IDisposable
     {
         if (IsRunning)
         {
-            _logger.Warning("DICOM服务器已在运行中");
+            DicomLogger.Warning("DICOM服务器已在运行中");
             return;
         }
 
@@ -58,7 +55,7 @@ public sealed class DicomServer : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "DICOM服务启动失败");
+            DicomLogger.Error(ex, "DICOM服务启动失败");
             await StopAsync();  // 确保清理资源
             throw;
         }
@@ -71,10 +68,12 @@ public sealed class DicomServer : IDisposable
             try
             {
                 Directory.CreateDirectory(_settings.StoragePath);
+                DicomLogger.Information("创建存储目录: {Path}", _settings.StoragePath);
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"无法创建存储目录: {_settings.StoragePath}", ex);
+                DicomLogger.Error(ex, "创建存储目录失败: {Path}", _settings.StoragePath);
+                throw;
             }
         }
     }
@@ -83,13 +82,22 @@ public sealed class DicomServer : IDisposable
     {
         try
         {
-            // 配置和启动 C-STORE SCP 服务器
+            DicomLogger.Information("开始启动DICOM服务...");
+
+            // 配置存储服务
             CStoreSCP.Configure(
                 _settings.StoragePath,
                 _settings.TempPath,
                 _settings,
                 _repository);
 
+            // 配置工作列表服务
+            WorklistSCP.Configure(
+                _settings,
+                _configuration,
+                _repository);
+
+            // 启动存储服务
             _storeScp = DicomServerFactory.Create<CStoreSCP>(
                 _settings.StoreSCPPort,
                 null,
@@ -97,14 +105,10 @@ public sealed class DicomServer : IDisposable
                 _loggerFactory.CreateLogger<CStoreSCP>(),
                 Options.Create(_settings));
 
-            _logger.Information("C-STORE服务已启动 - 端口: {Port}", _settings.StoreSCPPort);
+            DicomLogger.Information("C-STORE服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                _settings.AeTitle, _settings.StoreSCPPort);
 
-            // 配置和启动 Worklist SCP 服务器
-            WorklistSCP.Configure(
-                _settings,
-                _configuration,
-                _repository);
-
+            // 启动工作列表服务
             _worklistScp = DicomServerFactory.Create<WorklistSCP>(
                 _settings.WorklistSCPPort,
                 null,
@@ -112,11 +116,12 @@ public sealed class DicomServer : IDisposable
                 _loggerFactory.CreateLogger<WorklistSCP>(),
                 Options.Create(_settings));
 
-            _logger.Information("Worklist服务已启动 - 端口: {Port}", _settings.WorklistSCPPort);
+            DicomLogger.Information("Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                _settings.AeTitle, _settings.WorklistSCPPort);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "DICOM服务启动失败");
+            DicomLogger.Error(ex, "DICOM服务启动失败 - AET: {AeTitle}", _settings.AeTitle);
             _storeScp?.Dispose();
             _worklistScp?.Dispose();
             _storeScp = _worklistScp = null;
@@ -126,17 +131,16 @@ public sealed class DicomServer : IDisposable
 
     private void LogServerStartup()
     {
-        _logger.Information(
-            "DICOM服务启动 - AET: {AET}\n" +
-            "C-STORE服务 - 端口: {StorePort}\n" +
-            "Worklist服务 - 端口: {WorklistPort}\n" +
-            "存储路径: {StoragePath}\n" +
-            "{Area}", 
+        DicomLogger.Information(
+            "DICOM服务启动完成\n" +
+            "AE Title: {AeTitle}\n" +
+            "C-STORE服务端口: {StorePort}\n" +
+            "Worklist服务端口: {WorklistPort}\n" +
+            "存储路径: {StoragePath}", 
             _settings.AeTitle,
             _settings.StoreSCPPort,
             _settings.WorklistSCPPort,
-            Path.GetFullPath(_settings.StoragePath),
-            new { Area = "AppState" });
+            Path.GetFullPath(_settings.StoragePath));
     }
 
     public async Task StopAsync()
@@ -150,19 +154,16 @@ public sealed class DicomServer : IDisposable
         {
             await Task.Run(() =>
             {
+                DicomLogger.Information("正在停止DICOM服务 - AET: {AeTitle}", _settings.AeTitle);
                 _storeScp?.Dispose();
                 _worklistScp?.Dispose();
                 _storeScp = _worklistScp = null;
             });
-
-            _logger.Information(
-                "DICOM服务 - 动作: {Action} {Area}", 
-                "停止",
-                new { Area = "AppState" });
+            DicomLogger.Information("DICOM服务已停止 - AET: {AeTitle}", _settings.AeTitle);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "DICOM服务错误 - 动作: {Action}", "停止");
+            DicomLogger.Error(ex, "停止DICOM服务时发生错误 - AET: {AeTitle}", _settings.AeTitle);
             throw;
         }
     }
@@ -176,7 +177,6 @@ public sealed class DicomServer : IDisposable
 
         _storeScp?.Dispose();
         _worklistScp?.Dispose();
-        _storeScp = _worklistScp = null;
         _disposed = true;
     }
 } 

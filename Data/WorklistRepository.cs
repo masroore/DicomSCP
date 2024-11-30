@@ -3,18 +3,16 @@ using Microsoft.Data.Sqlite;
 using DicomSCP.Models;
 using DicomSCP.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using DicomSCP.Data;
 
-namespace DicomSCP.Services;
+namespace DicomSCP.Data;
 
-public class WorklistRepository
+public class WorklistRepository : BaseRepository
 {
-    private readonly string _connectionString;
-    private readonly ILogger<WorklistRepository> _logger;
-
     public WorklistRepository(IOptions<DicomSettings> settings, ILogger<WorklistRepository> logger)
+        : base(settings.Value.ConnectionString, logger)
     {
-        _connectionString = settings.Value.ConnectionString;
-        _logger = logger;
         InitializeDatabase();
     }
 
@@ -55,6 +53,7 @@ public class WorklistRepository
 
     public async Task<IEnumerable<WorklistItem>> GetAllAsync()
     {
+        LogDebug("正在查询所有Worklist项目");
         using var connection = new SqliteConnection(_connectionString);
         var sql = @"
             SELECT * FROM Worklist 
@@ -65,6 +64,7 @@ public class WorklistRepository
 
     public async Task<WorklistItem?> GetByIdAsync(string worklistId)
     {
+        LogDebug("正在查询Worklist项目 - WorklistId: {WorklistId}", worklistId);
         using var connection = new SqliteConnection(_connectionString);
         var sql = "SELECT * FROM Worklist WHERE WorklistId = @WorklistId";
 
@@ -99,7 +99,7 @@ public class WorklistRepository
             item.CreateTime = DateTime.UtcNow;
             item.UpdateTime = item.CreateTime;
 
-            _logger.LogInformation("正在创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
+            LogInformation("正在创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
 
             var sql = @"
                 INSERT INTO Worklist (
@@ -121,57 +121,98 @@ public class WorklistRepository
                 )";
 
             await connection.ExecuteAsync(sql, item);
-            _logger.LogInformation("成功创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
+            LogInformation("成功创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
             return item.WorklistId;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "创建Worklist项目失败");
+            LogError(ex, "创建Worklist项目失败");
             throw;
         }
     }
 
     public async Task<bool> UpdateAsync(WorklistItem item)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        
-        // 更新时间
-        item.UpdateTime = DateTime.UtcNow;
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            
+            // 更新时间
+            item.UpdateTime = DateTime.UtcNow;
 
-        var sql = @"
-            UPDATE Worklist 
-            SET AccessionNumber = @AccessionNumber,
-                PatientId = @PatientId,
-                PatientName = @PatientName,
-                PatientBirthDate = @PatientBirthDate,
-                PatientSex = @PatientSex,
-                StudyInstanceUid = @StudyInstanceUid,
-                StudyDescription = @StudyDescription,
-                Modality = @Modality,
-                ScheduledAET = @ScheduledAET,
-                ScheduledDateTime = @ScheduledDateTime,
-                ScheduledStationName = @ScheduledStationName,
-                ScheduledProcedureStepID = @ScheduledProcedureStepID,
-                ScheduledProcedureStepDescription = @ScheduledProcedureStepDescription,
-                RequestedProcedureID = @RequestedProcedureID,
-                RequestedProcedureDescription = @RequestedProcedureDescription,
-                ReferringPhysicianName = @ReferringPhysicianName,
-                Status = @Status,
-                UpdateTime = @UpdateTime,
-                BodyPartExamined = @BodyPartExamined,
-                ReasonForRequest = @ReasonForRequest
-            WHERE WorklistId = @WorklistId";
+            LogInformation("正在更新Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
 
-        var rowsAffected = await connection.ExecuteAsync(sql, item);
-        return rowsAffected > 0;
+            var sql = @"
+                UPDATE Worklist 
+                SET AccessionNumber = @AccessionNumber,
+                    PatientId = @PatientId,
+                    PatientName = @PatientName,
+                    PatientBirthDate = @PatientBirthDate,
+                    PatientSex = @PatientSex,
+                    StudyInstanceUid = @StudyInstanceUid,
+                    StudyDescription = @StudyDescription,
+                    Modality = @Modality,
+                    ScheduledAET = @ScheduledAET,
+                    ScheduledDateTime = @ScheduledDateTime,
+                    ScheduledStationName = @ScheduledStationName,
+                    ScheduledProcedureStepID = @ScheduledProcedureStepID,
+                    ScheduledProcedureStepDescription = @ScheduledProcedureStepDescription,
+                    RequestedProcedureID = @RequestedProcedureID,
+                    RequestedProcedureDescription = @RequestedProcedureDescription,
+                    ReferringPhysicianName = @ReferringPhysicianName,
+                    Status = @Status,
+                    UpdateTime = @UpdateTime,
+                    BodyPartExamined = @BodyPartExamined,
+                    ReasonForRequest = @ReasonForRequest
+                WHERE WorklistId = @WorklistId";
+
+            var rowsAffected = await connection.ExecuteAsync(sql, item);
+            
+            if (rowsAffected > 0)
+            {
+                LogInformation("成功更新Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
+            }
+            else
+            {
+                LogWarning("未找到要更新的Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
+            }
+            
+            return rowsAffected > 0;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "更新Worklist项目失败 - WorklistId: {WorklistId}", item.WorklistId);
+            throw;
+        }
     }
 
     public async Task<bool> DeleteAsync(string worklistId)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        var sql = "DELETE FROM Worklist WHERE WorklistId = @WorklistId";
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            
+            LogInformation("正在删除Worklist项目 - WorklistId: {WorklistId}", worklistId);
+            
+            var sql = "DELETE FROM Worklist WHERE WorklistId = @WorklistId";
 
-        var rowsAffected = await connection.ExecuteAsync(sql, new { WorklistId = worklistId });
-        return rowsAffected > 0;
+            var rowsAffected = await connection.ExecuteAsync(sql, new { WorklistId = worklistId });
+            
+            if (rowsAffected > 0)
+            {
+                LogInformation("成功删除Worklist项目 - WorklistId: {WorklistId}", worklistId);
+            }
+            else
+            {
+                LogWarning("未找到要删除的Worklist项目 - WorklistId: {WorklistId}", worklistId);
+            }
+            
+            return rowsAffected > 0;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "删除Worklist项目失败 - WorklistId: {WorklistId}", worklistId);
+            throw;
+        }
     }
 } 

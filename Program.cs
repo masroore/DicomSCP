@@ -17,9 +17,19 @@ var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettin
 
 // 配置日志
 var logSettings = builder.Configuration
-    .GetSection("DicomSettings:Logging")
+    .GetSection("Logging")
     .Get<LogSettings>() ?? new LogSettings();
 
+// 初始化DICOM日志
+DicomLogger.Initialize(logSettings);
+
+// 初始化数据库日志
+BaseRepository.ConfigureLogging(logSettings);
+
+// 初始化API日志
+ApiLoggingMiddleware.ConfigureLogging(logSettings);
+
+// 配置全局日志（用于其他服务）
 var logConfig = new LoggerConfiguration()
     .MinimumLevel.Debug()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -38,19 +48,6 @@ if (logSettings.EnableConsoleLog)
             evt.Level == LogEventLevel.Fatal || 
             evt.Properties.ContainsKey("Area")
         )
-    );
-}
-
-// 文件日志 - 统一记录到一个文件，添加服务标识
-if (logSettings.EnableFileLog)
-{
-    logConfig.WriteTo.File(
-        path: Path.Combine(logSettings.LogPath, "dicom-scp-.txt"),
-        rollingInterval: RollingInterval.Day,
-        restrictedToMinimumLevel: logSettings.FileLogLevel,
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}",
-        retainedFileCountLimit: logSettings.RetainedDays,
-        shared: true
     );
 }
 
@@ -87,13 +84,13 @@ builder.Services.AddSingleton<WorklistRepository>();
 
 // 确保配置服务正确注册
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
-
-builder.Services.Configure<QueryRetrieveConfig>(
-    builder.Configuration.GetSection("QueryRetrieveConfig"));
-
+builder.Services.Configure<QueryRetrieveConfig>(builder.Configuration.GetSection("QueryRetrieveConfig"));
 builder.Services.AddScoped<IQueryRetrieveSCU, QueryRetrieveSCU>();
 
 var app = builder.Build();
+
+// 添加API日志中间件
+app.UseMiddleware<ApiLoggingMiddleware>();
 
 // 获取服务
 var dicomRepository = app.Services.GetRequiredService<DicomRepository>();
