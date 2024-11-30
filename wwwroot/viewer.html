@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>DICOM 查看器</title>
+    <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        .viewport {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            color: white;
+            display: inline-block;
+            background-color: black;
+        }
+        .corner-info {
+            position: absolute;
+            padding: 5px;
+            font-size: 12px;
+            color: white;
+            z-index: 100;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+        .top-left {
+            top: 5px;
+            left: 5px;
+        }
+        .top-right {
+            top: 5px;
+            right: 5px;
+            text-align: right;
+        }
+        .bottom-left {
+            bottom: 5px;
+            left: 5px;
+        }
+        .bottom-right {
+            bottom: 5px;
+            right: 5px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="viewport" id="viewer">
+        <div class="corner-info top-left" id="patientInfo"></div>
+        <div class="corner-info top-right" id="studyInfo"></div>
+        <div class="corner-info bottom-left" id="imageInfo"></div>
+        <div class="corner-info bottom-right" id="windowInfo"></div>
+    </div>
+
+    <!-- 只保留必要的库 -->
+    <script src="lib/cornerstone/dicomParser.min.js"></script>
+    <script src="lib/cornerstone/cornerstone.min.js"></script>
+    <script src="lib/cornerstone/cornerstoneWADOImageLoader.bundle.min.js"></script>
+    
+    <!-- 应用代码 -->
+    <script src="js/viewer.js"></script>
+</body>
+</html> 

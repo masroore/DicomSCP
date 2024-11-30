@@ -2,6 +2,7 @@
 let worklistModal;
 let currentWorklistId = null;
 let changePasswordModal;
+let viewerModal;
 
 // 页面加载完成后执行
 $(document).ready(function() {
@@ -16,6 +17,14 @@ $(document).ready(function() {
     if (changePasswordModalElement) {
         changePasswordModal = new bootstrap.Modal(changePasswordModalElement);
     }
+    
+    // 初始化查看器模态框
+    viewerModal = new bootstrap.Modal(document.getElementById('viewerModal'));
+    
+    // 监听模态框关闭事件，清理资源
+    document.getElementById('viewerModal').addEventListener('hidden.bs.modal', function () {
+        document.getElementById('viewerFrame').src = 'about:blank';
+    });
     
     // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
     const currentPage = window.location.hash.slice(1) || 'worklist';
@@ -573,5 +582,20 @@ function deleteStudy(studyInstanceUid) {
             alert(error.message || '删除失败，请重试');
         });
     }
+}
+
+// 修改预览函数
+function previewSeries(studyUid, seriesUid, event) {
+    // 防止事件冒泡
+    if (event) {
+        event.stopPropagation();
+    }
+    
+    // 设置 iframe 源
+    const viewerUrl = `/viewer.html?studyUid=${encodeURIComponent(studyUid)}&seriesUid=${encodeURIComponent(seriesUid)}`;
+    document.getElementById('viewerFrame').src = viewerUrl;
+    
+    // 显示模态框
+    viewerModal.show();
 }
 
