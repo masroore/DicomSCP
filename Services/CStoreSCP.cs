@@ -35,8 +35,8 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         DicomTransferSyntax.ExplicitVRBigEndian
     };
 
-    private static string StoragePath = "./received_files";
-    private static string TempPath = "./temp_files";
+    private static string? StoragePath;
+    private static string? TempPath;
     private static DicomSettings? GlobalSettings;
     private static DicomRepository? _repository;
 
@@ -58,13 +58,19 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public static void Configure(string storagePath, string tempPath, DicomSettings settings, DicomRepository repository)
     {
-        StoragePath = storagePath;
-        TempPath = tempPath;
+        if (string.IsNullOrEmpty(settings.StoragePath) || string.IsNullOrEmpty(settings.TempPath))
+        {
+            throw new ArgumentException("Storage paths must be configured in settings");
+        }
+        
+        StoragePath = settings.StoragePath;
+        TempPath = settings.TempPath;
         GlobalSettings = settings;
         _repository = repository;
         
-        // 确保临时目录存在
-        Directory.CreateDirectory(tempPath);
+        // 确保目录存在
+        Directory.CreateDirectory(StoragePath);
+        Directory.CreateDirectory(TempPath);
     }
 
     public CStoreSCP(
@@ -77,6 +83,19 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     {
         _settings = GlobalSettings ?? settings.Value 
             ?? throw new ArgumentNullException(nameof(settings));
+        
+        // 如果静态路径未初始化，使用配置中的值
+        if (string.IsNullOrEmpty(StoragePath))
+        {
+            StoragePath = _settings.StoragePath;
+            Directory.CreateDirectory(StoragePath);
+        }
+        if (string.IsNullOrEmpty(TempPath))
+        {
+            TempPath = _settings.TempPath;
+            Directory.CreateDirectory(TempPath);
+        }
+        
         var advancedSettings = _settings.Advanced;
 
         _logger.Debug("加载配置 - 压缩: {Enabled}, 格式: {Format}", 
@@ -124,7 +143,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 if (isImageStorage)
                 {
                     pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);
-                    _logger.Information("DICOM服务 - 动作: {Action}, 类型: {Type}, 传输: {Transfer}", 
+                    _logger.Information("DICOM服务 - 动作: {Action}, 类型: {Type}, 传: {Transfer}", 
                         "接受", pc.AbstractSyntax.Name, "支持压缩传输");
                 }
                 else
@@ -151,7 +170,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                sopClass.Equals(DicomUID.MRImageStorage) ||                      // MR图像
                sopClass.Equals(DicomUID.UltrasoundImageStorage) ||             // 超声图像
                sopClass.Equals(DicomUID.UltrasoundMultiFrameImageStorage) ||   // 超声多帧图像
-               sopClass.Equals(DicomUID.XRayAngiographicImageStorage) ||       // 血管造影图像
+               sopClass.Equals(DicomUID.XRayAngiographicImageStorage) ||       // 血管造影图
                sopClass.Equals(DicomUID.XRayRadiofluoroscopicImageStorage) ||  // X射线透视图像
                sopClass.Equals(DicomUID.DigitalXRayImageStorageForPresentation) || // DR图像
                sopClass.Equals(DicomUID.DigitalMammographyXRayImageStorageForPresentation) || // 乳腺X射线图像
@@ -284,6 +303,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
                 try
                 {
+                    if (TempPath == null || StoragePath == null)
+                    {
+                        throw new InvalidOperationException("Storage paths are not properly initialized");
+                    }
+                    
                     // 使用临时目录创建临时文件
                     var tempFileName = $"{instanceUid}_temp_{Guid.NewGuid()}.dcm";
                     tempFilePath = Path.Combine(TempPath, tempFileName);
@@ -291,13 +315,19 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     // 压缩图像
                     var compressedFile = await CompressImageAsync(request.File);
 
-                    // 保压缩后的文件
+                    // 保存压缩后的文件
                     await compressedFile.SaveAsync(tempFilePath);
 
-                    // 确保目标目录存在
-                    var targetPath = Path.Combine(StoragePath, studyUid, seriesUid);
+                    // 构建相对路径和完整路径
+                    var relativePath = Path.Combine(studyUid, seriesUid, $"{instanceUid}.dcm");
+                    var targetFilePath = Path.Combine(StoragePath, relativePath);
+                    var targetPath = Path.GetDirectoryName(targetFilePath);
+
+                    if (targetPath == null)
+                    {
+                        throw new InvalidOperationException("Invalid target path structure");
+                    }
                     Directory.CreateDirectory(targetPath);
-                    var targetFilePath = Path.Combine(targetPath, $"{instanceUid}.dcm");
 
                     if (File.Exists(targetFilePath))
                     {
@@ -329,7 +359,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     {
                         try 
                         {
-                            await _repository.SaveDicomDataAsync(request.Dataset, targetFilePath);
+                            await _repository.SaveDicomDataAsync(request.Dataset, relativePath);
                         }
                         catch (Exception ex)
                         {
