@@ -439,4 +439,23 @@ public class DicomRepository : IDisposable
         var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
         return Convert.ToBase64String(hashedBytes);
     }
+
+    public async Task<IEnumerable<Instance>> GetInstancesBySeriesUidAsync(string seriesUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = @"
+            SELECT * FROM Instances 
+            WHERE SeriesInstanceUid = @SeriesUid 
+            ORDER BY CAST(InstanceNumber as INTEGER)";
+
+        return await connection.QueryAsync<Instance>(sql, new { SeriesUid = seriesUid });
+    }
+
+    public async Task<Instance?> GetInstanceAsync(string instanceUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = "SELECT * FROM Instances WHERE SopInstanceUid = @InstanceUid";
+
+        return await connection.QueryFirstOrDefaultAsync<Instance>(sql, new { InstanceUid = instanceUid });
+    }
 }

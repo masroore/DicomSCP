@@ -87,6 +87,17 @@ builder.Services.AddSingleton<WorklistRepository>();
 // 确保配置服务正确注册
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
 
+// 在 builder.Services 配置部分添加
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
 
 // 获取服务
@@ -121,9 +132,23 @@ if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
     });
 }
 
+app.UseStaticFiles();  // 先处理静态文件
+app.UseRouting();     // 然后是路由
+
 // 认证中间件
 app.Use(async (context, next) =>
 {
+    var path = context.Request.Path.Value?.ToLower();
+
+    // 1. 检查是否是 DICOM 实例请求
+    if (path?.StartsWith("/api/images/instances/") == true)
+    {
+        // DICOM 实例请求直接放行，不检查认证
+        await next();
+        return;
+    }
+
+    // 2. 检查是否是白名单路径
     var allowedPaths = new[] 
     {
         "/login.html",
@@ -133,22 +158,22 @@ app.Use(async (context, next) =>
         "/js"
     };
 
-    var path = context.Request.Path.Value?.ToLower();
-
     if (allowedPaths.Any(p => path?.StartsWith(p) == true))
     {
         await next();
         return;
     }
 
-    // 检查认证 Cookie
+    // 3. 检查认证状态
     if (!context.Request.Cookies.ContainsKey("auth"))
     {
+        // API 请求返回 401，而不是重定向
         if (path?.StartsWith("/api") == true)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
+        // 只有页面请求才重定向
         context.Response.Redirect("/login.html");
         return;
     }
@@ -156,10 +181,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// 其他中间件按顺序放在认证中间件后面
-app.UseStaticFiles();
-app.UseRouting();
 app.UseAuthorization();
+app.UseCors();
 app.MapControllers();
 
 // 处理根路径

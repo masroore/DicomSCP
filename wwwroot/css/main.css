@@ -178,3 +178,37 @@ body {
 .table tr[data-study-uid]:hover {
     background-color: rgba(0, 123, 255, 0.1);
 }
+
+/* DWV 相关样式 */
+#dwv-viewer {
+    height: 600px;
+    background: #000;
+    position: relative;
+}
+
+.modal-xl {
+    max-width: 90%;
+}
+
+#dwv-container {
+    width: 100%;
+    height: 100%;
+}
+
+/* DWV 工具栏样式 */
+#dwvModal .btn-group {
+    margin-right: auto;
+}
+
+#dwvModal .btn-outline-primary {
+    --bs-btn-color: #666;
+    --bs-btn-border-color: #ccc;
+    --bs-btn-hover-bg: #f8f9fa;
+    --bs-btn-hover-border-color: #999;
+    --bs-btn-active-bg: #e9ecef;
+    --bs-btn-active-border-color: #999;
+}
+
+#dwvModal .modal-header {
+    padding: 0.5rem 1rem;
+}

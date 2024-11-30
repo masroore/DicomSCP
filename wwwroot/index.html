@@ -7,6 +7,7 @@
     <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <script type="text/javascript" src="lib/dwv/dwv.min.js"></script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -206,6 +207,28 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="button" class="btn btn-primary" onclick="changePassword()">确认修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DWV 的模态框 -->
+    <div class="modal fade" id="dwvModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">图像预览</h5>
+                    <div class="btn-group ms-3" role="group">
+                        <button type="button" class="btn btn-outline-primary" onclick="dwvApp.setTool('Scroll')">滚动</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="dwvApp.setTool('ZoomAndPan')">缩放/平移</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="dwvApp.setTool('WindowLevel')">窗宽窗位</button>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="dwv-container">
+                        <div id="dwv-viewer"></div>
+                    </div>
                 </div>
             </div>
         </div>
