@@ -49,7 +49,7 @@
             <!-- Worklist管理页面 -->
             <div id="worklist-page">
                 <div class="d-flex justify-content-start mb-3">
-                    <button class="btn btn-primary" onclick="showAddWorklistModal()">
+                    <button class="btn btn-primary" onclick="openAddWorklistModal()">
                         添加预约
                     </button>
                 </div>
@@ -74,6 +74,30 @@
                             <!-- 数据将通过JavaScript动态加载 -->
                         </tbody>
                     </table>
+                    
+                    <!-- 添加分页组件 -->
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div class="pagination-info">
+                            显示 <span id="worklist-currentRange">1-10</span> 条，共 <span id="worklist-totalCount">0</span> 条
+                        </div>
+                        <nav aria-label="分页导航">
+                            <ul class="pagination mb-0">
+                                <li class="page-item">
+                                    <button class="page-link" id="worklist-prevPage" aria-label="上一页">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </button>
+                                </li>
+                                <li class="page-item">
+                                    <span class="page-link" id="worklist-currentPage">1</span>
+                                </li>
+                                <li class="page-item">
+                                    <button class="page-link" id="worklist-nextPage" aria-label="下一页">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
                 </div>
             </div>
 
@@ -112,41 +136,40 @@
                 </div>
                 <div class="modal-body">
                     <form id="worklistForm">
-                        <input type="hidden" id="worklistId">
                         <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">姓名</label>
-                                <input type="text" class="form-control" id="patientName" required>
-                            </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">患者ID</label>
                                 <input type="text" class="form-control" id="patientId" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">检查号</label>
-                                <input type="text" class="form-control" id="accessionNumber" required>
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="patientName" required>
                             </div>
-                        </div>
-                        <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">性别</label>
                                 <select class="form-select" id="patientSex" required>
-                                    <option value="M" selected>男</option>
+                                    <option value="M">男</option>
                                     <option value="F">女</option>
                                     <option value="O">其他</option>
                                 </select>
                             </div>
+                        </div>
+                        <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">年龄</label>
                                 <input type="number" class="form-control" id="patientAge" min="0" max="150" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="accessionNumber" required>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">检查类型</label>
                                 <select class="form-select" id="modality" required>
                                     <option value="CT">CT</option>
                                     <option value="MR">MR</option>
-                                    <option value="US">US</option>
                                     <option value="DR">DR</option>
+                                    <option value="US">US</option>
                                 </select>
                             </div>
                         </div>
@@ -156,18 +179,28 @@
                                 <input type="datetime-local" class="form-control" id="scheduledDateTime" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">预约AE Title</label>
+                                <label class="form-label">设备AE Title</label>
                                 <input type="text" class="form-control" id="scheduledAET" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">检查站名称</label>
+                                <label class="form-label">设备名称</label>
                                 <input type="text" class="form-control" id="scheduledStationName">
                             </div>
                         </div>
                         <div class="row">
-                            <div class="col-md-8 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label">检查部位</label>
                                 <input type="text" class="form-control" id="bodyPartExamined">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">状态</label>
+                                <select class="form-select" id="status" required>
+                                    <option value="SCHEDULED">已预约</option>
+                                    <option value="ARRIVED">已到达</option>
+                                    <option value="STARTED">检查中</option>
+                                    <option value="COMPLETED">已完成</option>
+                                    <option value="CANCELED">已取消</option>
+                                </select>
                             </div>
                         </div>
                     </form>

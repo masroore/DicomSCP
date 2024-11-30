@@ -4,6 +4,11 @@ let currentWorklistId = null;
 let changePasswordModal;
 let viewerModal;
 
+// 分页参数
+let currentPage = 1;
+const pageSize = 10;
+let allWorklistItems = [];  // 存储所有数据
+
 // 页面加载完成后执行
 $(document).ready(function() {
     // 初始化模态框
@@ -88,47 +93,93 @@ function loadPage(page) {
 }
 
 // 加载 Worklist 数据
-function loadWorklistData() {
-    fetch('/api/worklist')
-        .then(response => {
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            if (!response.ok) {
-                throw new Error('获取数据失败');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (!data) return;  // 如果是401跳转，data会是undefined
-            const tbody = $('#worklist-table-body');
-            tbody.empty();
-            
-            data.forEach(item => {
-                tbody.append(`
-                    <tr>
-                        <td title="${item.patientId}">${item.patientId}</td>
-                        <td title="${item.patientName}">${item.patientName}</td>
-                        <td>${formatGender(item.patientSex)}</td>
-                        <td>${item.age ? item.age + '岁' : ''}</td>
-                        <td title="${item.accessionNumber}">${item.accessionNumber}</td>
-                        <td>${item.modality}</td>
-                        <td>${formatDateTime(item.scheduledDateTime)}</td>
-                        <td><span class="status-${item.status.toLowerCase()}">${formatStatus(item.status)}</span></td>
-                        <td>
-                            <button class="btn btn-sm btn-primary" onclick="editWorklist('${item.worklistId}')">编辑</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteWorklist('${item.worklistId}')">删除</button>
-                        </td>
-                    </tr>
-                `);
-            });
-        })
-        .catch(error => {
-            console.error('获取Worklist数据失败:', error);
-            alert('获取数据失败，请检查网络连接');
-        });
+async function loadWorklistData() {
+    try {
+        const response = await fetch('/api/worklist');
+        if (response.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
+        if (!response.ok) {
+            throw new Error('获取数据失败');
+        }
+        
+        const data = await response.json();
+        if (!data) return;  // 如果是401跳转，data会是undefined
+
+        // 保存所有数据
+        allWorklistItems = data;
+        
+        // 更新分页信息
+        const total = allWorklistItems.length;
+        const totalPages = Math.ceil(total / pageSize);
+        updatePagination(total);
+        
+        // 显示当前页数据
+        displayWorklistPage(currentPage);
+    } catch (error) {
+        console.error('获取Worklist数据失败:', error);
+        alert('获取数据失败，请检查网络连接');
+    }
 }
+
+// 显示指定页的数据
+function displayWorklistPage(page) {
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const pageItems = allWorklistItems.slice(start, end);
+    
+    const tbody = document.getElementById('worklist-table-body');
+    tbody.innerHTML = pageItems.map(item => `
+        <tr>
+            <td title="${item.patientId}">${item.patientId}</td>
+            <td title="${item.patientName}">${item.patientName}</td>
+            <td>${formatGender(item.patientSex)}</td>
+            <td>${item.age ? item.age + '岁' : ''}</td>
+            <td title="${item.accessionNumber}">${item.accessionNumber}</td>
+            <td>${item.modality}</td>
+            <td>${formatDateTime(item.scheduledDateTime)}</td>
+            <td><span class="status-${item.status.toLowerCase()}">${formatStatus(item.status)}</span></td>
+            <td>
+                <button class="btn btn-sm btn-primary" onclick="editWorklist('${item.worklistId}')">编辑</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteWorklist('${item.worklistId}')">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 更新分页信息
+function updatePagination(total) {
+    const totalPages = Math.ceil(total / pageSize);
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(currentPage * pageSize, total);
+    
+    document.getElementById('worklist-currentRange').textContent = `${start}-${end}`;
+    document.getElementById('worklist-totalCount').textContent = total;
+    document.getElementById('worklist-currentPage').textContent = currentPage;
+    
+    // 更新按钮状态
+    document.getElementById('worklist-prevPage').disabled = currentPage === 1;
+    document.getElementById('worklist-nextPage').disabled = currentPage === totalPages;
+}
+
+// 添加分页事件监听
+document.getElementById('worklist-prevPage').onclick = () => {
+    if (currentPage > 1) {
+        currentPage--;
+        displayWorklistPage(currentPage);
+        updatePagination(allWorklistItems.length);
+    }
+};
+
+document.getElementById('worklist-nextPage').onclick = () => {
+    const totalPages = Math.ceil(allWorklistItems.length / pageSize);
+    if (currentPage < totalPages) {
+        currentPage++;
+        displayWorklistPage(currentPage);
+        updatePagination(allWorklistItems.length);
+    }
+};
 
 // 加载影像数据
 function loadImagesData() {
@@ -255,44 +306,86 @@ function toggleSeriesInfo(row) {
         });
 }
 
-// 显示添加 Worklist 模态框
-function showAddWorklistModal() {
+// 打开添加预约模态框
+function openAddWorklistModal() {
     currentWorklistId = null;
+    document.getElementById('modalTitle').textContent = '添加预约';
+    
+    // 重置表单
     document.getElementById('worklistForm').reset();
     
-    // 设置预约时间认为当前时间
+    // 获取当前时间
     const now = new Date();
-    const defaultDateTime = now.toISOString().slice(0, 16);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    
+    // 生成患者ID：P + 年月日时分秒
+    const patientId = `P${year}${month}${day}${hours}${minutes}${seconds}`;
+    document.getElementById('patientId').value = patientId;
+    
+    // 生成检查号：A + 年月日时分秒
+    const accessionNumber = `A${year}${month}${day}${hours}${minutes}${seconds}`;
+    document.getElementById('accessionNumber').value = accessionNumber;
+    
+    // 设置默认预约时间为当前时间
+    const defaultDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
     document.getElementById('scheduledDateTime').value = defaultDateTime;
-    document.getElementById('patientAge').value = '';
-    document.getElementById('modalTitle').textContent = '添加预约';
+    
+    // 显示模态框
     worklistModal.show();
 }
 
-// 编辑 Worklist
-function editWorklist(id) {
-    currentWorklistId = id;
+// 编辑预约时，格式化日期时间
+function editWorklist(worklistId) {
+    currentWorklistId = worklistId;
+    document.getElementById('modalTitle').textContent = '编辑预约';
     
-    fetch(`/api/worklist/${id}`)
-        .then(response => response.json())
+    fetch(`/api/worklist/${worklistId}`)
+        .then(response => {
+            if (!response.ok) throw new Error('获取数据失败');
+            return response.json();
+        })
         .then(data => {
+            // 填充表单数据
             document.getElementById('patientId').value = data.patientId || '';
             document.getElementById('patientName').value = data.patientName || '';
             document.getElementById('patientSex').value = data.patientSex || '';
             document.getElementById('patientAge').value = data.age || '';
             document.getElementById('accessionNumber').value = data.accessionNumber || '';
             document.getElementById('modality').value = data.modality || '';
-            document.getElementById('scheduledDateTime').value = formatDateTimeForInput(data.scheduledDateTime);
             document.getElementById('scheduledAET').value = data.scheduledAET || '';
             document.getElementById('scheduledStationName').value = data.scheduledStationName || '';
             document.getElementById('bodyPartExamined').value = data.bodyPartExamined || '';
+            document.getElementById('status').value = data.status || 'SCHEDULED';
             
-            document.getElementById('modalTitle').textContent = '编辑预约';
+            // 格式化预约时间
+            if (data.scheduledDateTime) {
+                try {
+                    const date = new Date(data.scheduledDateTime);
+                    if (!isNaN(date)) {
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        
+                        document.getElementById('scheduledDateTime').value = 
+                            `${year}-${month}-${day}T${hours}:${minutes}`;
+                    }
+                } catch (error) {
+                    console.warn('日期格式化失败:', error);
+                }
+            }
+            
             worklistModal.show();
         })
         .catch(error => {
-            console.error('获取检查数据失败:', error);
-            alert('获取数据失败，请重试');
+            console.error('获取预约数据失败:', error);
+            alert('获取预约数据失败');
         });
 }
 
