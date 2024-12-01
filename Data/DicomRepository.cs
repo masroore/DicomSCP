@@ -476,7 +476,7 @@ public class DicomRepository : BaseRepository, IDisposable
             );
   
             await transaction.CommitAsync();
-            LogInformation("成功删除检�� - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
+            LogInformation("成功删除检查 - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
                 studyInstanceUid, instanceCount);
         }
         catch (Exception ex)
@@ -677,6 +677,35 @@ public class DicomRepository : BaseRepository, IDisposable
         {
             LogError(ex, "图像查询失败 - StudyInstanceUid: {StudyInstanceUid}, SeriesInstanceUid: {SeriesInstanceUid}", 
                 studyInstanceUid, seriesInstanceUid);
+            return new List<Instance>();
+        }
+    }
+
+    public IEnumerable<Instance> GetInstancesByStudyUid(string studyInstanceUid)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT i.*, s.StudyInstanceUid, s.Modality
+                FROM Instances i
+                JOIN Series s ON i.SeriesInstanceUid = s.SeriesInstanceUid
+                WHERE s.StudyInstanceUid = @StudyInstanceUid
+                ORDER BY CAST(i.InstanceNumber as INTEGER)";
+
+            LogDebug("执行实例查询 - SQL: {Sql}, StudyInstanceUid: {StudyInstanceUid}", 
+                sql, studyInstanceUid);
+
+            var instances = connection.Query<Instance>(sql, new { StudyInstanceUid = studyInstanceUid });
+
+            var result = instances?.ToList() ?? new List<Instance>();
+            LogInformation("实例查询完成 - StudyInstanceUid: {StudyInstanceUid}, 返回记录数: {Count}", 
+                studyInstanceUid, result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "实例查询失败 - StudyInstanceUid: {StudyInstanceUid}", studyInstanceUid);
             return new List<Instance>();
         }
     }
