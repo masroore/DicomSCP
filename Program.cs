@@ -11,6 +11,15 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 配置 Kestrel
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.ConfigureEndpointDefaults(listenOptions =>
+    {
+        listenOptions.UseConnectionLogging();
+    });
+});
+
 // 获取配置
 var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
     ?? new DicomSettings();
@@ -112,22 +121,35 @@ if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
     });
 }
 
+// 配置静态文件
+app.UseDefaultFiles(new DefaultFilesOptions
+{
+    DefaultFileNames = new List<string> { "index.html", "login.html" }
+});
+app.UseStaticFiles();
+
 // 认证中间件
 app.Use(async (context, next) =>
 {
+    var path = context.Request.Path.Value?.ToLower();
+    
     var allowedPaths = new[] 
     {
         "/login.html",
         "/api/auth/login",
         "/lib",
         "/css",
-        "/js"
+        "/js",
+        "/favicon.ico"
     };
 
-    var path = context.Request.Path.Value?.ToLower();
+    // 记录请求路径和认证信息
+    DicomLogger.Debug("Api", "[Auth] Request Path: {0}", path ?? "(null)");
+    DicomLogger.Debug("Api", "[Auth] Has Auth Cookie: {0}", context.Request.Cookies.ContainsKey("auth").ToString());
 
     if (allowedPaths.Any(p => path?.StartsWith(p) == true))
     {
+        DicomLogger.Debug("Api", "[Auth] Allowed path: {0}", path ?? "(null)");
         await next();
         return;
     }
@@ -135,20 +157,34 @@ app.Use(async (context, next) =>
     // 检查认证 Cookie
     if (!context.Request.Cookies.ContainsKey("auth"))
     {
+        DicomLogger.Warning("Api", "[Auth] No auth cookie found for path: {0}", path ?? "(null)");
         if (path?.StartsWith("/api") == true)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
-        context.Response.Redirect("/login.html");
+        
+        var scheme = context.Request.Scheme;
+        var host = context.Request.Host.Value;
+        var redirectUrl = $"{scheme}://{host}/login.html";
+        context.Response.Redirect(redirectUrl);
         return;
     }
 
+    // 验证 Cookie 值
+    var authCookie = context.Request.Cookies["auth"];
+    if (string.IsNullOrEmpty(authCookie))
+    {
+        DicomLogger.Warning("Api", "[Auth] Auth cookie is empty");
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    DicomLogger.Debug("Api", "[Auth] Auth cookie found: {0}", authCookie ?? "(null)");
     await next();
 });
 
 // 其他中间件按顺序放在认证中间件后面
-app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();

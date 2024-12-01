@@ -33,19 +33,20 @@ public class AuthController : ControllerBase
             {
                 HttpOnly = true,
                 Expires = DateTime.Now.AddMinutes(30),
-                SameSite = SameSiteMode.Strict,
+                SameSite = SameSiteMode.Lax,
                 IsEssential = true,
                 Path = "/",
-                Secure = true,
+                Secure = Request.IsHttps
             });
 
             Response.Cookies.Append("username", request.Username, new CookieOptions
             {
                 HttpOnly = false,
                 Expires = DateTime.Now.AddMinutes(30),
-                SameSite = SameSiteMode.Strict,
+                SameSite = SameSiteMode.Lax,
                 IsEssential = true,
                 Path = "/",
+                Secure = Request.IsHttps
             });
 
             DicomLogger.Information("Api", "[API] 登录成功 - 用户名: {Username}", request.Username);
@@ -64,6 +65,7 @@ public class AuthController : ControllerBase
         try
         {
             var username = Request.Cookies["username"] ?? "unknown";
+            Response.Cookies.Delete("auth", new CookieOptions { Path = "/" });
             Response.Cookies.Delete("username", new CookieOptions { Path = "/" });
             DicomLogger.Information("Api", "[API] 用户登出 - 用户名: {Username}", username);
             return Ok();
