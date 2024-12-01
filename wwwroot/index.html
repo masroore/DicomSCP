@@ -7,6 +7,34 @@
     <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <style>
+        .drop-zone {
+            min-height: 150px;
+            border: 2px dashed #dee2e6;
+            transition: all 0.3s ease;
+            background-color: #f8f9fa;
+        }
+        
+        .drop-zone.border-primary {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+        
+        .drop-zone i {
+            font-size: 2rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+        
+        .drop-zone p {
+            color: #6c757d;
+        }
+        
+        #selectedFiles {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -25,6 +53,9 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#qr" data-page="qr">查询检索</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#store" data-page="store">发送图像</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#settings" data-page="settings">系统设置</a>
@@ -284,6 +315,65 @@
             <div id="settings-page" style="display: none;">
                 <!-- 系统设置内容 -->
             </div>
+
+            <!-- 发送图像页面 -->
+            <div id="store-page" style="display: none;">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="storeForm">
+                            <div class="mb-3">
+                                <label class="form-label">目标节点</label>
+                                <select class="form-select" id="storeNode" required>
+                                    <!-- 节点列表将通过JavaScript动态加载 -->
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">选择文件或拖拽到此处</label>
+                                <div class="drop-zone border rounded p-4 text-center" id="dropZone">
+                                    <div class="mb-3">
+                                        <i class="bi bi-cloud-upload"></i>
+                                        <p class="mb-0">拖拽文件/文件夹到这里，或点击选择</p>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-primary me-2" id="fileInput">
+                                        选择DICOM文件
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary" id="folderInput">
+                                        选择文件夹
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="selectedFiles" class="mb-3" style="display: none;">
+                                <h6>已选择的文件：</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>文件名</th>
+                                                <th>大小</th>
+                                                <th>状态</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fileList">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-primary" id="sendButton" disabled>
+                                    发送文件
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="clearButton">
+                                    清空列表
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -424,6 +514,7 @@
     <script src="lib/jquery/jquery.min.js"></script>
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/store.js"></script>
     <script>
         function logout() {
             fetch('/api/auth/logout', { method: 'POST' })
@@ -432,5 +523,15 @@
                 });
         }
     </script>
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="storeToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto" id="storeToastTitle">发送结果</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="storeToastMessage">
+            </div>
+        </div>
+    </div>
 </body>
 </html>

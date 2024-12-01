@@ -69,7 +69,6 @@ public class StoreSCUController : ControllerBase
                 DicomLogger.Information("Api", "开始发送文件夹 - 路径: {FolderPath}, 目标: {RemoteName}", 
                     folderPath, remoteName);
                 
-                // 发送文件夹
                 await _storeSCU.SendFolderAsync(folderPath, remoteName);
                 return Ok(new { message = "文件夹发送成功" });
             }
@@ -79,7 +78,7 @@ public class StoreSCUController : ControllerBase
                     files.Count, remoteName);
                 
                 // 创建临时目录
-                var tempDir = Path.Combine(_tempPath, Guid.NewGuid().ToString());
+                var tempDir = Path.Combine(_tempPath, "temp_" + DateTime.Now.Ticks.ToString());
                 Directory.CreateDirectory(tempDir);
 
                 try
@@ -88,7 +87,10 @@ public class StoreSCUController : ControllerBase
                     var filePaths = new List<string>();
                     foreach (var file in files)
                     {
-                        var filePath = Path.Combine(tempDir, file.FileName);
+                        // 直接使用文件名保存到临时目录
+                        var fileName = Path.GetFileName(file.FileName);
+                        var filePath = Path.Combine(tempDir, fileName);
+
                         using (var stream = new FileStream(filePath, FileMode.Create))
                         {
                             await file.CopyToAsync(stream);
@@ -117,20 +119,10 @@ public class StoreSCUController : ControllerBase
                 return BadRequest("请提供文件或文件夹路径");
             }
         }
-        catch (ArgumentException ex)
-        {
-            DicomLogger.Warning("Api", ex, "参数错误 - {Message}", ex.Message);
-            return BadRequest(ex.Message);
-        }
-        catch (DirectoryNotFoundException ex)
-        {
-            DicomLogger.Warning("Api", ex, "目录不存在 - {Message}", ex.Message);
-            return BadRequest(ex.Message);
-        }
         catch (Exception ex)
         {
             DicomLogger.Error("Api", ex, "发送失败");
-            return StatusCode(500, "发送失败");
+            return StatusCode(500, ex.Message);
         }
     }
 } 

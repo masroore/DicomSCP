@@ -65,7 +65,7 @@ $(document).ready(function() {
 // 切换页面函数
 function switchPage(page) {
     // 隐藏所有页面
-    $('#worklist-page, #images-page, #settings-page, #qr-page').hide();
+    $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page').hide();
     
     // 移除所有导航链接的active类
     $('.nav-link').removeClass('active');
@@ -83,6 +83,11 @@ function switchPage(page) {
         loadImagesData();
     } else if (page === 'qr') {
         loadQRNodes();
+    } else if (page === 'store') {
+        // 如果store.js中的loadStoreNodes函数已经定义，就调用它
+        if (typeof loadStoreNodes === 'function') {
+            loadStoreNodes();
+        }
     }
 }
 
@@ -91,16 +96,29 @@ function loadPage(page) {
     switch(page) {
         case 'worklist':
             $('#worklist-page').show();
-            $('#images-page').hide();
+            $('#images-page, #qr-page, #store-page, #settings-page').hide();
             loadWorklistData();
             break;
         case 'images':
-            $('#worklist-page').hide();
             $('#images-page').show();
+            $('#worklist-page, #qr-page, #store-page, #settings-page').hide();
             loadImagesData();
             break;
+        case 'qr':
+            $('#qr-page').show();
+            $('#worklist-page, #images-page, #store-page, #settings-page').hide();
+            loadQRNodes();
+            break;
+        case 'store':
+            $('#store-page').show();
+            $('#worklist-page, #images-page, #qr-page, #settings-page').hide();
+            if (typeof loadStoreNodes === 'function') {
+                loadStoreNodes();
+            }
+            break;
         case 'settings':
-            // TODO: 加载系统设置页面
+            $('#settings-page').show();
+            $('#worklist-page, #images-page, #qr-page, #store-page').hide();
             break;
     }
 }
@@ -918,7 +936,7 @@ async function searchQR() {
         updateQRPagination(qrAllData.length);
     } catch (error) {
         console.error('查询失败:', error);
-        alert('查询失败，请检查网络连接');
+        alert('查询失败，请���查网络连接');
     }
 }
 
