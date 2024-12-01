@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using FellowOakDicom;
-using DicomSCP.Models;
 using DicomSCP.Services;
+using DicomSCP.Configuration;
+using DicomSCP.Models;
 using System.Text.Json;
 
 namespace DicomSCP.Controllers;
@@ -23,24 +24,24 @@ public class QueryRetrieveController : ControllerBase
     }
 
     [HttpGet("nodes")]
-    public ActionResult<IEnumerable<DicomNodeConfig>> GetNodes()
+    public ActionResult<IEnumerable<RemoteNode>> GetNodes()
     {
         return Ok(_config.RemoteNodes);
     }
 
     [HttpGet("nodes/default")]
-    public ActionResult<DicomNodeConfig> GetDefaultNode()
+    public ActionResult<RemoteNode> GetDefaultNode()
     {
-        var defaultNode = _config.RemoteNodes.FirstOrDefault(n => n.IsDefault);
-        if (defaultNode == null)
+        var node = _config.RemoteNodes?.FirstOrDefault(n => n.IsDefault);
+        if (node == null)
         {
             return NotFound("未配置默认节点");
         }
-        return Ok(defaultNode);
+        return Ok(node);
     }
 
     [HttpPost("{nodeId}/query/study")]
-    public async Task<ActionResult<IEnumerable<object>>> QueryStudy(string nodeId, [FromBody] Dictionary<string, string> queryParams)
+    public async Task<ActionResult<IEnumerable<DicomStudyResult>>> QueryStudy(string nodeId, [FromBody] Dictionary<string, string> queryParams)
     {
         var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
         if (node == null)
@@ -63,8 +64,9 @@ public class QueryRetrieveController : ControllerBase
             dataset.Add(DicomTag.ModalitiesInStudy, "");
             dataset.Add(DicomTag.NumberOfStudyRelatedSeries, "");
             dataset.Add(DicomTag.NumberOfStudyRelatedInstances, "");
+            dataset.Add(DicomTag.AccessionNumber, "");
 
-            // 添加查询条件
+            // 添加查询参数
             foreach (var param in queryParams)
             {
                 if (DicomDictionary.Default[param.Key] != null)
@@ -74,27 +76,13 @@ public class QueryRetrieveController : ControllerBase
             }
 
             var results = await _queryRetrieveScu.QueryStudyAsync(node, dataset);
-            
-            // 转换为更友好的JSON格式
-            var studies = results.Select(ds => new
-            {
-                StudyInstanceUid = ds.GetString(DicomTag.StudyInstanceUID),
-                StudyDate = ds.GetString(DicomTag.StudyDate),
-                StudyTime = ds.GetString(DicomTag.StudyTime),
-                PatientName = ds.GetString(DicomTag.PatientName),
-                PatientId = ds.GetString(DicomTag.PatientID),
-                StudyDescription = ds.GetSingleValueOrDefault(DicomTag.StudyDescription, ""),
-                Modalities = ds.GetSingleValueOrDefault(DicomTag.ModalitiesInStudy, ""),
-                SeriesCount = ds.GetSingleValueOrDefault(DicomTag.NumberOfStudyRelatedSeries, "0"),
-                InstanceCount = ds.GetSingleValueOrDefault(DicomTag.NumberOfStudyRelatedInstances, "0")
-            });
-
-            return Ok(studies);
+            var studyResults = results.Select(DicomStudyResult.FromDataset).ToList();
+            return Ok(studyResults);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 执行Study查询失败");
-            return StatusCode(500, "查询失败: " + ex.Message);
+            DicomLogger.Error("Api", ex, "执行Study查询失败");
+            return StatusCode(500, ex.Message);
         }
     }
 

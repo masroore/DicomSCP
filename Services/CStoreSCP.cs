@@ -184,7 +184,24 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
     {
-        DicomLogger.Warning("StoreSCP", "收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
+        var sourceDescription = source switch
+        {
+            DicomAbortSource.ServiceProvider => "服务提供方",
+            DicomAbortSource.ServiceUser => "服务使用方",
+            DicomAbortSource.Unknown => "未知来源",
+            _ => $"其他来源({source})"
+        };
+
+        var reasonDescription = reason switch
+        {
+            DicomAbortReason.NotSpecified => "未指定原因",
+            DicomAbortReason.UnrecognizedPDU => "无法识别的PDU",
+            DicomAbortReason.UnexpectedPDU => "意外的PDU",
+            _ => $"其他原因({reason})"
+        };
+
+        DicomLogger.Information("StoreSCP", "收到中止请求 - 来源: {Source} ({SourceDesc}), 原因: {Reason} ({ReasonDesc})", 
+            source, sourceDescription, reason, reasonDescription);
     }
 
     public void OnConnectionClosed(Exception? exception)

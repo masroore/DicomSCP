@@ -58,6 +58,14 @@ public static class DicomLogger
             _loggers["StoreSCP"] = storeLogger;
         }
 
+        // 配置StoreSCU的日志
+        if (settings.Services.StoreSCU?.Enabled == true)
+        {
+            var storeSCUConfig = settings.Services.StoreSCU;
+            var storeSCULogger = CreateLogger("StoreSCU", storeSCUConfig);
+            _loggers["StoreSCU"] = storeSCULogger;
+        }
+
         // 配置数据库日志
         if (settings.Database.Enabled)
         {

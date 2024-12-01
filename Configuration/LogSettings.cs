@@ -24,6 +24,15 @@ public class ServiceLoggingConfig
         LogPath = "logs/store",
         OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"
     };
+    public ServiceLogConfig StoreSCU { get; set; } = new ServiceLogConfig
+    {
+        Enabled = true,
+        EnableConsoleLog = true,
+        EnableFileLog = true,
+        MinimumLevel = Serilog.Events.LogEventLevel.Debug,
+        LogPath = "logs/store-scu",
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [StoreSCU] {Message:lj}{NewLine}{Exception}"
+    };
     public ServiceLogConfig WorklistSCP { get; set; } = new ServiceLogConfig
     {
         Enabled = true,

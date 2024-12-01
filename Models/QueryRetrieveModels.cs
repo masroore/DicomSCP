@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using DicomSCP.Configuration;
+using FellowOakDicom;
 
 namespace DicomSCP.Models;
 
@@ -18,13 +20,6 @@ public class DicomNodeConfig
     
     [JsonPropertyName("isDefault")]
     public bool IsDefault { get; set; }
-}
-
-public class QueryRetrieveConfig
-{
-    public string LocalAeTitle { get; set; } = "QUERYSCU";
-    public int LocalPort { get; set; } = 11114;
-    public List<DicomNodeConfig> RemoteNodes { get; set; } = new();
 }
 
 public class QueryRequest
@@ -145,4 +140,54 @@ public class MoveResponse
 
     [JsonPropertyName("jobId")]
     public string JobId { get; set; } = string.Empty;
+}
+
+public class DicomStudyResult
+{
+    [JsonPropertyName("studyInstanceUid")]
+    public string StudyInstanceUid { get; set; } = string.Empty;
+
+    [JsonPropertyName("studyDate")]
+    public string StudyDate { get; set; } = string.Empty;
+
+    [JsonPropertyName("studyTime")]
+    public string StudyTime { get; set; } = string.Empty;
+
+    [JsonPropertyName("patientId")]
+    public string PatientId { get; set; } = string.Empty;
+
+    [JsonPropertyName("patientName")]
+    public string PatientName { get; set; } = string.Empty;
+
+    [JsonPropertyName("accessionNumber")]
+    public string AccessionNumber { get; set; } = string.Empty;
+
+    [JsonPropertyName("studyDescription")]
+    public string StudyDescription { get; set; } = string.Empty;
+
+    [JsonPropertyName("modalities")]
+    public string Modalities { get; set; } = string.Empty;
+
+    [JsonPropertyName("seriesCount")]
+    public int SeriesCount { get; set; }
+
+    [JsonPropertyName("instanceCount")]
+    public int InstanceCount { get; set; }
+
+    public static DicomStudyResult FromDataset(DicomDataset dataset)
+    {
+        return new DicomStudyResult
+        {
+            StudyInstanceUid = dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, string.Empty),
+            StudyDate = dataset.GetSingleValueOrDefault(DicomTag.StudyDate, string.Empty),
+            StudyTime = dataset.GetSingleValueOrDefault(DicomTag.StudyTime, string.Empty),
+            PatientId = dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty),
+            PatientName = dataset.GetSingleValueOrDefault(DicomTag.PatientName, string.Empty),
+            AccessionNumber = dataset.GetSingleValueOrDefault(DicomTag.AccessionNumber, string.Empty),
+            StudyDescription = dataset.GetSingleValueOrDefault(DicomTag.StudyDescription, string.Empty),
+            Modalities = dataset.GetSingleValueOrDefault(DicomTag.ModalitiesInStudy, string.Empty),
+            SeriesCount = dataset.GetSingleValueOrDefault(DicomTag.NumberOfStudyRelatedSeries, 0),
+            InstanceCount = dataset.GetSingleValueOrDefault(DicomTag.NumberOfStudyRelatedInstances, 0)
+        };
+    }
 } 
