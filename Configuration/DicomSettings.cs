@@ -55,6 +55,8 @@ public class QRSCPSettings
     public string AeTitle { get; set; } = "QR_SCP";
     public int Port { get; set; } = 11114;
     public bool EnableCGet { get; set; } = true;
+    public bool EnableCMove { get; set; } = true;
+    public bool ValidateCallingAE { get; set; } = false;
     public List<string> AllowedCallingAETitles { get; set; } = new List<string>();
     public List<MoveDestination> MoveDestinations { get; set; } = new List<MoveDestination>();
 }
