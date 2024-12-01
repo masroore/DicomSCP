@@ -18,8 +18,6 @@ public class DicomSettings
     [Required]
     public string TempPath { get; set; } = "./temp_files";
 
-    public string ConnectionString { get; set; } = "Data Source=dicom.db";
-
     public AdvancedSettings Advanced { get; set; } = new();
 
     public WorklistSCPSettings WorklistSCP { get; set; } = new();

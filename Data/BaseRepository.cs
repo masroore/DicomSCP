@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
+using Microsoft.Data.Sqlite;
 
 namespace DicomSCP.Data;
 
@@ -14,6 +15,11 @@ public abstract class BaseRepository
     protected BaseRepository(string connectionString, Microsoft.Extensions.Logging.ILogger logger)
     {
         _connectionString = connectionString;
+    }
+
+    protected SqliteConnection CreateConnection()
+    {
+        return new SqliteConnection(_connectionString);
     }
 
     public static void ConfigureLogging(LogSettings settings)

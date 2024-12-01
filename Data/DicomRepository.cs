@@ -518,4 +518,52 @@ public class DicomRepository : BaseRepository, IDisposable
             new { SopInstanceUid = sopInstanceUid }
         );
     }
+
+    public List<WorklistItem> GetWorklistItems(
+        string patientId,
+        string accessionNumber,
+        string scheduledDateTime,
+        string modality,
+        string scheduledStationName)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"SELECT * FROM Worklist 
+                WHERE (@PatientId IS NULL OR @PatientId = '' OR PatientId LIKE @PatientId)
+                AND (@AccessionNumber IS NULL OR @AccessionNumber = '' OR AccessionNumber LIKE @AccessionNumber)
+                AND (@ScheduledDateTime IS NULL OR @ScheduledDateTime = '' OR ScheduledDateTime LIKE @ScheduledDateTime)
+                AND (@Modality IS NULL OR @Modality = '' OR Modality = @Modality)
+                AND (@ScheduledStationName IS NULL OR @ScheduledStationName = '' OR ScheduledStationName = @ScheduledStationName)
+                AND Status = 'SCHEDULED'";
+
+            LogDebug("执行工作列表查询 - SQL: {Sql}, 参数: {@Parameters}", sql, new
+            {
+                PatientId = patientId,
+                AccessionNumber = accessionNumber,
+                ScheduledDateTime = scheduledDateTime,
+                Modality = modality,
+                ScheduledStationName = scheduledStationName
+            });
+
+            var items = connection.Query<WorklistItem>(sql,
+                new
+                {
+                    PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
+                    AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
+                    ScheduledDateTime = string.IsNullOrEmpty(scheduledDateTime) ? "" : $"%{scheduledDateTime}%",
+                    Modality = string.IsNullOrEmpty(modality) ? "" : modality,
+                    ScheduledStationName = string.IsNullOrEmpty(scheduledStationName) ? "" : scheduledStationName
+                });
+
+            var result = items?.ToList() ?? new List<WorklistItem>();
+            LogInformation("工作列表查询完成 - 返回记录数: {Count}", result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "工作列表查询失败");
+            throw;
+        }
+    }
 }

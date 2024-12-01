@@ -5,13 +5,16 @@ using DicomSCP.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using DicomSCP.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace DicomSCP.Data;
 
 public class WorklistRepository : BaseRepository
 {
-    public WorklistRepository(IOptions<DicomSettings> settings, ILogger<WorklistRepository> logger)
-        : base(settings.Value.ConnectionString, logger)
+    public WorklistRepository(
+        IConfiguration configuration,
+        Microsoft.Extensions.Logging.ILogger<WorklistRepository> logger)
+        : base(configuration.GetConnectionString("DicomDb") ?? throw new ArgumentException("Missing DicomDb connection string"), logger)
     {
         InitializeDatabase();
     }
