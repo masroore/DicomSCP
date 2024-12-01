@@ -4,8 +4,7 @@ using DicomSCP.Configuration;
 using DicomSCP.Services;
 using DicomSCP.Data;
 using DicomSCP.Models;
-using Serilog;
-using ILogger = Serilog.ILogger;
+using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Controllers;
 
@@ -16,25 +15,22 @@ public class DicomController : ControllerBase
     private readonly DicomServer _server;
     private readonly DicomSettings _settings;
     private readonly DicomRepository _repository;
-    private readonly ILogger _logger;
 
     public DicomController(
         DicomServer server,
         IOptions<DicomSettings> settings,
-        DicomRepository repository,
-        Microsoft.Extensions.Logging.ILogger<DicomController> logger)
+        DicomRepository repository)
     {
         _server = server;
         _settings = settings.Value;
         _repository = repository;
-        _logger = Log.ForContext<DicomController>();
     }
 
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
-        _logger.Debug("API操作 - 动作: {Action}, AET: {AET}, 端口: {Port}, 路径: {Path}", 
-            "查询状态",
+        DicomLogger.Debug("Api",
+            "[API] 查询服务状态 - AET: {AET}, 端口: {Port}, 路径: {Path}", 
             _settings.AeTitle,
             _settings.StoreSCPPort,
             _settings.StoragePath);
@@ -56,8 +52,9 @@ public class DicomController : ControllerBase
         {
             if (_server.IsRunning)
             {
-                _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
-                    "启动服务器", "失败", "服务器已在运行");
+                DicomLogger.Warning("Api",
+                    "[API] 启动服务失败 - 原因: {Reason}", 
+                    "服务器已在运行");
                 return BadRequest(new
                 {
                     Message = "服务器已在运行",
@@ -75,8 +72,8 @@ public class DicomController : ControllerBase
             );
 
             await _server.StartAsync();
-            _logger.Information("API操作 - 动作: {Action}, 结果: {Result}", 
-                "启动服务器", "成功");
+            DicomLogger.Information("Api",
+                "[API] 启动服务成功");
             return Ok(new
             {
                 Message = "服务器已启动",
@@ -87,8 +84,8 @@ public class DicomController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}", 
-                "启动服务器", "异常");
+            DicomLogger.Error("Api", ex,
+                "[API] 启动服务异常");
             return StatusCode(500, "启动服务器失败");
         }
     }
@@ -100,20 +97,21 @@ public class DicomController : ControllerBase
         {
             if (!_server.IsRunning)
             {
-                _logger.Warning("API操作 - 动作: {Action}, 状态: {Status}, 原因: {Reason}", 
-                    "停止服务器", "失败", "服务器未运行");
+                DicomLogger.Warning("Api",
+                    "[API] 停止服务失败 - 原因: {Reason}", 
+                    "服务器未运行");
                 return BadRequest("服务器未运行");
             }
 
             await _server.StopAsync();
-            _logger.Information("API操作 - 动作: {Action}, 结果: {Result}", 
-                "停止服务器", "成功");
+            DicomLogger.Information("Api",
+                "[API] 停止服务成功");
             return Ok("服务器已停止");
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "API操作 - 动作: {Action}, 状态: {Status}", 
-                "停止服务器", "异常");
+            DicomLogger.Error("Api", ex,
+                "[API] 停止服务异常");
             return StatusCode(500, "停止服务器失败");
         }
     }

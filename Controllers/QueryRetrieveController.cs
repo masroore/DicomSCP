@@ -12,16 +12,13 @@ namespace DicomSCP.Controllers;
 public class QueryRetrieveController : ControllerBase
 {
     private readonly IQueryRetrieveSCU _queryRetrieveScu;
-    private readonly ILogger<QueryRetrieveController> _logger;
     private readonly QueryRetrieveConfig _config;
 
     public QueryRetrieveController(
         IQueryRetrieveSCU queryRetrieveScu,
-        ILogger<QueryRetrieveController> logger,
         IOptions<QueryRetrieveConfig> config)
     {
         _queryRetrieveScu = queryRetrieveScu;
-        _logger = logger;
         _config = config.Value;
     }
 
@@ -96,7 +93,7 @@ public class QueryRetrieveController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "执行Study查询时发生错误");
+            DicomLogger.Error("Api", ex, "[API] 执行Study查询失败");
             return StatusCode(500, "查询失败: " + ex.Message);
         }
     }
@@ -138,7 +135,7 @@ public class QueryRetrieveController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "执行Series查询时发生错误");
+            DicomLogger.Error("Api", ex, "[API] 执行Series查询失败");
             return StatusCode(500, "查询失败: " + ex.Message);
         }
     }
@@ -166,7 +163,7 @@ public class QueryRetrieveController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "执行C-MOVE时发生错误");
+            DicomLogger.Error("Api", ex, "[API] 执行C-MOVE失败");
             return StatusCode(500, new { message = "检查传输失败: " + ex.Message });
         }
     }

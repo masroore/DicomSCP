@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Models;
 using DicomSCP.Data;
 using Microsoft.Extensions.Configuration;
-using System.IO;
+using DicomSCP.Services;
 
 namespace DicomSCP.Controllers;
 
@@ -11,13 +11,11 @@ namespace DicomSCP.Controllers;
 public class ImagesController : ControllerBase
 {
     private readonly DicomRepository _repository;
-    private readonly ILogger<ImagesController> _logger;
     private readonly IConfiguration _configuration;
 
-    public ImagesController(DicomRepository repository, ILogger<ImagesController> logger, IConfiguration configuration)
+    public ImagesController(DicomRepository repository, IConfiguration configuration)
     {
         _repository = repository;
-        _logger = logger;
         _configuration = configuration;
 
         // 验证必要的配置是否存在
@@ -52,7 +50,7 @@ public class ImagesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取影像列表失败");
+            DicomLogger.Error("Api", ex, "[API] 获取影像列表失败");
             return StatusCode(500, "获取数据失败");
         }
     }
@@ -76,7 +74,7 @@ public class ImagesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获序列列表失败 - StudyUid: {StudyUid}", studyUid);
+            DicomLogger.Error("Api", ex, "[API] 获取序列列表失败 - StudyUid: {StudyUid}", studyUid);
             return StatusCode(500, "获取数据失败");
         }
     }
@@ -113,7 +111,7 @@ public class ImagesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
+            DicomLogger.Error("Api", ex, "[API] 删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
             return StatusCode(500, new { error = "删除失败，请重试" });
         }
     }
@@ -134,7 +132,7 @@ public class ImagesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取序列实例失败");
+            DicomLogger.Error("Api", ex, "[API] 获取序列实例失败");
             return StatusCode(500, "获取序列实例失败");
         }
     }
@@ -147,7 +145,7 @@ public class ImagesController : ControllerBase
             var instance = await _repository.GetInstanceAsync(instanceUid);
             if (instance == null)
             {
-                _logger.LogWarning("实例不存在 - InstanceUid: {InstanceUid}", instanceUid);
+                DicomLogger.Warning("Api", "[API] 实例不存在 - InstanceUid: {InstanceUid}", instanceUid);
                 return NotFound("实例不存在");
             }
 
@@ -170,8 +168,8 @@ public class ImagesController : ControllerBase
             // 拼接完整的文件路径并规范化
             var fullPath = Path.GetFullPath(Path.Combine(storagePath, instance.FilePath));
 
-            _logger.LogInformation(
-                "准备下载文件 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
+            DicomLogger.Information("Api",
+                "[API] 准备下载文件 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
                 instanceUid,
                 storagePath,
                 fullPath
@@ -179,8 +177,8 @@ public class ImagesController : ControllerBase
 
             if (!System.IO.File.Exists(fullPath))
             {
-                _logger.LogError(
-                    "文件不存在 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
+                DicomLogger.Error("Api", null,
+                    "[API] 文件不存在 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
                     instanceUid,
                     storagePath,
                     fullPath
@@ -198,7 +196,7 @@ public class ImagesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "下载文件失败 - InstanceUid: {InstanceUid}", instanceUid);
+            DicomLogger.Error("Api", ex, "[API] 下载文件失败 - InstanceUid: {InstanceUid}", instanceUid);
             return StatusCode(500, "下载文件失败");
         }
     }

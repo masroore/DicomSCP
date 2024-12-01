@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Models;
 using DicomSCP.Data;
-using Microsoft.Extensions.Logging;
+using DicomSCP.Services;
 
 namespace DicomSCP.Controllers;
 
@@ -10,12 +10,10 @@ namespace DicomSCP.Controllers;
 public class WorklistController : ControllerBase
 {
     private readonly WorklistRepository _repository;
-    private readonly ILogger<WorklistController> _logger;
 
-    public WorklistController(WorklistRepository repository, ILogger<WorklistController> logger)
+    public WorklistController(WorklistRepository repository)
     {
         _repository = repository;
-        _logger = logger;
     }
 
     [HttpGet]
@@ -37,7 +35,7 @@ public class WorklistController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取Worklist列表失败");
+            DicomLogger.Error("Api", ex, "[API] 获取Worklist列表失败");
             return StatusCode(500, "获取数据失败");
         }
     }
@@ -65,7 +63,7 @@ public class WorklistController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取Worklist项目失败 - ID: {Id}", id);
+            DicomLogger.Error("Api", ex, "[API] 获取Worklist项目失败 - ID: {Id}", id);
             return StatusCode(500, "获取数据失败");
         }
     }
@@ -75,7 +73,7 @@ public class WorklistController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("正在创建Worklist项目: {@Item}", item);
+            DicomLogger.Information("Api", "[API] 正在创建Worklist项目: {@Item}", item);
 
             // 验证必填字段
             if (string.IsNullOrEmpty(item.PatientId))
@@ -104,12 +102,12 @@ public class WorklistController : ControllerBase
             var worklistId = await _repository.CreateAsync(item);
             item.WorklistId = worklistId;
 
-            _logger.LogInformation("成功创建Worklist项目 - ID: {WorklistId}", worklistId);
+            DicomLogger.Information("Api", "[API] 成功创建Worklist项目 - ID: {WorklistId}", worklistId);
             return Ok(item);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "创建Worklist项目失败");
+            DicomLogger.Error("Api", ex, "[API] 创建Worklist项目失败");
             return StatusCode(500, $"创建失败: {ex.Message}");
         }
     }
@@ -142,7 +140,7 @@ public class WorklistController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "更新Worklist项目失败 - ID: {Id}", id);
+            DicomLogger.Error("Api", ex, "[API] 更新Worklist项目失败 - ID: {Id}", id);
             return StatusCode(500, "更新失败");
         }
     }
@@ -161,7 +159,7 @@ public class WorklistController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "删除Worklist项目失败 - ID: {Id}", id);
+            DicomLogger.Error("Api", ex, "[API] 删除Worklist项目失败 - ID: {Id}", id);
             return StatusCode(500, "删除失败");
         }
     }
