@@ -11,9 +11,9 @@ namespace DicomSCP.Services;
 /// </summary>
 public static class DicomLogger
 {
-    private static ILogger? _logger;
     private static readonly Dictionary<string, ILogger> _loggers = new();
     private static LogSettings? _settings;
+    private static ILogger? _logger;
 
     private const string DefaultConsoleTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}";
     private const string DefaultFileTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}";
@@ -33,6 +33,14 @@ public static class DicomLogger
             .CreateLogger();
 
         _loggers["DicomServer"] = serverLogger;
+
+        // 配置QR服务的日志
+        if (settings.Services.QRSCP?.Enabled == true)
+        {
+            var qrConfig = settings.Services.QRSCP;
+            var qrLogger = CreateLogger("QRSCP", qrConfig);
+            _loggers["QRSCP"] = qrLogger;
+        }
 
         // 配置QueryRetrieveSCU的日志
         if (settings.Services.QueryRetrieveSCU.Enabled)
@@ -160,23 +168,38 @@ public static class DicomLogger
     private static ILogger GetLogger(string service = "DicomServer")
     {
         if (_loggers.TryGetValue(service, out var logger))
-        {
             return logger;
-        }
-        return _logger ?? throw new InvalidOperationException("Logger not initialized");
+        
+        // 如果找不到特定服务的日志记录器，返回默认的日志记录器
+        return _logger ?? CreateDefaultLogger();
+    }
+
+    private static ILogger CreateDefaultLogger()
+    {
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.Console(
+                outputTemplate: DefaultConsoleTemplate)
+            .CreateLogger();
+
+        _logger = logger;
+        return logger;
     }
 
     public static void Debug(string messageTemplate, params object[] propertyValues)
-        => GetLogger().Debug(messageTemplate, propertyValues);
+        => GetLogger("DicomServer").Debug(messageTemplate, propertyValues);
 
     public static void Information(string messageTemplate, params object[] propertyValues)
-        => GetLogger().Information(messageTemplate, propertyValues);
+        => GetLogger("DicomServer").Information(messageTemplate, propertyValues);
 
     public static void Warning(string messageTemplate, params object[] propertyValues)
-        => GetLogger().Warning(messageTemplate, propertyValues);
+        => GetLogger("DicomServer").Warning(messageTemplate, propertyValues);
+
+    public static void Error(string messageTemplate, params object[] propertyValues)
+        => GetLogger("DicomServer").Error(messageTemplate, propertyValues);
 
     public static void Error(Exception? exception, string messageTemplate, params object[] propertyValues)
-        => GetLogger().Error(exception, messageTemplate, propertyValues);
+        => GetLogger("DicomServer").Error(exception, messageTemplate, propertyValues);
 
     public static void Debug(string service, string messageTemplate, params object[] propertyValues)
         => GetLogger(service).Debug(messageTemplate, propertyValues);
@@ -189,6 +212,9 @@ public static class DicomLogger
 
     public static void Error(string service, Exception? exception, string messageTemplate, params object[] propertyValues)
         => GetLogger(service).Error(exception, messageTemplate, propertyValues);
+
+    public static void Error(string service, string messageTemplate, params object[] propertyValues)
+        => GetLogger(service).Error(messageTemplate, propertyValues);
 
     /// <summary>
     /// 关闭日志服务

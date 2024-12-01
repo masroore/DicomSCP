@@ -87,6 +87,9 @@ builder.Services.AddScoped<IQueryRetrieveSCU, QueryRetrieveSCU>();
 
 var app = builder.Build();
 
+// 初始化服务提供者
+DicomServiceProvider.Initialize(app.Services);
+
 // 添加API日志中间件
 app.UseMiddleware<ApiLoggingMiddleware>();
 

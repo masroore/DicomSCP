@@ -13,10 +13,13 @@ public class Study
 {
     public string StudyInstanceUid { get; set; } = null!;
     public string PatientId { get; set; } = null!;
+    public string PatientName { get; set; } = string.Empty;
+    public string PatientSex { get; set; } = string.Empty;
     public string? StudyDate { get; set; }
     public string? StudyTime { get; set; }
     public string? StudyDescription { get; set; }
     public string? AccessionNumber { get; set; }
+    public string Modality { get; set; } = string.Empty;
     public DateTime CreateTime { get; set; }
 }
 

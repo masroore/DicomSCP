@@ -6,7 +6,8 @@ using DicomSCP.Configuration;
 using DicomSCP.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using FellowOakDicom.Imaging.Codec;
+using DicomSCP.Models;
+using System.Net;
 
 namespace DicomSCP.Services;
 
@@ -19,6 +20,7 @@ public sealed class DicomServer : IDisposable
     
     private IDicomServer? _storeScp;
     private IDicomServer? _worklistScp;
+    private IDicomServer? _qrScp;
     private bool _disposed;
 
     public DicomServer(
@@ -33,7 +35,7 @@ public sealed class DicomServer : IDisposable
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
 
-    public bool IsRunning => _storeScp != null || _worklistScp != null;
+    public bool IsRunning => _storeScp != null || _worklistScp != null || _qrScp != null;
 
     public async Task StartAsync()
     {
@@ -55,8 +57,8 @@ public sealed class DicomServer : IDisposable
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("DICOM",ex, "DICOM服务启动失败");
-            await StopAsync();  // 确保清理资源
+            DicomLogger.Error("DICOM", ex, "DICOM服务启动失败");
+            await StopAsync();
             throw;
         }
     }
@@ -102,8 +104,7 @@ public sealed class DicomServer : IDisposable
                 _settings.StoreSCPPort,
                 null,
                 Encoding.UTF8,
-                _loggerFactory.CreateLogger<CStoreSCP>(),
-                Options.Create(_settings));
+                _loggerFactory.CreateLogger<CStoreSCP>());
 
             DicomLogger.Information("DICOM", "C-STORE服务已启动 - AET: {AeTitle}, 端口: {Port}", 
                 _settings.AeTitle, _settings.StoreSCPPort);
@@ -113,18 +114,30 @@ public sealed class DicomServer : IDisposable
                 _settings.WorklistSCP.Port,
                 null,
                 Encoding.UTF8,
-                _loggerFactory.CreateLogger<WorklistSCP>(),
-                Options.Create(_settings));
+                _loggerFactory.CreateLogger<WorklistSCP>());
 
             DicomLogger.Information("DICOM", "Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
                 _settings.WorklistSCP.AeTitle, _settings.WorklistSCP.Port);
+
+            // 启动QR服务
+            _qrScp = DicomServerFactory.Create<QRSCP>(
+                _settings.QRSCP.Port,
+                null,
+                Encoding.UTF8,
+                _loggerFactory.CreateLogger<QRSCP>(),
+                _repository);
+
+            DicomLogger.Information("DICOM", "QR服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                _settings.QRSCP.AeTitle, _settings.QRSCP.Port);
         }
         catch (Exception ex)
         {
             DicomLogger.Error("DICOM", ex, "DICOM服务启动失败 - AET: {AeTitle}", _settings.AeTitle);
             _storeScp?.Dispose();
             _worklistScp?.Dispose();
+            _qrScp?.Dispose();
             _storeScp = _worklistScp = null;
+            _qrScp = null;
             throw;
         }
     }
@@ -148,7 +161,9 @@ public sealed class DicomServer : IDisposable
                 DicomLogger.Information("DICOM", "正在停止DICOM服务...");
                 _storeScp?.Dispose();
                 _worklistScp?.Dispose();
+                _qrScp?.Dispose();
                 _storeScp = _worklistScp = null;
+                _qrScp = null;
             });
             DicomLogger.Information("DICOM", "DICOM服务已停止...");
         }
@@ -168,6 +183,7 @@ public sealed class DicomServer : IDisposable
 
         _storeScp?.Dispose();
         _worklistScp?.Dispose();
+        _qrScp?.Dispose();
         _disposed = true;
     }
 } 

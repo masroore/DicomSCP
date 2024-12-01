@@ -14,7 +14,26 @@ public class LogSettings
 
 public class ServiceLoggingConfig
 {
-    public ServiceLogConfig QueryRetrieveSCU { get; set; } = new ServiceLogConfig();
+    public ServiceLogConfig QRSCP { get; set; } = new ServiceLogConfig
+    {
+        Enabled = true,
+        EnableConsoleLog = true,
+        EnableFileLog = true,
+        MinimumLevel = Serilog.Events.LogEventLevel.Debug,
+        LogPath = "logs/qrscp",
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+    };
+
+    public ServiceLogConfig QueryRetrieveSCU { get; set; } = new ServiceLogConfig
+    {
+        Enabled = true,
+        EnableConsoleLog = true,
+        EnableFileLog = true,
+        MinimumLevel = Serilog.Events.LogEventLevel.Debug,
+        LogPath = "logs/qr",
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+    };
+
     public ServiceLogConfig StoreSCP { get; set; } = new ServiceLogConfig
     {
         Enabled = true,
@@ -24,6 +43,7 @@ public class ServiceLoggingConfig
         LogPath = "logs/store",
         OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"
     };
+
     public ServiceLogConfig StoreSCU { get; set; } = new ServiceLogConfig
     {
         Enabled = true,
@@ -33,6 +53,7 @@ public class ServiceLoggingConfig
         LogPath = "logs/store-scu",
         OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [StoreSCU] {Message:lj}{NewLine}{Exception}"
     };
+
     public ServiceLogConfig WorklistSCP { get; set; } = new ServiceLogConfig
     {
         Enabled = true,

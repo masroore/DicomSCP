@@ -22,7 +22,7 @@ public class DicomSettings
 
     public WorklistSCPSettings WorklistSCP { get; set; } = new();
 
-    public QueryRetrieveSettings QueryRetrieve { get; set; } = new();
+    public QRSCPSettings QRSCP { get; set; } = new();
 
     public SwaggerSettings Swagger { get; set; } = new();
 }
@@ -50,10 +50,22 @@ public class AdvancedSettings
     public string PreferredTransferSyntax { get; set; } = "JPEG2000Lossless";
 }
 
-public class QueryRetrieveSettings
+public class QRSCPSettings
 {
-    public bool ValidateCallingAE { get; set; } = false;
-    public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
+    public string AeTitle { get; set; } = "QR_SCP";
+    public int Port { get; set; } = 11114;
+    public bool EnableCGet { get; set; } = true;
+    public List<string> AllowedCallingAETitles { get; set; } = new List<string>();
+    public List<MoveDestination> MoveDestinations { get; set; } = new List<MoveDestination>();
+}
+
+public class MoveDestination
+{
+    public string Name { get; set; } = "";
+    public string AeTitle { get; set; } = "";
+    public string HostName { get; set; } = "localhost";
+    public int Port { get; set; } = 11112;
+    public bool IsDefault { get; set; }
 }
 
 public class SwaggerSettings

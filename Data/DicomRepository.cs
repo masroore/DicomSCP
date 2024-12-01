@@ -256,6 +256,10 @@ public class DicomRepository : BaseRepository, IDisposable
         connection.Open();
         using var transaction = connection.BeginTransaction();
 
+        // 检查是否已存在表
+        var tableExists = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Studies'") > 0;
+
         try
         {
             // 创建所有表
@@ -269,7 +273,10 @@ public class DicomRepository : BaseRepository, IDisposable
 
             transaction.Commit();
             _initialized = true;
-            LogInformation("数据库表初始化完成");
+            if (!tableExists)
+            {
+                LogInformation("数据库表首次初始化完成");
+            }
         }
         catch (Exception ex)
         {
@@ -469,7 +476,7 @@ public class DicomRepository : BaseRepository, IDisposable
             );
   
             await transaction.CommitAsync();
-            LogInformation("成功删除检查 - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
+            LogInformation("成功删除检�� - StudyInstanceUID: {StudyInstanceUid}, 删除实例数: {InstanceCount}", 
                 studyInstanceUid, instanceCount);
         }
         catch (Exception ex)
@@ -564,6 +571,113 @@ public class DicomRepository : BaseRepository, IDisposable
         {
             LogError(ex, "工作列表查询失败");
             throw;
+        }
+    }
+
+    public List<Study> GetStudies(string patientId, string patientName, string accessionNumber, string studyDate)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT s.*, p.PatientName, p.PatientSex, p.PatientBirthDate,
+                       (SELECT Modality FROM Series WHERE StudyInstanceUid = s.StudyInstanceUid LIMIT 1) as Modality
+                FROM Studies s
+                LEFT JOIN Patients p ON s.PatientId = p.PatientId
+                WHERE (@PatientId IS NULL OR @PatientId = '' OR s.PatientId LIKE @PatientId)
+                AND (@PatientName IS NULL OR @PatientName = '' OR p.PatientName LIKE @PatientName)
+                AND (@AccessionNumber IS NULL OR @AccessionNumber = '' OR s.AccessionNumber LIKE @AccessionNumber)
+                AND (@StudyDate IS NULL OR @StudyDate = '' OR s.StudyDate LIKE @StudyDate)
+                ORDER BY s.CreateTime DESC";
+
+            LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, new
+            {
+                PatientId = patientId,
+                PatientName = patientName,
+                AccessionNumber = accessionNumber,
+                StudyDate = studyDate
+            });
+
+            var studies = connection.Query<Study>(sql, new
+            {
+                PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
+                PatientName = string.IsNullOrEmpty(patientName) ? "" : $"%{patientName}%",
+                AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
+                StudyDate = string.IsNullOrEmpty(studyDate) ? "" : $"{studyDate}%"
+            });
+
+            var result = studies?.ToList() ?? new List<Study>();
+            LogInformation("检查查询完成 - 返回记录数: {Count}", result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "检查查询失败");
+            return new List<Study>();
+        }
+    }
+
+    public List<Series> GetSeriesByStudyUid(string studyInstanceUid)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT s.*, 
+                       (SELECT COUNT(*) FROM Instances i WHERE i.SeriesInstanceUid = s.SeriesInstanceUid) as NumberOfInstances
+                FROM Series s
+                WHERE s.StudyInstanceUid = @StudyInstanceUid
+                ORDER BY CAST(s.SeriesNumber as INTEGER)";
+
+            LogDebug("执行序列查询 - SQL: {Sql}, StudyInstanceUid: {StudyInstanceUid}", 
+                sql, studyInstanceUid);
+
+            var series = connection.Query<Series>(sql, new { StudyInstanceUid = studyInstanceUid });
+
+            var result = series?.ToList() ?? new List<Series>();
+            LogInformation("序列查询完成 - StudyInstanceUid: {StudyInstanceUid}, 返回记录数: {Count}", 
+                studyInstanceUid, result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "序列查询失败 - StudyInstanceUid: {StudyInstanceUid}", studyInstanceUid);
+            return new List<Series>();
+        }
+    }
+
+    public List<Instance> GetInstancesBySeriesUid(string studyInstanceUid, string seriesInstanceUid)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT i.*, s.StudyInstanceUid, s.Modality
+                FROM Instances i
+                JOIN Series s ON i.SeriesInstanceUid = s.SeriesInstanceUid
+                WHERE s.StudyInstanceUid = @StudyInstanceUid 
+                AND i.SeriesInstanceUid = @SeriesInstanceUid
+                ORDER BY CAST(i.InstanceNumber as INTEGER)";
+
+            LogDebug("执行图像查询 - SQL: {Sql}, StudyInstanceUid: {StudyInstanceUid}, SeriesInstanceUid: {SeriesInstanceUid}", 
+                sql, studyInstanceUid, seriesInstanceUid);
+
+            var instances = connection.Query<Instance>(sql, new 
+            { 
+                StudyInstanceUid = studyInstanceUid,
+                SeriesInstanceUid = seriesInstanceUid
+            });
+
+            var result = instances?.ToList() ?? new List<Instance>();
+            LogInformation("图像查询完成 - StudyInstanceUid: {StudyInstanceUid}, SeriesInstanceUid: {SeriesInstanceUid}, 返回记录数: {Count}", 
+                studyInstanceUid, seriesInstanceUid, result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "图像查询失败 - StudyInstanceUid: {StudyInstanceUid}, SeriesInstanceUid: {SeriesInstanceUid}", 
+                studyInstanceUid, seriesInstanceUid);
+            return new List<Instance>();
         }
     }
 }
