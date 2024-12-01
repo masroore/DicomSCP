@@ -110,14 +110,14 @@ public sealed class DicomServer : IDisposable
 
             // 启动工作列表服务
             _worklistScp = DicomServerFactory.Create<WorklistSCP>(
-                _settings.WorklistSCPPort,
+                _settings.WorklistSCP.Port,
                 null,
                 Encoding.UTF8,
                 _loggerFactory.CreateLogger<WorklistSCP>(),
                 Options.Create(_settings));
 
             DicomLogger.Information("DICOM", "Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
-                _settings.AeTitle, _settings.WorklistSCPPort);
+                _settings.WorklistSCP.AeTitle, _settings.WorklistSCP.Port);
         }
         catch (Exception ex)
         {

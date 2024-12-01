@@ -12,9 +12,6 @@ public class DicomSettings
     [Range(1, 65535)]
     public int StoreSCPPort { get; set; } = 11112;
 
-    [Range(1, 65535)]
-    public int WorklistSCPPort { get; set; } = 11113;
-
     [Required]
     public string StoragePath { get; set; } = "./received_files";
 
@@ -25,7 +22,24 @@ public class DicomSettings
 
     public AdvancedSettings Advanced { get; set; } = new();
 
+    public WorklistSCPSettings WorklistSCP { get; set; } = new();
+
+    public QueryRetrieveSettings QueryRetrieve { get; set; } = new();
+
     public SwaggerSettings Swagger { get; set; } = new();
+}
+
+public class WorklistSCPSettings
+{
+    [Required]
+    [RegularExpression(@"^[A-Za-z0-9\-_]{1,16}$")]
+    public string AeTitle { get; set; } = "WORKLISTSCP";
+
+    [Range(1, 65535)]
+    public int Port { get; set; } = 11113;
+
+    public bool ValidateCallingAE { get; set; } = false;
+    public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
 }
 
 public class AdvancedSettings
@@ -36,6 +50,12 @@ public class AdvancedSettings
     
     public bool EnableCompression { get; set; } = false;
     public string PreferredTransferSyntax { get; set; } = "JPEG2000Lossless";
+}
+
+public class QueryRetrieveSettings
+{
+    public bool ValidateCallingAE { get; set; } = false;
+    public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
 }
 
 public class SwaggerSettings

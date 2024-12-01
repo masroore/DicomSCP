@@ -58,6 +58,16 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
     {
+        if (_settings?.WorklistSCP.ValidateCallingAE == true &&
+            !_settings.WorklistSCP.AllowedCallingAEs.Contains(association.CallingAE))
+        {
+            DicomLogger.Warning("WorklistSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+            return SendAssociationRejectAsync(
+                DicomRejectResult.Permanent,
+                DicomRejectSource.ServiceUser,
+                DicomRejectReason.CallingAENotRecognized);
+        }
+
         foreach (var pc in association.PresentationContexts)
         {
             if (pc.AbstractSyntax == DicomUID.ModalityWorklistInformationModelFind ||
