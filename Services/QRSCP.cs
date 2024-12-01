@@ -324,7 +324,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             dataset.Add(DicomTag.SeriesDescription, series.SeriesDescription ?? string.Empty);
             dataset.Add(DicomTag.NumberOfSeriesRelatedInstances, series.NumberOfInstances);
 
-            // 复制请求中的其他查询字段（如果不存在）
+            // 复制请求中的其他查���字段（如果不存在）
             foreach (var tag in request.Dataset.Select(x => x.Tag))
             {
                 if (!dataset.Contains(tag) && request.Dataset.TryGetString(tag, out string value))
@@ -458,8 +458,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         // 发送每个实例
         foreach (var instance in instances)
         {
-            DicomCMoveResponse? progressResponse = null;
-
             try
             {
                 // 使用完整的存储路径
@@ -485,43 +483,23 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 // 创建 C-STORE 请求
                 var storeRequest = new DicomCStoreRequest(file);
                 var success = false;
-                var responseReceived = false;
 
                 storeRequest.OnResponseReceived += (req, response) =>
                 {
                     success = response.Status == DicomStatus.Success;
-                    responseReceived = true;
                     if (!success)
                     {
                         DicomLogger.Warning("QRSCP", "存储响应失败 - Status: {Status}", response.Status);
                     }
                 };
 
-                // 添加请求到客户端，客户端会自动处理传输语法协商
-                await client.AddRequestAsync(storeRequest);
-
-                // 使用 CancellationToken 来控制超时
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                
                 // 发送请求
-                await client.SendAsync(cts.Token);
+                await client.AddRequestAsync(storeRequest);
+                await client.SendAsync();
 
-                // 等待响应
-                while (!responseReceived && !cts.Token.IsCancellationRequested)
-                {
-                    await Task.Delay(100, cts.Token);
-                }
-
-                if (!responseReceived)
-                {
-                    DicomLogger.Warning("QRSCP", "发送实例超时 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
-                    failures++;
-                }
-                else if (success)
+                if (success)
                 {
                     completed++;
-                    DicomLogger.Debug("QRSCP", "成功发送实例 - SOPInstanceUID: {SopInstanceUid}, 进度: {Completed}/{Total}", 
-                        instance.SopInstanceUid, completed, remaining);
                 }
                 else
                 {
@@ -530,33 +508,35 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}, FilePath: {FilePath}", 
-                    instance.SopInstanceUid, instance.FilePath);
                 failures++;
-            }
-            finally
-            {
-                remaining--;
-                
-                // 创建进度响应
-                progressResponse = new DicomCMoveResponse(request, DicomStatus.Pending)
-                {
-                    Remaining = remaining,
-                    Completed = completed,
-                    Failures = failures
-                };
+                DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
             }
 
-            if (progressResponse != null)
+            remaining--;
+
+            // 发送进度响应
+            yield return new DicomCMoveResponse(request, DicomStatus.Pending)
             {
-                yield return progressResponse;
-            }
+                Remaining = remaining,
+                Completed = completed,
+                Failures = failures
+            };
         }
 
         // 返回最终状态
-        var finalStatus = failures == 0 ? DicomStatus.Success : 
-            failures == instances.Count() ? DicomStatus.ProcessingFailure :
-            DicomStatus.Cancel;  // 部分失败的情况
+        DicomStatus finalStatus;
+        if (failures == 0)
+        {
+            finalStatus = DicomStatus.Success;
+        }
+        else if (failures == instances.Count())
+        {
+            finalStatus = DicomStatus.ProcessingFailure;  // 全部失败
+        }
+        else
+        {
+            finalStatus = DicomStatus.Cancel;  // 部分失败
+        }
 
         yield return new DicomCMoveResponse(request, finalStatus)
         {
@@ -564,9 +544,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             Completed = completed,
             Failures = failures
         };
-
-        DicomLogger.Information("QRSCP", "C-MOVE 完成 - 总数: {Total}, 成功: {Success}, 失败: {Failures}, 状态: {Status}", 
-            completed + failures, completed, failures, finalStatus);
     }
 
     private async Task<IEnumerable<Instance>> GetRequestedInstances(DicomCMoveRequest request)
@@ -641,6 +618,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         // 发送每个实例
         foreach (var instance in instances)
         {
+            DicomCGetResponse? progressResponse = null;
+
             try
             {
                 // 使用完整的存储路径
@@ -669,49 +648,59 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
                 storeRequest.OnResponseReceived += (req, response) =>
                 {
-                    success = response.Status.State == DicomState.Success;
+                    success = response.Status == DicomStatus.Success;
                     if (!success)
                     {
                         DicomLogger.Warning("QRSCP", "存储响应失败 - Status: {Status}", response.Status);
                     }
                 };
 
-                // 发送到请求方并等待完成
                 await SendRequestAsync(storeRequest);
 
                 if (success)
                 {
                     completed++;
-                    DicomLogger.Debug("QRSCP", "成功发送实例 - SOPInstanceUID: {SopInstanceUid}, 进度: {Completed}/{Total}", 
-                        instance.SopInstanceUid, completed, remaining);
                 }
                 else
                 {
                     failures++;
                 }
+
+                progressResponse = new DicomCGetResponse(request, DicomStatus.Pending)
+                {
+                    Remaining = remaining - 1,
+                    Completed = completed,
+                    Failures = failures
+                };
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}, FilePath: {FilePath}", 
-                    instance.SopInstanceUid, instance.FilePath);
                 failures++;
+                DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
             }
 
             remaining--;
 
-            // 发送进度响应
-            yield return new DicomCGetResponse(request, DicomStatus.Pending)
+            if (progressResponse != null)
             {
-                Remaining = remaining,
-                Completed = completed,
-                Failures = failures
-            };
+                yield return progressResponse;
+            }
         }
 
         // 返回最终状态
-        var finalStatus = failures == 0 ? DicomStatus.Success : 
-            completed > 0 ? DicomStatus.Cancel : 
-            DicomStatus.ProcessingFailure;
+        DicomStatus finalStatus;
+        if (failures == 0)
+        {
+            finalStatus = DicomStatus.Success;
+        }
+        else if (failures == instances.Count())
+        {
+            finalStatus = DicomStatus.ProcessingFailure;  // 全部失败
+        }
+        else
+        {
+            finalStatus = DicomStatus.Cancel;  // 部分失败
+        }
 
         yield return new DicomCGetResponse(request, finalStatus)
         {
