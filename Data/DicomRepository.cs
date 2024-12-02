@@ -709,4 +709,21 @@ public class DicomRepository : BaseRepository, IDisposable
             return new List<Instance>();
         }
     }
+
+    public void UpdateWorklistStatus(string scheduledStepId, string status)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+            UPDATE Worklist 
+            SET Status = @Status 
+            WHERE ScheduledProcedureStepID = @StepID";
+
+        command.Parameters.AddWithValue("@Status", status);
+        command.Parameters.AddWithValue("@StepID", scheduledStepId);
+
+        command.ExecuteNonQuery();
+    }
 }

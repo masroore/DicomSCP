@@ -181,7 +181,6 @@ function displayWorklistPage(page) {
         </tr>
     `).join('');
 }
-
 // 更新分页信息
 function updatePagination(total) {
     const totalPages = Math.ceil(total / pageSize);
@@ -490,7 +489,7 @@ function saveWorklist() {
         scheduledAET: document.getElementById('scheduledAET').value,
         scheduledStationName: document.getElementById('scheduledStationName').value,
         bodyPartExamined: document.getElementById('bodyPartExamined').value,
-        status: 'SCHEDULED',
+        status: document.getElementById('status').value,
         studyDescription: '',
         scheduledProcedureStepID: '',
         scheduledProcedureStepDescription: '',
@@ -619,7 +618,7 @@ function formatStatus(status) {
         'SCHEDULED': '已预约',
         'IN_PROGRESS': '检查中',
         'COMPLETED': '已完成',
-        'CANCELLED': '已取消'
+        'DISCONTINUED': '已中断'
     };
     return statusMap[status] || status;
 }
@@ -1229,3 +1228,4 @@ function resetQRSearch() {
     // 更新分页信息
     updateQRPagination(0);
 }
+

@@ -91,6 +91,13 @@ public class WorklistController : ControllerBase
             if (string.IsNullOrEmpty(item.ScheduledAET))
                 return BadRequest("预约AE Title不能为空");
 
+            // 验证状态值
+            var validStatuses = new[] { "SCHEDULED", "IN_PROGRESS", "COMPLETED", "DISCONTINUED" };
+            if (!validStatuses.Contains(item.Status))
+            {
+                item.Status = "SCHEDULED";  // 如果状态无效，默认为已预约
+            }
+
             // 生成新的 WorklistId
             item.WorklistId = Guid.NewGuid().ToString("N");
 
