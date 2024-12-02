@@ -368,7 +368,7 @@
                     </div>
                 </div>
 
-                <!-- 查询结果表格 -->
+                <!-- 查询结果表 -->
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
@@ -416,7 +416,28 @@
 
             <!-- 系统设置页面 -->
             <div id="settings-page" style="display: none;">
-                <!-- 系统设置内容 -->
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between mb-3">
+                                    <h5 class="card-title">系统配置</h5>
+                                    <div>
+                                        <button class="btn btn-outline-info me-2" onclick="configManager.showHelp()">
+                                            <i class="bi bi-question-circle"></i> 配置说明
+                                        </button>
+                                        <button class="btn btn-primary" onclick="configManager.saveConfig()">保存配置</button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <textarea id="configEditor" class="form-control" 
+                                        style="height: 500px; font-family: Consolas, monospace; font-size: 14px;"
+                                        spellcheck="false"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 发送图像页面 -->
@@ -500,7 +521,7 @@
                                             </tr>
                                         </thead>
                                         <tbody id="logFiles">
-                                            <!-- 日志文件列表将通过 JavaScript 动态加载 -->
+                                            <!-- 日志文件列表通过 JavaScript 动态加载 -->
                                         </tbody>
                                     </table>
                                 </div>
@@ -647,12 +668,263 @@
         </div>
     </div>
 
+    <!-- 添加配置说明模态框 -->
+    <div class="modal fade" id="configHelpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">配置说明</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="accordion" id="configHelp">
+                        <!-- DICOM 基础配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#dicomSettingsHelp">
+                                    DICOM 基础配置 (DicomSettings)
+                                </button>
+                            </h2>
+                            <div id="dicomSettingsHelp" class="accordion-collapse collapse show">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>AeTitle</dt>
+                                        <dd>DICOM 应用实体标题，1-16个字符，只能包含字母、数字、下划线和横线。例如：STORESCP</dd>
+                                        
+                                        <dt>StoreSCPPort</dt>
+                                        <dd>存储服务端口号，范围1-65535。建议使用11112等标准端口</dd>
+                                        
+                                        <dt>StoragePath</dt>
+                                        <dd>DICOM文件存储路径，必须是有效的目录路径。例如：D:\dicom\storage</dd>
+                                        
+                                        <dt>TempPath</dt>
+                                        <dd>临时文件存储路径，用于接收文件时的临时存储。例如：D:\dicom\temp</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 高级配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedHelp">
+                                    高级配置 (Advanced)
+                                </button>
+                            </h2>
+                            <div id="advancedHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>ValidateCallingAE</dt>
+                                        <dd>是否验证调用方AE Title，启用后只允许指定的AE Title连接。默认：false</dd>
+                                        
+                                        <dt>AllowedCallingAEs</dt>
+                                        <dd>允许的调用方AE Title列表，当ValidateCallingAE为true时生效。例如：["WORKSTATION1", "PACS1"]</dd>
+                                        
+                                        <dt>ConcurrentStoreLimit</dt>
+                                        <dd>并发存储限制，0表示不限制。建议值：根据服务器性能设置，如4或8</dd>
+                                        
+                                        <dt>EnableCompression</dt>
+                                        <dd>是否启用压缩，影响存储和传输性能。默认：false</dd>
+                                        
+                                        <dt>PreferredTransferSyntax</dt>
+                                        <dd>首选传输语法，可选值：
+                                            <ul>
+                                                <li>ImplicitVRLittleEndian - 隐式小端</li>
+                                                <li>ExplicitVRLittleEndian - 显式小端</li>
+                                                <li>JPEGProcess14 - JPEG有损压缩</li>
+                                                <li>JPEG2000Lossless - JPEG2000无损压缩</li>
+                                            </ul>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WorklistSCP配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#worklistHelp">
+                                    Worklist配置 (WorklistSCP)
+                                </button>
+                            </h2>
+                            <div id="worklistHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>AeTitle</dt>
+                                        <dd>Worklist服务的AE Title。例如：WORKLISTSCP</dd>
+                                        
+                                        <dt>Port</dt>
+                                        <dd>Worklist服务端口号，范围1-65535。建议：11113</dd>
+                                        
+                                        <dt>ValidateCallingAE</dt>
+                                        <dd>是否验证调用方AE Title。默认：false</dd>
+                                        
+                                        <dt>AllowedCallingAEs</dt>
+                                        <dd>允许的调用方AE Title列表。例如：["MODALITY1", "MODALITY2"]</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- QRSCP配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrscpHelp">
+                                    查询检索配置 (QRSCP)
+                                </button>
+                            </h2>
+                            <div id="qrscpHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>AeTitle</dt>
+                                        <dd>查询检索服务的AE Title。例如：QRSCP</dd>
+                                        
+                                        <dt>Port</dt>
+                                        <dd>查询检索服务端口号。建议：11114</dd>
+                                        
+                                        <dt>EnableCGet</dt>
+                                        <dd>是否启用C-GET服务。默认：true</dd>
+                                        
+                                        <dt>EnableCMove</dt>
+                                        <dd>是否启用C-MOVE服务。默认：true</dd>
+                                        
+                                        <dt>ValidateCallingAE</dt>
+                                        <dd>是否验证调用方AE Title。默认：false</dd>
+                                        
+                                        <dt>AllowedCallingAETitles</dt>
+                                        <dd>允许的调用方AE Title列表。例如：["WORKSTATION1"]</dd>
+                                        
+                                        <dt>MoveDestinations</dt>
+                                        <dd>C-MOVE目标节点配置，包含：
+                                            <ul>
+                                                <li>Name - 节点名称</li>
+                                                <li>AeTitle - 节点AE Title</li>
+                                                <li>HostName - 主机名或IP</li>
+                                                <li>Port - 端口号</li>
+                                                <li>IsDefault - 是否默认节点</li>
+                                            </ul>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 查询检索客户端配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrClientHelp">
+                                    查询检索客户端配置 (QueryRetrieveConfig)
+                                </button>
+                            </h2>
+                            <div id="qrClientHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>LocalAeTitle</dt>
+                                        <dd>本地AE Title。例如：QUERYSCU</dd>
+                                        
+                                        <dt>LocalPort</dt>
+                                        <dd>本地端口号。建议：11115</dd>
+                                        
+                                        <dt>RemoteNodes</dt>
+                                        <dd>远程PACS节点配置，包含：
+                                            <ul>
+                                                <li>Name - 节点名称，用于显示</li>
+                                                <li>AeTitle - 远程节点AE Title</li>
+                                                <li>HostName - 远程主机名或IP</li>
+                                                <li>Port - 远程端口号</li>
+                                                <li>IsDefault - 是否默认节点</li>
+                                            </ul>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 日志配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#loggingHelp">
+                                    日志配置 (Logging)
+                                </button>
+                            </h2>
+                            <div id="loggingHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>LogPath</dt>
+                                        <dd>日志根目录。例如：logs</dd>
+                                        
+                                        <dt>RetainedDays</dt>
+                                        <dd>日志保留天数。默认：31</dd>
+                                        
+                                        <dt>OutputTemplate</dt>
+                                        <dd>日志输出模板。默认：[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}</dd>
+                                        
+                                        <dt>Services</dt>
+                                        <dd>各服务的日志配置，包含：
+                                            <ul>
+                                                <li>Enabled - 是否启用</li>
+                                                <li>MinimumLevel - 最低日志级别</li>
+                                                <li>EnableConsoleLog - 是否输出到控制台</li>
+                                                <li>EnableFileLog - 是否输出到文件</li>
+                                                <li>LogPath - 日志文件路径</li>
+                                                <li>OutputTemplate - 输出模板</li>
+                                            </ul>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 其他配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#otherHelp">
+                                    其他配置
+                                </button>
+                            </h2>
+                            <div id="otherHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>Swagger</dt>
+                                        <dd>API文档配置：
+                                            <ul>
+                                                <li>Enabled - 是否启用</li>
+                                                <li>Title - 文档标题</li>
+                                                <li>Version - 版本号</li>
+                                                <li>Description - 描述</li>
+                                            </ul>
+                                        </dd>
+                                        
+                                        <dt>ConnectionStrings</dt>
+                                        <dd>数据库连接字符串配置：
+                                            <ul>
+                                                <li>DicomDb - SQLite数据库文件路径</li>
+                                            </ul>
+                                        </dd>
+                                        
+                                        <dt>Kestrel</dt>
+                                        <dd>Web服务器配置：
+                                            <ul>
+                                                <li>Endpoints.Http.Url - 监听地址和端口</li>
+                                            </ul>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="lib/jquery/jquery.min.js"></script>
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
     <script src="js/store.js"></script>
     <script src="js/logs.js"></script>
     <script src="js/services.js"></script>
+    <script src="js/config.js"></script>
     <script>
         function logout() {
             fetch('/api/auth/logout', { method: 'POST' })

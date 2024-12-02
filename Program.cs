@@ -23,6 +23,9 @@ builder.WebHost.ConfigureKestrel(serverOptions =>
 // 获取配置
 var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
     ?? new DicomSettings();
+// 获取 Swagger 配置
+var swaggerSettings = builder.Configuration.GetSection("Swagger").Get<SwaggerSettings>()
+    ?? new SwaggerSettings();
 
 // 配置日志
 var logSettings = builder.Configuration
@@ -60,15 +63,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
 // 配置 Swagger
-if (settings.Swagger.Enabled)
+if (swaggerSettings.Enabled)
 {
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc(settings.Swagger.Version, new OpenApiInfo
-        {
-            Title = settings.Swagger.Title,
-            Version = settings.Swagger.Version,
-            Description = settings.Swagger.Description
+        c.SwaggerDoc(swaggerSettings.Version, new OpenApiInfo 
+        { 
+            Title = swaggerSettings.Title,
+            Version = swaggerSettings.Version,
+            Description = swaggerSettings.Description
         });
     });
 }
@@ -84,6 +87,8 @@ builder.Services.AddSingleton<IStoreSCU, StoreSCU>();
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
 builder.Services.Configure<QueryRetrieveConfig>(builder.Configuration.GetSection("QueryRetrieveConfig"));
 builder.Services.AddScoped<IQueryRetrieveSCU, QueryRetrieveSCU>();
+// 注册 Swagger 配置
+builder.Services.Configure<SwaggerSettings>(builder.Configuration.GetSection("Swagger"));
 
 var app = builder.Build();
 
@@ -115,12 +120,12 @@ ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 增加�
 ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加最大线程数
 
 // 配置中间件
-if (app.Environment.IsDevelopment() && settings.Swagger.Enabled)
+if (app.Environment.IsDevelopment() && swaggerSettings.Enabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{settings.Swagger.Title} {settings.Swagger.Version}");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{swaggerSettings.Title} {swaggerSettings.Version}");
         c.RoutePrefix = "swagger";
     });
 }

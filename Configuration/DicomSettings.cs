@@ -23,8 +23,6 @@ public class DicomSettings
     public WorklistSCPSettings WorklistSCP { get; set; } = new();
 
     public QRSCPSettings QRSCP { get; set; } = new();
-
-    public SwaggerSettings Swagger { get; set; } = new();
 }
 
 public class WorklistSCPSettings
@@ -68,12 +66,4 @@ public class MoveDestination
     public string HostName { get; set; } = "localhost";
     public int Port { get; set; } = 11112;
     public bool IsDefault { get; set; }
-}
-
-public class SwaggerSettings
-{
-    public bool Enabled { get; set; } = true;
-    public string Title { get; set; } = "DICOM SCP API";
-    public string Version { get; set; } = "v1";
-    public string Description { get; set; } = "DICOM SCP服务器的REST API";
 } 
