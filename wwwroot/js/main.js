@@ -65,7 +65,7 @@ $(document).ready(function() {
 // 切换页面函数
 function switchPage(page) {
     // 隐藏所有页面
-    $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page').hide();
+    $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page').hide();
     
     // 移除所有导航链接的active类
     $('.nav-link').removeClass('active');
@@ -84,9 +84,12 @@ function switchPage(page) {
     } else if (page === 'qr') {
         loadQRNodes();
     } else if (page === 'store') {
-        // 如果store.js中的loadStoreNodes函数已经定义，就调用它
         if (typeof loadStoreNodes === 'function') {
             loadStoreNodes();
+        }
+    } else if (page === 'logs') {
+        if (!window.logManager) {
+            window.logManager = new LogManager();
         }
     }
 }
@@ -111,14 +114,14 @@ function loadPage(page) {
             break;
         case 'store':
             $('#store-page').show();
-            $('#worklist-page, #images-page, #qr-page, #settings-page').hide();
+            $('#worklist-page, #images-page, #qr-page, #settings-page, #logs-page').hide();
             if (typeof loadStoreNodes === 'function') {
                 loadStoreNodes();
             }
             break;
         case 'settings':
             $('#settings-page').show();
-            $('#worklist-page, #images-page, #qr-page, #store-page').hide();
+            $('#worklist-page, #images-page, #qr-page, #store-page, #logs-page').hide();
             break;
     }
 }
@@ -936,7 +939,7 @@ async function searchQR() {
         updateQRPagination(qrAllData.length);
     } catch (error) {
         console.error('查询失败:', error);
-        alert('查询失败，请���查网络连接');
+        alert('查询失败，请查网络连接');
     }
 }
 
@@ -1088,7 +1091,6 @@ async function moveQRStudy(studyUid, event) {
         alert('传输失败，请检查网络连接');
     }
 }
-
 // 获取序列
 async function moveQRSeries(studyUid, seriesUid, event) {
     // 阻止事件冒泡
@@ -1149,4 +1151,11 @@ document.getElementById('qr-nextPage').onclick = () => {
         updateQRPagination(qrAllData.length);
     }
 };
+
+// 根据页面类型加载数据
+if (page === 'logs') {
+    if (!window.logManager) {
+        window.logManager = new LogManager();
+    }
+}
 

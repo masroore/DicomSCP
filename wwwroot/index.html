@@ -58,6 +58,9 @@
                         <a class="nav-link" href="#store" data-page="store">发送图像</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="#logs" data-page="logs">日志管理</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="#settings" data-page="settings">系统设置</a>
                     </li>
                 </ul>
@@ -259,7 +262,7 @@
                             </div>
                             <div class="col-md-6 d-flex align-items-end">
                                 <button type="button" class="btn btn-primary" onclick="searchQR()">查询</button>
-                                <button type="button" class="btn btn-secondary ms-2" onclick="resetQRSearch()">重置</button>
+                                <button type="button" class="btn btn-secondary ms-2" onclick="resetQRSearch()">重</button>
                             </div>
                         </form>
                     </div>
@@ -371,6 +374,39 @@
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 日志管理页面 -->
+            <div id="logs-page" style="display: none;">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="list-group" id="logTypes">
+                                    <!-- 日志类型列表将通过 JavaScript 动态加载 -->
+                                </div>
+                            </div>
+                            <div class="col-md-9">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>文件名</th>
+                                                <th>大小</th>
+                                                <th>修改时间</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="logFiles">
+                                            <!-- 日志文件列表将通过 JavaScript 动态加载 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="logFiles-pagination"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -515,6 +551,7 @@
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
     <script src="js/store.js"></script>
+    <script src="js/logs.js"></script>
     <script>
         function logout() {
             fetch('/api/auth/logout', { method: 'POST' })
