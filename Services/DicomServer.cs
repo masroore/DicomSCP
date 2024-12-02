@@ -186,4 +186,47 @@ public sealed class DicomServer : IDisposable
         _qrScp?.Dispose();
         _disposed = true;
     }
+
+    public async Task RestartAllServices()
+    {
+        try
+        {
+            DicomLogger.Information("DICOM", "正在重启所有DICOM服务...");
+            await StopAsync();
+            await StartAsync();
+            DicomLogger.Information("DICOM", "所有DICOM服务重启完成");
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("DICOM", ex, "重启DICOM服务失败");
+            throw;
+        }
+    }
+
+    public class ServiceStatus
+    {
+        public bool IsRunning { get; set; }
+        public required ServicesStatus Services { get; set; }
+    }
+
+    public class ServicesStatus
+    {
+        public bool StoreScp { get; set; }
+        public bool WorklistScp { get; set; }
+        public bool QrScp { get; set; }
+    }
+
+    public ServiceStatus GetServicesStatus()
+    {
+        return new ServiceStatus
+        {
+            IsRunning = IsRunning,
+            Services = new ServicesStatus
+            {
+                StoreScp = _storeScp != null,
+                WorklistScp = _worklistScp != null,
+                QrScp = _qrScp != null
+            }
+        };
+    }
 } 

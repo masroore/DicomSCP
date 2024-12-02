@@ -15,6 +15,15 @@ class LogManager {
     async loadLogTypes() {
         try {
             const response = await fetch('/api/logs/types');
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (!response.ok) {
+                throw new Error('获取日志类型失败');
+            }
+            
             const types = await response.json();
             this.renderLogTypes(types);
             if (types.length > 0) {
@@ -29,6 +38,15 @@ class LogManager {
         try {
             this.currentType = type;
             const response = await fetch(`/api/logs/files/${type}`);
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (!response.ok) {
+                throw new Error('获取日志文件失败');
+            }
+            
             this.allFiles = await response.json();
             this.renderLogFiles();
             this.updateActiveType();
@@ -124,6 +142,11 @@ class LogManager {
                 method: 'DELETE'
             });
             
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
             if (!response.ok) {
                 throw new Error(await response.text());
             }
@@ -217,13 +240,23 @@ class LogManager {
 
     async loadLogContent(filename) {
         try {
+            const preElement = document.querySelector('.log-content');
+            if (preElement) {
+                // 显示简单的加载动画
+                preElement.innerHTML = `
+                    <div style="height: 100%; display: flex; align-items: center; justify-content: center;">
+                        <div class="spinner-border text-secondary" role="status"></div>
+                    </div>
+                `;
+            }
+
             const response = await fetch(`/api/logs/${this.currentType}/${filename}/content`);
             if (!response.ok) {
                 throw new Error('获取日志内容失败');
             }
             
             const data = await response.json();
-            const preElement = document.querySelector('.log-content');
+            
             if (preElement) {
                 preElement.innerHTML = data.content.reverse().join('\n') || '暂无日志内容';
             }
@@ -240,6 +273,11 @@ class LogManager {
                 const response = await fetch(`/api/logs/${this.currentType}/${select.value}/clear`, {
                     method: 'POST'
                 });
+                
+                if (response.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 
                 if (!response.ok) {
                     throw new Error('清空失败');

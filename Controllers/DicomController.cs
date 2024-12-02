@@ -35,13 +35,28 @@ public class DicomController : ControllerBase
             _settings.StoreSCPPort,
             _settings.StoragePath);
 
+        var serverStatus = _server.GetServicesStatus();
+
         return Ok(new
         {
-            _settings.AeTitle,
-            _settings.StoreSCPPort,
-            WorklistSCPPort = _settings.WorklistSCP.Port,
-            _settings.StoragePath,
-            IsRunning = _server.IsRunning
+            store = new
+            {
+                aeTitle = _settings.AeTitle,
+                port = _settings.StoreSCPPort,
+                isRunning = serverStatus.Services.StoreScp
+            },
+            worklist = new
+            {
+                aeTitle = _settings.WorklistSCP.AeTitle,
+                port = _settings.WorklistSCP.Port,
+                isRunning = serverStatus.Services.WorklistScp
+            },
+            qr = new
+            {
+                aeTitle = _settings.QRSCP.AeTitle,
+                port = _settings.QRSCP.Port,
+                isRunning = serverStatus.Services.QrScp
+            }
         });
     }
 
@@ -113,6 +128,31 @@ public class DicomController : ControllerBase
             DicomLogger.Error("Api", ex,
                 "[API] 停止服务异常");
             return StatusCode(500, "停止服务器失败");
+        }
+    }
+
+    [HttpPost("restart")]
+    public async Task<IActionResult> Restart()
+    {
+        try
+        {
+            DicomLogger.Information("Api", "[API] 正在重启DICOM服务...");
+            await _server.RestartAllServices();
+            DicomLogger.Information("Api", "[API] DICOM服务重启完成");
+
+            return Ok(new
+            {
+                Message = "服务重启成功",
+                AeTitle = _settings.AeTitle,
+                StoreSCPPort = _settings.StoreSCPPort,
+                WorklistSCPPort = _settings.WorklistSCP.Port,
+                QRSCPPort = _settings.QRSCP.Port
+            });
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("Api", ex, "[API] 重启DICOM服务失败");
+            return StatusCode(500, "重启服务失败");
         }
     }
 } 

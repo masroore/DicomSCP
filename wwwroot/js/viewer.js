@@ -126,6 +126,15 @@ function initializeViewer() {
 async function loadImages() {
     try {
         const response = await fetch(`/api/images/${studyUid}/series/${seriesUid}/instances`);
+        if (response.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
+        
+        if (!response.ok) {
+            throw new Error('Failed to load images');
+        }
+        
         const instances = await response.json();
         console.log('[Loading] Instances received:', instances);
         
@@ -166,7 +175,7 @@ async function displayImage(index) {
     }
 }
 
-// 更新角落信息
+// 更���角落信息
 function updateCornerInfo(image) {
     // 患者信息
     document.getElementById('patientInfo').innerHTML = `
