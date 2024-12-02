@@ -355,7 +355,7 @@ function toggleSeriesInfo(row) {
                         <td>${series.seriesNumber}</td>
                         <td>${series.modality || '未知'}</td>
                         <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                        <td>${series.numberOfInstances} 张</td>
+                        <td>${series.numberOfInstances}</td>
                         <td>
                             <button class="btn btn-primary btn-sm py-0" onclick="previewSeries('${studyUid}', '${series.seriesInstanceUid}')">
                                 预览
@@ -1034,7 +1034,7 @@ async function toggleQRSeriesInfo(row) {
                     <td>${series.seriesNumber || ''}</td>
                     <td>${series.modality || ''}</td>
                     <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                    <td>${series.instanceCount || 0} 张</td>
+                    <td>${series.instanceCount || 0}</td>
                     <td>
                         <button class="btn btn-primary btn-sm py-0" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
                             CMOVE
