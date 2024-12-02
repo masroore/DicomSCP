@@ -727,12 +727,20 @@
                                         <dd>是否启用压缩，影响存储和传输性能。默认：false</dd>
                                         
                                         <dt>PreferredTransferSyntax</dt>
-                                        <dd>首选传输语法，可选值：
+                                        <dd>首选传输语法，当接收到压缩格式的图像时，可以选择转换为以下格式存储：
                                             <ul>
                                                 <li>ImplicitVRLittleEndian - 隐式小端</li>
                                                 <li>ExplicitVRLittleEndian - 显式小端</li>
-                                                <li>JPEGProcess14 - JPEG有损压缩</li>
-                                                <li>JPEG2000Lossless - JPEG2000无损压缩</li>
+                                                <li>JPEGProcess1 - JPEG基线（有损）</li>
+                                                <li>JPEGProcess2_4 - JPEG扩展（有损）</li>
+                                                <li>JPEGProcess14 - JPEG无损</li>
+                                                <li>JPEGProcess14SV1 - JPEG无损SV1</li>
+                                                <li>JPEGLSLossless - JPEG-LS无损</li>
+                                                <li>JPEGLSNearLossless - JPEG-LS近无损</li>
+                                                <li>JPEG2000Lossless - JPEG2000无损</li>
+                                                <li>JPEG2000Lossy - JPEG2000有损</li>
+                                                <li>RLELossless - RLE无损</li>
+                                                <li>DeflatedExplicitVRLittleEndian - Deflate压缩</li>
                                             </ul>
                                         </dd>
                                     </dl>
@@ -770,7 +778,7 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrscpHelp">
-                                    查询检索配置 (QRSCP)
+                                    查询检索服务配置 (QRSCP)
                                 </button>
                             </h2>
                             <div id="qrscpHelp" class="accordion-collapse collapse">
@@ -782,17 +790,11 @@
                                         <dt>Port</dt>
                                         <dd>查询检索服务端口号。建议：11114</dd>
                                         
-                                        <dt>EnableCGet</dt>
-                                        <dd>是否启用C-GET服务。默认：true</dd>
-                                        
-                                        <dt>EnableCMove</dt>
-                                        <dd>是否启用C-MOVE服务。默认：true</dd>
-                                        
                                         <dt>ValidateCallingAE</dt>
                                         <dd>是否验证调用方AE Title。默认：false</dd>
                                         
-                                        <dt>AllowedCallingAETitles</dt>
-                                        <dd>允许的调用方AE Title列表。例如：["WORKSTATION1"]</dd>
+                                        <dt>AllowedCallingAEs</dt>
+                                        <dd>允许的调用方AE Title列表</dd>
                                         
                                         <dt>MoveDestinations</dt>
                                         <dd>C-MOVE目标节点配置，包含：
@@ -820,10 +822,10 @@
                                 <div class="accordion-body">
                                     <dl>
                                         <dt>LocalAeTitle</dt>
-                                        <dd>本地AE Title。例如：QUERYSCU</dd>
+                                        <dd>本地AE Title，用于 QueryRetrieveSCU 和 CStoreSCU。 例如：QUERYSCU</dd>
                                         
                                         <dt>LocalPort</dt>
-                                        <dd>本地端口号。建议：11115</dd>
+                                        <dd>本地端口号，用于 QueryRetrieveSCU 和 CStoreSCU。 建议：11115</dd>
                                         
                                         <dt>RemoteNodes</dt>
                                         <dd>远程PACS节点配置，包含：

@@ -1090,7 +1090,7 @@ async function moveQRStudy(studyUid, event) {
             toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
             toastEl.classList.add('bg-success', 'text-white');
             titleEl.textContent = '操作成功';
-            messageEl.textContent = '检查传输已开始';
+            messageEl.textContent = '检查传输已开始，请稍后去影像管理查看！';
             
             const storeToast = new bootstrap.Toast(toastEl);
             storeToast.show();
@@ -1146,7 +1146,7 @@ async function moveQRSeries(studyUid, seriesUid, event) {
             toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
             toastEl.classList.add('bg-success', 'text-white');
             titleEl.textContent = '操作成功';
-            messageEl.textContent = '序列传输已开始';
+            messageEl.textContent = '序列传输已开始，请稍后去影像管理查看！';
             
             const storeToast = new bootstrap.Toast(toastEl);
             storeToast.show();

@@ -64,7 +64,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             DicomLogger.Information("QRSCP", "收到关联请求 - AET: {CallingAE}", association.CallingAE);
 
             if (_settings.QRSCP.ValidateCallingAE && 
-                !_settings.QRSCP.AllowedCallingAETitles.Contains(association.CallingAE))
+                !_settings.QRSCP.AllowedCallingAEs.Contains(association.CallingAE))
             {
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,

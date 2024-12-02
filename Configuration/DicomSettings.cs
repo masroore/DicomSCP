@@ -50,13 +50,11 @@ public class AdvancedSettings
 
 public class QRSCPSettings
 {
-    public string AeTitle { get; set; } = "QR_SCP";
+    public string AeTitle { get; set; } = "QRSCP";
     public int Port { get; set; } = 11114;
-    public bool EnableCGet { get; set; } = true;
-    public bool EnableCMove { get; set; } = true;
-    public bool ValidateCallingAE { get; set; } = false;
-    public List<string> AllowedCallingAETitles { get; set; } = new List<string>();
-    public List<MoveDestination> MoveDestinations { get; set; } = new List<MoveDestination>();
+    public bool ValidateCallingAE { get; set; }
+    public List<string> AllowedCallingAEs { get; set; } = new();
+    public List<MoveDestination> MoveDestinations { get; set; } = new();
 }
 
 public class MoveDestination
