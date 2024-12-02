@@ -1038,7 +1038,7 @@ async function toggleQRSeriesInfo(row) {
                     <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
                     <td>${series.instanceCount || 0}</td>
                     <td>
-                        <button class="btn btn-primary btn-sm py-0" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
+                        <button class="btn btn-success btn-sm py-0" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
                             CMOVE
                         </button>
                     </td>
@@ -1064,6 +1064,12 @@ async function moveQRStudy(studyUid, event) {
     if (event) {
         event.stopPropagation();
     }
+
+    // 添加这两行代码
+    if (!await showConfirmMoveDialog()) {
+        return;  // 用户取消
+    }
+
 
     const nodeId = document.getElementById('qrNode').value;
     try {
@@ -1120,6 +1126,12 @@ async function moveQRSeries(studyUid, seriesUid, event) {
         event.stopPropagation();
     }
 
+   // 添加确认对话框
+   if (!await showConfirmMoveDialog()) {
+       return;  // 用户取消
+   }
+
+
     const nodeId = document.getElementById('qrNode').value;
     try {
         const response = await fetch(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`, {
@@ -1168,8 +1180,7 @@ async function moveQRSeries(studyUid, seriesUid, event) {
         const storeToast = new bootstrap.Toast(toastEl);
         storeToast.show();
     }
-}
-// 格式化日期
+}// 格式化日期
 function formatDate(dateStr) {
     if (!dateStr) return '';
     return dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
@@ -1231,19 +1242,23 @@ function resetQRSearch() {
     updateQRPagination(0);
 }
 
-// 加载远程节点列表
-async function loadRemoteNodes() {
-    try {
-        const response = await fetch('/api/QueryRetrieve/nodes');
-        if (!response.ok) {
-            throw new Error('获取节点列表失败');
-        }
-        return await response.json();
-    } catch (error) {
-        console.error('加载PACS节点失败:', error);
-        throw error;
-    }
+
+// 添加通用的提示框显示函数
+function showToast(type, title, message) {
+    const toastEl = document.getElementById('storeToast');
+    const titleEl = document.getElementById('storeToastTitle');
+    const messageEl = document.getElementById('storeToastMessage');
+    
+    toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+    toastEl.classList.add(type === 'success' ? 'bg-success' : 'bg-danger', 'text-white');
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    
+    const storeToast = new bootstrap.Toast(toastEl);
+    storeToast.show();
 }
+
+// 添加这些新函数到 main.js 文件末尾
 
 // 回传检查
 async function sendStudy(studyInstanceUid, event) {
@@ -1254,70 +1269,44 @@ async function sendStudy(studyInstanceUid, event) {
 
     try {
         // 加载远程节点列表
-        const nodes = await loadRemoteNodes();
+        const response = await fetch('/api/StoreSCU/nodes');
+        if (!response.ok) {
+            throw new Error('获取节点列表失败');
+        }
+        const nodes = await response.json();
+
         if (!nodes || nodes.length === 0) {
             alert('未配置远程节点');
             return;
         }
 
-        // 如果只有一个节点，直接使用；否则让用户选择
-        let selectedNode;
-        if (nodes.length === 1) {
-            selectedNode = nodes[0];
-        } else {
-            const nodeOptions = nodes.map(node => 
-                `${node.name} (${node.aeTitle}@${node.hostName}:${node.port})`
-            );
-            const selectedIndex = await showNodeSelectionDialog(nodeOptions);
-            if (selectedIndex === -1) return;
-            selectedNode = nodes[selectedIndex];
-        }
+        // 显示节点选择对话框
+        const nodeOptions = nodes.map(node => 
+            `${node.name} (${node.aeTitle}@${node.hostName}:${node.port})`
+        );
+        const selectedIndex = await showNodeSelectionDialog(nodeOptions);
+        if (selectedIndex === -1) return;  // 用户取消
+        
+        const selectedNode = nodes[selectedIndex];
 
         // 调用发送接口
-        const response = await fetch(`/api/StoreSCU/send/${studyInstanceUid}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                nodeId: selectedNode.name
-            })
+        const sendResponse = await fetch(`/api/StoreSCU/sendStudy/${selectedNode.name}/${studyInstanceUid}`, {
+            method: 'POST'
         });
 
-        if (!response.ok) {
+        if (!sendResponse.ok) {
             throw new Error('发送失败');
         }
 
-        const result = await response.json();
+        const result = await sendResponse.json();
         
         // 显示结果提示
-        const toastEl = document.getElementById('storeToast');
-        const titleEl = document.getElementById('storeToastTitle');
-        const messageEl = document.getElementById('storeToastMessage');
-        
-        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-        toastEl.classList.add('bg-success', 'text-white');
-        titleEl.textContent = '操作成功';
-        messageEl.textContent = '图像发送已开始';
-        
-        const storeToast = new bootstrap.Toast(toastEl);
-        storeToast.show();
+        showToast('success', '操作成功', `图像发送成功，共发送 ${result.totalFiles} 个文件`);
     } catch (error) {
         console.error('发送失败:', error);
-        const toastEl = document.getElementById('storeToast');
-        const titleEl = document.getElementById('storeToastTitle');
-        const messageEl = document.getElementById('storeToastMessage');
-        
-        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-        toastEl.classList.add('bg-danger', 'text-white');
-        titleEl.textContent = '操作失败';
-        messageEl.textContent = error.message || '发送失败，请检查网络连接';
-        
-        const storeToast = new bootstrap.Toast(toastEl);
-        storeToast.show();
+        showToast('error', '操作失败', error.message || '发送失败，请检查网络连接');
     }
 }
-
 // 显示节点选择对话框
 function showNodeSelectionDialog(nodes) {
     return new Promise((resolve) => {
@@ -1330,15 +1319,18 @@ function showNodeSelectionDialog(nodes) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <select class="form-select" id="nodeSelect">
-                                ${nodes.map((node, index) => 
-                                    `<option value="${index}">${node}</option>`
-                                ).join('')}
-                            </select>
+                            <div class="mb-3">
+                                <label class="form-label">请选择要发送到的PACS节点：</label>
+                                <select class="form-select" id="nodeSelect">
+                                    ${nodes.map((node, index) => 
+                                        `<option value="${index}">${node}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                            <button type="button" class="btn btn-primary" onclick="confirmNodeSelection()">确定</button>
+                            <button type="button" class="btn btn-primary" onclick="confirmNodeSelection()">发送</button>
                         </div>
                     </div>
                 </div>
@@ -1378,3 +1370,71 @@ function showNodeSelectionDialog(nodes) {
     });
 }
 
+// 添加通用的提示框显示函数
+function showToast(type, title, message) {
+    const toastEl = document.getElementById('storeToast');
+    const titleEl = document.getElementById('storeToastTitle');
+    const messageEl = document.getElementById('storeToastMessage');
+    
+    toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+    toastEl.classList.add(type === 'success' ? 'bg-success' : 'bg-danger', 'text-white');
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    
+    const storeToast = new bootstrap.Toast(toastEl);
+    storeToast.show();
+}
+
+// 添加确认对话框函数
+function showConfirmMoveDialog() {
+    return new Promise((resolve) => {
+        const html = `
+            <div class="modal fade" id="confirmMoveModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">确认回取图像</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>确定要回取这个检查/序列的图像吗？</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" onclick="confirmMove()">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 添加模态框到页面
+        document.body.insertAdjacentHTML('beforeend', html);
+        
+        const modal = new bootstrap.Modal(document.getElementById('confirmMoveModal'));
+        
+        // 处理确认
+        window.confirmMove = () => {
+            modal.hide();
+            resolve(true);
+            
+            // 清理模态框
+            setTimeout(() => {
+                document.getElementById('confirmMoveModal').remove();
+                delete window.confirmMove;
+            }, 300);
+        };
+        
+        // 处理取消
+        document.getElementById('confirmMoveModal').addEventListener('hidden.bs.modal', () => {
+            resolve(false);
+            // 清理模态框
+            setTimeout(() => {
+                document.getElementById('confirmMoveModal').remove();
+                delete window.confirmMove;
+            }, 300);
+        });
+        
+        modal.show();
+    });
+}
