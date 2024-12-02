@@ -139,20 +139,55 @@ public class QueryRetrieveController : ControllerBase
 
         try
         {
-            var success = await _queryRetrieveScu.MoveStudyAsync(node, studyUid, request.DestinationAe);
-            if (success)
+            // 验证请求参数
+            if (string.IsNullOrEmpty(request.DestinationAe))
             {
-                return Ok(new { message = "检查传输已开始" });
+                return BadRequest(new { message = "目标AE Title不能为空" });
             }
-            else
+
+            // 记录开始获取的日志
+            DicomLogger.Information("QueryRetrieveSCU", 
+                "开始获取影像 - 源节点: {SourceAet}@{Host}:{Port}, 目标节点: {DestAet}, StudyInstanceUid: {StudyUid}", 
+                node.AeTitle, node.HostName, node.Port, request.DestinationAe, studyUid);
+
+            // 尝试发起C-MOVE请求
+            var moveTask = Task.Run(async () =>
             {
-                return StatusCode(500, new { message = "检查传输失败" });
+                try
+                {
+                    var success = await _queryRetrieveScu.MoveStudyAsync(node, studyUid, request.DestinationAe);
+                    return success;
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+
+            // 等待一小段时间，看看是否能快速确认请求是否被接受
+            if (await Task.WhenAny(moveTask, Task.Delay(2000)) == moveTask)
+            {
+                // 如果在2秒内得到结果
+                var success = await moveTask;
+                if (!success)
+                {
+                    return StatusCode(500, new { message = "影像获取请求被拒绝" });
+                }
             }
+
+            // 请求已被接受，返回成功
+            return Ok(new { 
+                message = "影像获取请求已发送，请稍后在影像管理中查看",
+                studyUid = studyUid,
+                sourceAet = node.AeTitle,
+                destinationAe = request.DestinationAe
+            });
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 执行C-MOVE失败");
-            return StatusCode(500, new { message = "检查传输失败: " + ex.Message });
+            DicomLogger.Error("QueryRetrieveSCU", ex, 
+                "发送获取请求失败 - StudyInstanceUid: {StudyUid}", studyUid);
+            return StatusCode(500, new { message = "发送获取请求失败" });
         }
     }
 }
