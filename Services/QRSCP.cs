@@ -305,7 +305,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             return responses;
         }
 
-        // 使用 Task.Run 来异步执行数据库查询
+        // 使用 Task.Run 来异步执行数库查询
         var seriesList = await Task.Run(() => _repository.GetSeriesByStudyUid(studyInstanceUid));
 
         foreach (var series in seriesList)
@@ -324,7 +324,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             dataset.Add(DicomTag.SeriesDescription, series.SeriesDescription ?? string.Empty);
             dataset.Add(DicomTag.NumberOfSeriesRelatedInstances, series.NumberOfInstances);
 
-            // 复制请求中的其他查���字段（如果不存在）
+            // 复制请求中的其他查询字段（如果不存在）
             foreach (var tag in request.Dataset.Select(x => x.Tag))
             {
                 if (!dataset.Contains(tag) && request.Dataset.TryGetString(tag, out string value))
@@ -618,31 +618,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         // 发送每个实例
         foreach (var instance in instances)
         {
-            DicomCGetResponse? progressResponse = null;
-
             try
             {
-                // 使用完整的存储路径
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
-                
                 if (!File.Exists(filePath))
                 {
                     DicomLogger.Warning("QRSCP", "未找到文件: {FilePath}", filePath);
                     failures++;
-                    remaining--;
                     continue;
                 }
 
-                var file = DicomFile.Open(filePath);
-                if (file == null)
-                {
-                    DicomLogger.Warning("QRSCP", "无法打开文件: {FilePath}", filePath);
-                    failures++;
-                    remaining--;
-                    continue;
-                }
-
-                // 创建 C-STORE 请求
+                var file = await Task.Run(() => DicomFile.Open(filePath));
                 var storeRequest = new DicomCStoreRequest(file);
                 var success = false;
 
@@ -660,47 +646,35 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 if (success)
                 {
                     completed++;
+                    DicomLogger.Debug("QRSCP", "成功发送实例 - SOPInstanceUID: {SopInstanceUid}, 进度: {Completed}/{Total}", 
+                        instance.SopInstanceUid, completed, remaining);
                 }
                 else
                 {
                     failures++;
                 }
-
-                progressResponse = new DicomCGetResponse(request, DicomStatus.Pending)
-                {
-                    Remaining = remaining - 1,
-                    Completed = completed,
-                    Failures = failures
-                };
             }
             catch (Exception ex)
             {
-                failures++;
                 DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
+                failures++;
             }
 
             remaining--;
 
-            if (progressResponse != null)
+            // 发送进度响应
+            yield return new DicomCGetResponse(request, DicomStatus.Pending)
             {
-                yield return progressResponse;
-            }
+                Remaining = remaining,
+                Completed = completed,
+                Failures = failures
+            };
         }
 
         // 返回最终状态
-        DicomStatus finalStatus;
-        if (failures == 0)
-        {
-            finalStatus = DicomStatus.Success;
-        }
-        else if (failures == instances.Count())
-        {
-            finalStatus = DicomStatus.ProcessingFailure;  // 全部失败
-        }
-        else
-        {
-            finalStatus = DicomStatus.Cancel;  // 部分失败
-        }
+        var finalStatus = failures == 0 ? DicomStatus.Success : 
+            completed == 0 ? DicomStatus.ProcessingFailure : 
+            DicomStatus.Cancel;
 
         yield return new DicomCGetResponse(request, finalStatus)
         {
