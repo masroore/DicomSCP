@@ -63,6 +63,16 @@ public class ServiceLoggingConfig
         LogPath = "logs/worklist",
         OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"
     };
+
+    public ServiceLogConfig PrintSCP { get; set; } = new ServiceLogConfig
+    {
+        Enabled = true,
+        EnableConsoleLog = true,
+        EnableFileLog = true,
+        MinimumLevel = LogEventLevel.Debug,
+        LogPath = "logs/printscp",
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [PrintSCP] {Message:lj}{NewLine}{Exception}"
+    };
 }
 
 public class ServiceLogConfig

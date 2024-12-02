@@ -21,6 +21,7 @@ public sealed class DicomServer : IDisposable
     private IDicomServer? _storeScp;
     private IDicomServer? _worklistScp;
     private IDicomServer? _qrScp;
+    private IDicomServer? _printScp;
     private bool _disposed;
 
     public DicomServer(
@@ -35,7 +36,7 @@ public sealed class DicomServer : IDisposable
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
 
-    public bool IsRunning => _storeScp != null || _worklistScp != null || _qrScp != null;
+    public bool IsRunning => _storeScp != null || _worklistScp != null || _qrScp != null || _printScp != null;
 
     public async Task StartAsync()
     {
@@ -99,36 +100,84 @@ public sealed class DicomServer : IDisposable
                 _configuration,
                 _repository);
 
-            // 启动存储服务
-            _storeScp = DicomServerFactory.Create<CStoreSCP>(
-                _settings.StoreSCPPort,
-                null,
-                Encoding.UTF8,
-                _loggerFactory.CreateLogger<CStoreSCP>());
-
-            DicomLogger.Information("DICOM", "C-STORE服务已启动 - AET: {AeTitle}, 端口: {Port}", 
-                _settings.AeTitle, _settings.StoreSCPPort);
-
-            // 启动工作列表服务
-            _worklistScp = DicomServerFactory.Create<WorklistSCP>(
-                _settings.WorklistSCP.Port,
-                null,
-                Encoding.UTF8,
-                _loggerFactory.CreateLogger<WorklistSCP>());
-
-            DicomLogger.Information("DICOM", "Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
-                _settings.WorklistSCP.AeTitle, _settings.WorklistSCP.Port);
-
-            // 启动QR服务
-            _qrScp = DicomServerFactory.Create<QRSCP>(
-                _settings.QRSCP.Port,
-                null,
-                Encoding.UTF8,
-                _loggerFactory.CreateLogger<QRSCP>(),
+            // 配置打印服务
+            PrintSCP.Configure(
+                _settings,
                 _repository);
 
-            DicomLogger.Information("DICOM", "QR服务已启动 - AET: {AeTitle}, 端口: {Port}", 
-                _settings.QRSCP.AeTitle, _settings.QRSCP.Port);
+            try
+            {
+                // 启动存储服务
+                _storeScp = DicomServerFactory.Create<CStoreSCP>(
+                    _settings.StoreSCPPort,
+                    null,
+                    Encoding.UTF8,
+                    _loggerFactory.CreateLogger<CStoreSCP>());
+
+                DicomLogger.Information("DICOM", "C-STORE服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                    _settings.AeTitle, _settings.StoreSCPPort);
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("DICOM", ex, "启动C-STORE服务失败");
+                throw;
+            }
+
+            try
+            {
+                // 启动工作列表服务
+                _worklistScp = DicomServerFactory.Create<WorklistSCP>(
+                    _settings.WorklistSCP.Port,
+                    null,
+                    Encoding.UTF8,
+                    _loggerFactory.CreateLogger<WorklistSCP>());
+
+                DicomLogger.Information("DICOM", "Worklist服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                    _settings.WorklistSCP.AeTitle, _settings.WorklistSCP.Port);
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("DICOM", ex, "启动Worklist服务失败");
+                throw;
+            }
+
+            try
+            {
+                // 启动QR服务
+                _qrScp = DicomServerFactory.Create<QRSCP>(
+                    _settings.QRSCP.Port,
+                    null,
+                    Encoding.UTF8,
+                    _loggerFactory.CreateLogger<QRSCP>(),
+                    _repository);
+
+                DicomLogger.Information("DICOM", "QR服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                    _settings.QRSCP.AeTitle, _settings.QRSCP.Port);
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("DICOM", ex, "启动QR服务失败");
+                throw;
+            }
+
+            try
+            {
+                // 启动打印服务
+                _printScp = DicomServerFactory.Create<PrintSCP>(
+                    _settings.PrintSCP.Port,
+                    null,
+                    Encoding.UTF8,
+                    _loggerFactory.CreateLogger<PrintSCP>(),
+                    _repository);
+
+                DicomLogger.Information("DICOM", "打印服务已启动 - AET: {AeTitle}, 端口: {Port}", 
+                    _settings.PrintSCP.AeTitle, _settings.PrintSCP.Port);
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("DICOM", ex, "启动打印服务失败");
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -136,8 +185,10 @@ public sealed class DicomServer : IDisposable
             _storeScp?.Dispose();
             _worklistScp?.Dispose();
             _qrScp?.Dispose();
+            _printScp?.Dispose();
             _storeScp = _worklistScp = null;
             _qrScp = null;
+            _printScp = null;
             throw;
         }
     }
@@ -162,8 +213,10 @@ public sealed class DicomServer : IDisposable
                 _storeScp?.Dispose();
                 _worklistScp?.Dispose();
                 _qrScp?.Dispose();
+                _printScp?.Dispose();
                 _storeScp = _worklistScp = null;
                 _qrScp = null;
+                _printScp = null;
             });
             DicomLogger.Information("DICOM", "DICOM服务已停止...");
         }
@@ -184,6 +237,7 @@ public sealed class DicomServer : IDisposable
         _storeScp?.Dispose();
         _worklistScp?.Dispose();
         _qrScp?.Dispose();
+        _printScp?.Dispose();
         _disposed = true;
     }
 
@@ -214,6 +268,7 @@ public sealed class DicomServer : IDisposable
         public bool StoreScp { get; set; }
         public bool WorklistScp { get; set; }
         public bool QrScp { get; set; }
+        public bool PrintScp { get; set; }
     }
 
     public ServiceStatus GetServicesStatus()
@@ -225,7 +280,8 @@ public sealed class DicomServer : IDisposable
             {
                 StoreScp = _storeScp != null,
                 WorklistScp = _worklistScp != null,
-                QrScp = _qrScp != null
+                QrScp = _qrScp != null,
+                PrintScp = _printScp != null
             }
         };
     }

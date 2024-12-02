@@ -74,6 +74,14 @@ public static class DicomLogger
             _loggers["StoreSCU"] = storeSCULogger;
         }
 
+        // 配置PrintSCP的日志
+        if (settings.Services.PrintSCP?.Enabled == true)
+        {
+            var printConfig = settings.Services.PrintSCP;
+            var printLogger = CreateLogger("PrintSCP", printConfig);
+            _loggers["PrintSCP"] = printLogger;
+        }
+
         // 配置数据库日志
         if (settings.Database.Enabled)
         {

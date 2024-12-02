@@ -23,6 +23,8 @@ public class DicomSettings
     public WorklistSCPSettings WorklistSCP { get; set; } = new();
 
     public QRSCPSettings QRSCP { get; set; } = new();
+
+    public PrintSCPSettings PrintSCP { get; set; } = new();
 }
 
 public class WorklistSCPSettings
@@ -64,4 +66,17 @@ public class MoveDestination
     public string HostName { get; set; } = "localhost";
     public int Port { get; set; } = 11112;
     public bool IsDefault { get; set; }
+}
+
+public class PrintSCPSettings
+{
+    [Required]
+    [RegularExpression(@"^[A-Za-z0-9\-_]{1,16}$")]
+    public string AeTitle { get; set; } = "PRINTSCP";
+
+    [Range(1, 65535)]
+    public int Port { get; set; } = 11115;
+
+    public bool ValidateCallingAE { get; set; } = false;
+    public string[] AllowedCallingAEs { get; set; } = Array.Empty<string>();
 } 

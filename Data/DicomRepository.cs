@@ -135,6 +135,21 @@ public class DicomRepository : BaseRepository, IDisposable
         public const string InitializeAdminUser = @"
             INSERT OR IGNORE INTO Users (Username, Password) 
             VALUES ('admin', 'jGl25bVBBBW96Qi9Te4V37Fnqchz/Eu4qB9vKrRIqRg=')";
+
+        public const string CreatePrintJobsTable = @"
+            CREATE TABLE IF NOT EXISTS PrintJobs (
+                JobId TEXT PRIMARY KEY,
+                FilmSessionId TEXT,
+                FilmBoxId TEXT,
+                ImageBoxId TEXT,
+                CallingAE TEXT,
+                Status TEXT,
+                ImagePath TEXT,
+                PrinterName TEXT,
+                ErrorMessage TEXT,
+                CreateTime DATETIME,
+                UpdateTime DATETIME
+            )";
     }
 
     public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
@@ -278,6 +293,7 @@ public class DicomRepository : BaseRepository, IDisposable
             connection.Execute(SqlQueries.CreateWorklistTable, transaction: transaction);
             connection.Execute(SqlQueries.CreateUsersTable, transaction: transaction);
             connection.Execute(SqlQueries.InitializeAdminUser, transaction: transaction);
+            connection.Execute(SqlQueries.CreatePrintJobsTable, transaction: transaction);
 
             transaction.Commit();
             _initialized = true;
@@ -733,5 +749,79 @@ public class DicomRepository : BaseRepository, IDisposable
         command.Parameters.AddWithValue("@StepID", scheduledStepId);
 
         command.ExecuteNonQuery();
+    }
+
+    // 添加打印任务
+    public async Task<string> AddPrintJobAsync(PrintJob job)
+    {
+        using var connection = CreateConnection();
+        var sql = @"
+            INSERT INTO PrintJobs (
+                JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                Status, ImagePath, PrinterName, CreateTime
+            ) VALUES (
+                @JobId, @FilmSessionId, @FilmBoxId, @ImageBoxId, @CallingAE,
+                @Status, @ImagePath, @PrinterName, @CreateTime
+            )";
+
+        await connection.ExecuteAsync(sql, job);
+        return job.JobId;
+    }
+
+    // 更新打印任务状态
+    public async Task UpdatePrintJobStatusAsync(string jobId, string status, string? errorMessage = null)
+    {
+        using var connection = CreateConnection();
+        var sql = @"
+            UPDATE PrintJobs 
+            SET Status = @Status, 
+                ErrorMessage = @ErrorMessage,
+                UpdateTime = @UpdateTime
+            WHERE JobId = @JobId";
+
+        await connection.ExecuteAsync(sql, new { 
+            JobId = jobId, 
+            Status = status, 
+            ErrorMessage = errorMessage,
+            UpdateTime = DateTime.UtcNow
+        });
+    }
+
+    // 获取打印作业列表
+    public async Task<List<PrintJob>> GetPrintJobsAsync()
+    {
+        using var connection = CreateConnection();
+        var sql = @"
+            SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                   Status, ImagePath, PrinterName, ErrorMessage,
+                   CreateTime, UpdateTime
+            FROM PrintJobs
+            ORDER BY CreateTime DESC";
+
+        var jobs = await connection.QueryAsync<PrintJob>(sql);
+        return jobs.ToList();
+    }
+
+    // 获取单个打印作业
+    public async Task<PrintJob?> GetPrintJobAsync(string jobId)
+    {
+        using var connection = CreateConnection();
+        var sql = @"
+            SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                   Status, ImagePath, PrinterName, ErrorMessage,
+                   CreateTime, UpdateTime
+            FROM PrintJobs
+            WHERE JobId = @JobId";
+
+        return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { JobId = jobId });
+    }
+
+    // 删除打印作业
+    public async Task<bool> DeletePrintJobAsync(string jobId)
+    {
+        using var connection = CreateConnection();
+        var sql = "DELETE FROM PrintJobs WHERE JobId = @JobId";
+        var rowsAffected = await connection.ExecuteAsync(sql, new { JobId = jobId });
+        return rowsAffected > 0;
     }
 }

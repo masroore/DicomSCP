@@ -37,69 +37,95 @@
         
         /* 服务状态样式 */
         .service-status-group {
-            display: flex;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 4px 8px;
-            border-radius: 3px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-gap: 2px;
+            background: rgba(33, 37, 41, 0.1);
+            padding: 3px;
+            min-width: 200px;
         }
         
         .service-status {
             display: flex;
             align-items: center;
-            gap: 4px;
-            padding: 0 4px;
+            gap: 3px;
+            padding: 1px 3px;
+            background: transparent;
+            height: 22px;
         }
         
         .service-name {
-            color: #adb5bd;
-            font-size: 0.8rem;
-            min-width: 45px;
+            color: rgba(173, 181, 189, 0.8);
+            font-size: 0.75rem;
+            min-width: 52px;
+            text-align: right;
+            line-height: 1;
         }
         
         .service-status .badge {
             font-size: 0.7rem;
-            padding: 0.2em 0.5em;
+            padding: 0.15em 0.4em;
             font-weight: normal;
-            min-width: 48px;
+            min-width: 45px;
             text-align: center;
+            background-color: rgba(33, 37, 41, 0.3);
+            line-height: 1.2;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 18px;
         }
         
-        /* 状态徽章颜色 */
         .service-status .badge.bg-success {
-            background-color: rgba(25, 135, 84, 0.9) !important;
+            background-color: rgba(25, 135, 84, 0.7) !important;
         }
         
         .service-status .badge.bg-danger {
-            background-color: rgba(220, 53, 69, 0.9) !important;
+            background-color: rgba(220, 53, 69, 0.7) !important;
         }
         
         .service-status .badge.bg-warning {
-            background-color: rgba(255, 193, 7, 0.9) !important;
+            background-color: rgba(255, 193, 7, 0.7) !important;
             color: #000;
         }
         
         .service-status .badge.bg-secondary {
-            background-color: rgba(108, 117, 125, 0.9) !important;
+            background-color: rgba(108, 117, 125, 0.7) !important;
         }
 
         /* 重启按钮样式 */
         .service-restart-btn {
-            background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #adb5bd;
-            padding: 4px 8px;
-            font-size: 0.8rem;
+            background: rgba(33, 37, 41, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: rgba(255, 255, 255, 0.9);
+            padding: 3px 10px;
+            font-size: 0.85rem;
             margin-left: 8px;
-            border-radius: 3px;
             transition: all 0.2s;
+            height: 30px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            margin-top: 0;
+            border-radius: 3px;
+            letter-spacing: 1px;
         }
         
         .service-restart-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.15);
             color: #fff;
-            border-color: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+        }
+
+        .service-restart-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .service-restart-btn i {
+            font-size: 0.95rem;
+            margin-right: 4px;
         }
 
         /* 刷新按钮旋转动画 */
@@ -114,31 +140,34 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-0">
         <div class="container">
-            <a class="navbar-brand" href="#">DICOM SCP 管理系统</a>
+            <a class="navbar-brand py-2" href="#">DICOM管理系统</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#worklist" data-page="worklist">RIS预约</a>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#worklist" data-page="worklist">RIS预约</a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#images" data-page="images">影像管理</a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#qr" data-page="qr">查询检索</a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#store" data-page="store">发送图像</a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#print" data-page="print">打印管理</a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#logs" data-page="logs">日志管理</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#images" data-page="images">影像管理</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#qr" data-page="qr">查询检索</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#store" data-page="store">发送图像</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#logs" data-page="logs">日志管理</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#settings" data-page="settings">系统设置</a>
+                        <a class="nav-link py-2" href="#settings" data-page="settings">系统设置</a>
                     </li>
                 </ul>
                 <!-- 右侧用户菜单 -->
@@ -151,16 +180,20 @@
                                     <span id="storeScp-status" class="badge bg-secondary">加载中...</span>
                                 </span>
                                 <span class="service-status">
-                                    <span class="service-name">Worklist</span>
+                                    <span class="service-name">WListSCP</span>
                                     <span id="worklistScp-status" class="badge bg-secondary">加载中...</span>
                                 </span>
                                 <span class="service-status">
                                     <span class="service-name">QRSCP</span>
                                     <span id="qrScp-status" class="badge bg-secondary">加载中...</span>
                                 </span>
+                                <span class="service-status">
+                                    <span class="service-name">PrintSCP</span>
+                                    <span id="printScp-status" class="badge bg-secondary">加载中...</span>
+                                </span>
                             </div>
                             <button class="service-restart-btn" onclick="serviceManager.restartAllServices()">
-                                重启服务
+                                <i class="bi bi-arrow-clockwise"></i>重启服务
                             </button>
                         </div>
                     </li>
@@ -453,7 +486,7 @@
                             </div>
                             
                             <div class="mb-3">
-                                <label class="form-label">选择文件或拖拽到此处</label>
+                                <label class="form-label">选择文件或拖到此处</label>
                                 <div class="drop-zone border rounded p-4 text-center" id="dropZone">
                                     <div class="mb-3">
                                         <i class="bi bi-cloud-upload"></i>
@@ -527,6 +560,40 @@
                                 </div>
                                 <div id="logFiles-pagination"></div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 打印管理页面 -->
+            <div id="print-page" style="display: none;">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div id="print-jobs-stats">
+                                <!-- 打印作业统计信息将通过JavaScript动态加载 -->
+                            </div>
+                            <button class="btn btn-outline-primary" id="print-refresh">
+                                <i class="bi bi-arrow-clockwise"></i> 刷新
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 80px">作业ID</th>
+                                        <th style="width: 120px">患者姓名</th>
+                                        <th style="width: 120px">患者ID</th>
+                                        <th style="width: 120px">检查号</th>
+                                        <th style="width: 150px">创建时间</th>
+                                        <th style="width: 80px">状态</th>
+                                        <th style="width: 120px">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="print-jobs-table-body">
+                                    <!-- 打印作业列表将通过JavaScript动态加载 -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -730,16 +797,9 @@
                                             <ul>
                                                 <li>ImplicitVRLittleEndian - 隐式小端</li>
                                                 <li>ExplicitVRLittleEndian - 显式小端</li>
-                                                <li>JPEGProcess1 - JPEG基线（有损）</li>
-                                                <li>JPEGProcess2_4 - JPEG扩展（有损）</li>
-                                                <li>JPEGProcess14 - JPEG无损</li>
-                                                <li>JPEGProcess14SV1 - JPEG无损SV1</li>
-                                                <li>JPEGLSLossless - JPEG-LS无损</li>
-                                                <li>JPEGLSNearLossless - JPEG-LS近无损</li>
-                                                <li>JPEG2000Lossless - JPEG2000无损</li>
-                                                <li>JPEG2000Lossy - JPEG2000有损</li>
-                                                <li>RLELossless - RLE无损</li>
-                                                <li>DeflatedExplicitVRLittleEndian - Deflate压缩</li>
+                                                <li>JPEGProcess14 - JPEG无损压缩</li>
+                                                <li>JPEG2000Lossless - JPEG2000无损压缩</li>
+                                                <li>JPEGLSLossless - JPEG-LS无损压缩</li>
                                             </ul>
                                         </dd>
                                     </dl>
@@ -773,7 +833,7 @@
                             </div>
                         </div>
 
-                        <!-- QRSCP配置 -->
+                        <!-- QRSCP配置说明 -->
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrscpHelp">
@@ -796,13 +856,13 @@
                                         <dd>允许的调用方AE Title列表</dd>
                                         
                                         <dt>MoveDestinations</dt>
-                                        <dd>C-MOVE目标节点配置，包含：
+                                        <dd>C-MOVE目标节点配置列表，每个节点包含：
                                             <ul>
                                                 <li>Name - 节点名称</li>
                                                 <li>AeTitle - 节点AE Title</li>
-                                                <li>HostName - 主机名或IP</li>
+                                                <li>HostName - 主机名或IP地址</li>
                                                 <li>Port - 端口号</li>
-                                                <li>IsDefault - 是否默认节点</li>
+                                                <li>IsDefault - 是否为默认节点</li>
                                             </ul>
                                         </dd>
                                     </dl>
@@ -810,32 +870,27 @@
                             </div>
                         </div>
 
-                        <!-- 查询检索客户端配置 -->
+                        <!-- 打印服务配置 -->
                         <div class="accordion-item">
                             <h2 class="accordion-header">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrClientHelp">
-                                    查询检索客户端配置 (QueryRetrieveConfig和CStoreSCU)
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#printscpHelp">
+                                    打印服务配置 (PrintSCP)
                                 </button>
                             </h2>
-                            <div id="qrClientHelp" class="accordion-collapse collapse">
+                            <div id="printscpHelp" class="accordion-collapse collapse">
                                 <div class="accordion-body">
                                     <dl>
-                                        <dt>LocalAeTitle</dt>
-                                        <dd>本地AE Title，用于 QueryRetrieveSCU 和 CStoreSCU。 例如：QUERYSCU</dd>
+                                        <dt>AeTitle</dt>
+                                        <dd>打印服务的AE Title。例如：PRINTSCP</dd>
                                         
-                                        <dt>LocalPort</dt>
-                                        <dd>本地端口号，用于 QueryRetrieveSCU 和 CStoreSCU。 建议：11115</dd>
+                                        <dt>Port</dt>
+                                        <dd>打印服务端口号。建议：11115</dd>
                                         
-                                        <dt>RemoteNodes</dt>
-                                        <dd>远程PACS节点配置，用于 QueryRetrieveSCU 和 CStoreSCU。包含：
-                                            <ul>
-                                                <li>Name - 节点名称，用于显示</li>
-                                                <li>AeTitle - 远程节点AE Title</li>
-                                                <li>HostName - 远程主机名或IP</li>
-                                                <li>Port - 远程端口号</li>
-                                                <li>IsDefault - 是否默认节点</li>
-                                            </ul>
-                                        </dd>
+                                        <dt>ValidateCallingAE</dt>
+                                        <dd>是否验证调用方AE Title。默认：false</dd>
+                                        
+                                        <dt>AllowedCallingAEs</dt>
+                                        <dd>允许的调用方AE Title列表</dd>
                                     </dl>
                                 </div>
                             </div>
@@ -852,7 +907,7 @@
                                 <div class="accordion-body">
                                     <dl>
                                         <dt>LogPath</dt>
-                                        <dd>日志根目录。例如：logs</dd>
+                                        <dd>日志根目录。例如logs</dd>
                                         
                                         <dt>RetainedDays</dt>
                                         <dd>日志保留天数。默认：31</dd>
@@ -926,6 +981,7 @@
     <script src="js/logs.js"></script>
     <script src="js/services.js"></script>
     <script src="js/config.js"></script>
+    <script src="js/print.js"></script>
     <script>
         function logout() {
             fetch('/api/auth/logout', { method: 'POST' })
@@ -941,6 +997,14 @@
                 <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body" id="storeToastMessage">
+            </div>
+        </div>
+        <div id="printToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto" id="printToastTitle">通知</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="printToastMessage">
             </div>
         </div>
     </div>

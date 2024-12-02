@@ -24,6 +24,7 @@ class ServiceManager {
             this.updateServiceStatus('storeScp', status.store);
             this.updateServiceStatus('worklistScp', status.worklist);
             this.updateServiceStatus('qrScp', status.qr);
+            this.updateServiceStatus('printScp', status.print);
             
         } catch (error) {
             console.error('获取服务状态失败:', error);
@@ -57,7 +58,7 @@ class ServiceManager {
     }
 
     setAllServicesUnknown() {
-        ['storeScp', 'worklistScp', 'qrScp'].forEach(serviceId => {
+        ['storeScp', 'worklistScp', 'qrScp', 'printScp'].forEach(serviceId => {
             const element = document.getElementById(`${serviceId}-status`);
             if (element) {
                 element.className = 'badge bg-warning';
@@ -73,7 +74,7 @@ class ServiceManager {
 
         try {
             // 显示所有服务为重启中状态
-            ['storeScp', 'worklistScp', 'qrScp'].forEach(serviceId => {
+            ['storeScp', 'worklistScp', 'qrScp', 'printScp'].forEach(serviceId => {
                 const element = document.getElementById(`${serviceId}-status`);
                 if (element) {
                     element.className = 'badge bg-warning';

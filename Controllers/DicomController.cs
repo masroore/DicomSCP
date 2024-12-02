@@ -56,6 +56,12 @@ public class DicomController : ControllerBase
                 aeTitle = _settings.QRSCP.AeTitle,
                 port = _settings.QRSCP.Port,
                 isRunning = serverStatus.Services.QrScp
+            },
+            print = new
+            {
+                aeTitle = _settings.PrintSCP.AeTitle,
+                port = _settings.PrintSCP.Port,
+                isRunning = serverStatus.Services.PrintScp
             }
         });
     }

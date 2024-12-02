@@ -65,7 +65,7 @@ $(document).ready(function() {
 // 切换页面函数
 function switchPage(page) {
     // 隐藏所有页面
-    $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page').hide();
+    $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page, #print-page').hide();
     
     // 移除所有导航链接的active类
     $('.nav-link').removeClass('active');
@@ -91,38 +91,12 @@ function switchPage(page) {
         if (!window.logManager) {
             window.logManager = new LogManager();
         }
-    }
-}
-
-// 加载页面内容
-function loadPage(page) {
-    switch(page) {
-        case 'worklist':
-            $('#worklist-page').show();
-            $('#images-page, #qr-page, #store-page, #settings-page').hide();
-            loadWorklistData();
-            break;
-        case 'images':
-            $('#images-page').show();
-            $('#worklist-page, #qr-page, #store-page, #settings-page').hide();
-            loadImagesData();
-            break;
-        case 'qr':
-            $('#qr-page').show();
-            $('#worklist-page, #images-page, #store-page, #settings-page').hide();
-            loadQRNodes();
-            break;
-        case 'store':
-            $('#store-page').show();
-            $('#worklist-page, #images-page, #qr-page, #settings-page, #logs-page').hide();
-            if (typeof loadStoreNodes === 'function') {
-                loadStoreNodes();
-            }
-            break;
-        case 'settings':
-            $('#settings-page').show();
-            $('#worklist-page, #images-page, #qr-page, #store-page, #logs-page').hide();
-            break;
+    } else if (page === 'print') {
+        if (!window.printManager) {
+            window.printManager = new PrintManager();
+        } else {
+            window.printManager.loadPrintJobs();
+        }
     }
 }
 
