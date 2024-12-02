@@ -125,4 +125,37 @@ public class StoreSCUController : ControllerBase
             return StatusCode(500, ex.Message);
         }
     }
+
+    [HttpPost("sendStudy/{remoteName}/{studyInstanceUid}")]
+    public async Task<IActionResult> SendStudy(string remoteName, string studyInstanceUid)
+    {
+        try
+        {
+            // 获取研究相关的所有文件路径
+            var repository = HttpContext.RequestServices.GetRequiredService<DicomRepository>();
+            var instances = await repository.GetInstancesByStudyUid(studyInstanceUid);
+            
+            if (!instances.Any())
+            {
+                return NotFound("未找到相关图像");
+            }
+
+            // 获取所有文件的完整路径
+            var settings = HttpContext.RequestServices.GetRequiredService<IOptions<DicomSettings>>().Value;
+            var filePaths = instances.Select(i => Path.Combine(settings.StoragePath, i.FilePath));
+
+            // 发送文件
+            await _storeSCU.SendFilesAsync(filePaths, remoteName);
+            
+            return Ok(new { 
+                message = "发送成功",
+                totalFiles = filePaths.Count()
+            });
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("Api", ex, "发送研究失败 - StudyInstanceUid: {StudyUid}", studyInstanceUid);
+            return StatusCode(500, new { message = "发送失败" });
+        }
+    }
 } 

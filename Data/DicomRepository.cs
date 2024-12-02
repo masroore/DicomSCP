@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text;
 using DicomSCP.Data;
+using System.IO;
 
 namespace DicomSCP.Data;
 
@@ -251,6 +252,13 @@ public class DicomRepository : BaseRepository, IDisposable
     private void InitializeDatabase()
     {
         if (_initialized) return;
+
+        // 确保数据库目录存在
+        var dbPath = Path.GetDirectoryName(_connectionString.Replace("Data Source=", "").Trim());
+        if (!string.IsNullOrEmpty(dbPath))
+        {
+            Directory.CreateDirectory(dbPath);
+        }
 
         using var connection = new SqliteConnection(_connectionString);
         connection.Open();

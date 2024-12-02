@@ -307,6 +307,15 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     return new DicomCStoreResponse(request, DicomStatus.InvalidAttributeValue);
                 }
 
+                // 获取检查日期，如果没有则使用当前日期
+                var studyDate = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, 
+                    DateTime.Now.ToString("yyyyMMdd"));
+                
+                // 解析年月日
+                var year = studyDate.Substring(0, 4);
+                var month = studyDate.Substring(4, 2);
+                var day = studyDate.Substring(6, 2);
+
                 var studyUid = request.Dataset.GetSingleValue<string>(DicomTag.StudyInstanceUID).Trim();
                 var seriesUid = request.Dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID).Trim();
                 var instanceUid = request.SOPInstanceUID.UID;
@@ -332,8 +341,16 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     // 保存压缩后的文件
                     await compressedFile.SaveAsync(tempFilePath);
 
-                    // 构建相对路径和完整路径
-                    var relativePath = Path.Combine(studyUid, seriesUid, $"{instanceUid}.dcm");
+                    // 构建新的文件路径：年/月/日/StudyUID/SeriesUID/SopUID.dcm
+                    var relativePath = Path.Combine(
+                        year,
+                        month,
+                        day,
+                        studyUid,
+                        seriesUid,
+                        $"{instanceUid}.dcm"
+                    );
+
                     var targetFilePath = Path.Combine(StoragePath, relativePath);
                     var targetPath = Path.GetDirectoryName(targetFilePath);
 

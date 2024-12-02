@@ -263,6 +263,7 @@ function displayImagesPage(page) {
             <td>${formatDateTime(item.studyDate)}</td>
             <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
             <td>
+                <button class="btn btn-primary btn-sm me-1" onclick="sendStudy('${item.studyInstanceUid}', event)">回传</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteStudy('${item.studyInstanceUid}', event)">删除</button>
             </td>
         </tr>
@@ -823,6 +824,7 @@ function displayFilteredImagesPage(filteredData) {
             <td>${formatDateTime(item.studyDate)}</td>
             <td title="${item.studyDescription || ''}">${item.studyDescription || ''}</td>
             <td>
+                <button class="btn btn-primary btn-sm me-1" onclick="sendStudy('${item.studyInstanceUid}', event)">回传</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteStudy('${item.studyInstanceUid}', event)">删除</button>
             </td>
         </tr>
@@ -1227,5 +1229,152 @@ function resetQRSearch() {
     
     // 更新分页信息
     updateQRPagination(0);
+}
+
+// 加载远程节点列表
+async function loadRemoteNodes() {
+    try {
+        const response = await fetch('/api/QueryRetrieve/nodes');
+        if (!response.ok) {
+            throw new Error('获取节点列表失败');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('加载PACS节点失败:', error);
+        throw error;
+    }
+}
+
+// 回传检查
+async function sendStudy(studyInstanceUid, event) {
+    // 阻止事件冒泡
+    if (event) {
+        event.stopPropagation();
+    }
+
+    try {
+        // 加载远程节点列表
+        const nodes = await loadRemoteNodes();
+        if (!nodes || nodes.length === 0) {
+            alert('未配置远程节点');
+            return;
+        }
+
+        // 如果只有一个节点，直接使用；否则让用户选择
+        let selectedNode;
+        if (nodes.length === 1) {
+            selectedNode = nodes[0];
+        } else {
+            const nodeOptions = nodes.map(node => 
+                `${node.name} (${node.aeTitle}@${node.hostName}:${node.port})`
+            );
+            const selectedIndex = await showNodeSelectionDialog(nodeOptions);
+            if (selectedIndex === -1) return;
+            selectedNode = nodes[selectedIndex];
+        }
+
+        // 调用发送接口
+        const response = await fetch(`/api/StoreSCU/send/${studyInstanceUid}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                nodeId: selectedNode.name
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('发送失败');
+        }
+
+        const result = await response.json();
+        
+        // 显示结果提示
+        const toastEl = document.getElementById('storeToast');
+        const titleEl = document.getElementById('storeToastTitle');
+        const messageEl = document.getElementById('storeToastMessage');
+        
+        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+        toastEl.classList.add('bg-success', 'text-white');
+        titleEl.textContent = '操作成功';
+        messageEl.textContent = '图像发送已开始';
+        
+        const storeToast = new bootstrap.Toast(toastEl);
+        storeToast.show();
+    } catch (error) {
+        console.error('发送失败:', error);
+        const toastEl = document.getElementById('storeToast');
+        const titleEl = document.getElementById('storeToastTitle');
+        const messageEl = document.getElementById('storeToastMessage');
+        
+        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+        toastEl.classList.add('bg-danger', 'text-white');
+        titleEl.textContent = '操作失败';
+        messageEl.textContent = error.message || '发送失败，请检查网络连接';
+        
+        const storeToast = new bootstrap.Toast(toastEl);
+        storeToast.show();
+    }
+}
+
+// 显示节点选择对话框
+function showNodeSelectionDialog(nodes) {
+    return new Promise((resolve) => {
+        const html = `
+            <div class="modal fade" id="nodeSelectModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">选择目标节点</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <select class="form-select" id="nodeSelect">
+                                ${nodes.map((node, index) => 
+                                    `<option value="${index}">${node}</option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" onclick="confirmNodeSelection()">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 添加模态框到页面
+        document.body.insertAdjacentHTML('beforeend', html);
+        
+        const modal = new bootstrap.Modal(document.getElementById('nodeSelectModal'));
+        
+        // 处理确认选择
+        window.confirmNodeSelection = () => {
+            const select = document.getElementById('nodeSelect');
+            const selectedIndex = parseInt(select.value);
+            modal.hide();
+            resolve(selectedIndex);
+            
+            // 清理模态框
+            setTimeout(() => {
+                document.getElementById('nodeSelectModal').remove();
+                delete window.confirmNodeSelection;
+            }, 300);
+        };
+        
+        // 处理取消选择
+        document.getElementById('nodeSelectModal').addEventListener('hidden.bs.modal', () => {
+            resolve(-1);
+            // 清理模态框
+            setTimeout(() => {
+                document.getElementById('nodeSelectModal').remove();
+                delete window.confirmNodeSelection;
+            }, 300);
+        });
+        
+        modal.show();
+    });
 }
 
