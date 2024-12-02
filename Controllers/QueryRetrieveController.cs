@@ -66,17 +66,53 @@ public class QueryRetrieveController : ControllerBase
             dataset.Add(DicomTag.NumberOfStudyRelatedInstances, "");
             dataset.Add(DicomTag.AccessionNumber, "");
 
-            // 添加查询参数
-            foreach (var param in queryParams)
+            // 处理查询参数
+            if (queryParams != null)
             {
-                if (DicomDictionary.Default[param.Key] != null)
+                // 患者ID
+                if (queryParams.TryGetValue("patientId", out var patientId) && !string.IsNullOrWhiteSpace(patientId))
                 {
-                    dataset.Add(DicomDictionary.Default[param.Key], param.Value);
+                    dataset.AddOrUpdate(DicomTag.PatientID, patientId);
+                }
+
+                // 患者姓名（添加模糊匹配）
+                if (queryParams.TryGetValue("patientName", out var patientName) && !string.IsNullOrWhiteSpace(patientName))
+                {
+                    dataset.AddOrUpdate(DicomTag.PatientName, $"*{patientName}*");
+                }
+
+                // 检查号
+                if (queryParams.TryGetValue("accessionNumber", out var accessionNumber) && !string.IsNullOrWhiteSpace(accessionNumber))
+                {
+                    dataset.AddOrUpdate(DicomTag.AccessionNumber, accessionNumber);
+                }
+
+                // 检查类型
+                if (queryParams.TryGetValue("modality", out var modality) && !string.IsNullOrWhiteSpace(modality))
+                {
+                    dataset.AddOrUpdate(DicomTag.ModalitiesInStudy, modality);
+                }
+
+                // 检查日期
+                if (queryParams.TryGetValue("studyDate", out var studyDate) && !string.IsNullOrWhiteSpace(studyDate))
+                {
+                    // 转换日期格式为DICOM格式 (YYYYMMDD)
+                    if (DateTime.TryParse(studyDate, out var date))
+                    {
+                        dataset.AddOrUpdate(DicomTag.StudyDate, date.ToString("yyyyMMdd"));
+                    }
                 }
             }
 
+            DicomLogger.Information("Api", "执行Study查询 - Node: {Node}, Params: {Params}", 
+                nodeId, 
+                queryParams ?? new Dictionary<string, string>());
+
             var results = await _queryRetrieveScu.QueryStudyAsync(node, dataset);
             var studyResults = results.Select(DicomStudyResult.FromDataset).ToList();
+            
+            DicomLogger.Information("Api", "Study查询完成 - 找到 {Count} 条结果", studyResults.Count);
+            
             return Ok(studyResults);
         }
         catch (Exception ex)
@@ -195,4 +231,51 @@ public class QueryRetrieveController : ControllerBase
 public class MoveRequest
 {
     public string DestinationAe { get; set; } = string.Empty;
+}
+
+// 添加用于转换查询结果的类
+public class DicomStudyResult
+{
+    public string PatientId { get; set; } = string.Empty;
+    public string PatientName { get; set; } = string.Empty;
+    public string AccessionNumber { get; set; } = string.Empty;
+    public string Modality { get; set; } = string.Empty;
+    public DateTime? StudyDate { get; set; }
+    public string StudyDescription { get; set; } = string.Empty;
+    public string StudyInstanceUid { get; set; } = string.Empty;
+    public int NumberOfSeries { get; set; }
+    public int NumberOfInstances { get; set; }
+
+    public static DicomStudyResult FromDataset(DicomDataset dataset)
+    {
+        DateTime? studyDate = null;
+        try
+        {
+            var dateStr = dataset.GetSingleValueOrDefault(DicomTag.StudyDate, string.Empty);
+            if (!string.IsNullOrEmpty(dateStr) && dateStr.Length == 8)
+            {
+                var year = int.Parse(dateStr.Substring(0, 4));
+                var month = int.Parse(dateStr.Substring(4, 2));
+                var day = int.Parse(dateStr.Substring(6, 2));
+                studyDate = new DateTime(year, month, day);
+            }
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Warning("Api", ex, "解析研究日期失败");
+        }
+
+        return new DicomStudyResult
+        {
+            PatientId = dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty),
+            PatientName = dataset.GetSingleValueOrDefault(DicomTag.PatientName, string.Empty),
+            AccessionNumber = dataset.GetSingleValueOrDefault(DicomTag.AccessionNumber, string.Empty),
+            Modality = dataset.GetSingleValueOrDefault(DicomTag.ModalitiesInStudy, string.Empty),
+            StudyDate = studyDate,
+            StudyDescription = dataset.GetSingleValueOrDefault(DicomTag.StudyDescription, string.Empty),
+            StudyInstanceUid = dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, string.Empty),
+            NumberOfSeries = dataset.GetSingleValueOrDefault(DicomTag.NumberOfStudyRelatedSeries, 0),
+            NumberOfInstances = dataset.GetSingleValueOrDefault(DicomTag.NumberOfStudyRelatedInstances, 0)
+        };
+    }
 }

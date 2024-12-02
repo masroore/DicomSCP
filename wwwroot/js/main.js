@@ -958,12 +958,12 @@ function displayQRPage(page) {
             <td>${item.patientName || ''}</td>
             <td>${item.accessionNumber || ''}</td>
             <td>${item.modalities || item.modality || ''}</td>
-            <td>${formatDate(item.studyDate) || ''}</td>
+            <td>${formatQRDate(item.studyDate) || ''}</td>
             <td>${item.studyDescription || ''}</td>
-            <td>${item.seriesCount || 0}</td>
-            <td>${item.instanceCount || 0}</td>
+            <td>${item.numberOfSeries || 0}</td>
+            <td>${item.numberOfInstances || 0}</td>
             <td>
-                <button class="btn btn-sm btn-success" onclick="moveQRStudy('${item.studyInstanceUid}', event)">获取</button>
+                <button class="btn btn-sm btn-success" onclick="moveQRStudy('${item.studyInstanceUid}', event)">CMOVE</button>
             </td>
         </tr>
     `).join('');
@@ -1038,7 +1038,7 @@ async function toggleQRSeriesInfo(row) {
                     <td>${series.instanceCount || 0} 张</td>
                     <td>
                         <button class="btn btn-primary btn-sm py-0" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
-                            获取
+                            CMOVE
                         </button>
                     </td>
                 </tr>
@@ -1056,6 +1056,7 @@ async function toggleQRSeriesInfo(row) {
     }
 }
 
+// 获取检查
 // 获取检查
 async function moveQRStudy(studyUid, event) {
     // 阻止事件冒泡，防止触发行的点击事件
@@ -1081,17 +1082,37 @@ async function moveQRStudy(studyUid, event) {
         }
 
         const result = await response.json();
-        if (result.success) {
-            alert('检查传输已开始');
+        if (response.ok && result.success !== false) {
+            const toastEl = document.getElementById('storeToast');
+            const titleEl = document.getElementById('storeToastTitle');
+            const messageEl = document.getElementById('storeToastMessage');
+            
+            toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+            toastEl.classList.add('bg-success', 'text-white');
+            titleEl.textContent = '操作成功';
+            messageEl.textContent = '检查传输已开始';
+            
+            const storeToast = new bootstrap.Toast(toastEl);
+            storeToast.show();
         } else {
-            alert(result.message || '传输失败');
+            throw new Error(result.message || '传输失败');
         }
     } catch (error) {
         console.error('传输失败:', error);
-        alert('传输失败，请检查网络连接');
+        const toastEl = document.getElementById('storeToast');
+        const titleEl = document.getElementById('storeToastTitle');
+        const messageEl = document.getElementById('storeToastMessage');
+        
+        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+        toastEl.classList.add('bg-danger', 'text-white');
+        titleEl.textContent = '操作失败';
+        messageEl.textContent = error.message || '传输失败，请检查网络连接';
+        
+        const storeToast = new bootstrap.Toast(toastEl);
+        storeToast.show();
     }
 }
-// 获取序列
+
 async function moveQRSeries(studyUid, seriesUid, event) {
     // 阻止事件冒泡
     if (event) {
@@ -1117,17 +1138,36 @@ async function moveQRSeries(studyUid, seriesUid, event) {
         }
 
         const result = await response.json();
-        if (result.success) {
-            alert('序列传输已开始');
+        if (response.ok && result.success !== false) {
+            const toastEl = document.getElementById('storeToast');
+            const titleEl = document.getElementById('storeToastTitle');
+            const messageEl = document.getElementById('storeToastMessage');
+            
+            toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+            toastEl.classList.add('bg-success', 'text-white');
+            titleEl.textContent = '操作成功';
+            messageEl.textContent = '序列传输已开始';
+            
+            const storeToast = new bootstrap.Toast(toastEl);
+            storeToast.show();
         } else {
-            alert(result.message || '传输失败');
+            throw new Error(result.message || '传输失败');
         }
     } catch (error) {
         console.error('传输失败:', error);
-        alert('传输失败，请检查网络连接');
+        const toastEl = document.getElementById('storeToast');
+        const titleEl = document.getElementById('storeToastTitle');
+        const messageEl = document.getElementById('storeToastMessage');
+        
+        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+        toastEl.classList.add('bg-danger', 'text-white');
+        titleEl.textContent = '操作失败';
+        messageEl.textContent = error.message || '传输失败，请检查网络连接';
+        
+        const storeToast = new bootstrap.Toast(toastEl);
+        storeToast.show();
     }
 }
-
 // 格式化日期
 function formatDate(dateStr) {
     if (!dateStr) return '';
@@ -1159,3 +1199,33 @@ if (page === 'logs') {
     }
 }
 
+function formatQRDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).replace(/\//g, '-');
+}
+
+// 重置QR查询条件
+function resetQRSearch() {
+    // 重置表单
+    document.getElementById('qrSearchForm').reset();
+    
+    // 清空结果
+    qrAllData = [];
+    qrCurrentPage = 1;
+    
+    // 更新显示
+    const tbody = document.getElementById('qr-table-body');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="9" class="text-center">请输入查询条件</td>
+        </tr>
+    `;
+    
+    // 更新分页信息
+    updateQRPagination(0);
+}
