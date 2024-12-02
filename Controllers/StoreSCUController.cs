@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Services;
 using DicomSCP.Configuration;
 using Microsoft.Extensions.Options;
+using DicomSCP.Data;
 
 namespace DicomSCP.Controllers;
 
@@ -133,7 +134,7 @@ public class StoreSCUController : ControllerBase
         {
             // 获取研究相关的所有文件路径
             var repository = HttpContext.RequestServices.GetRequiredService<DicomRepository>();
-            var instances = await repository.GetInstancesByStudyUid(studyInstanceUid);
+            var instances = repository.GetInstancesByStudyUid(studyInstanceUid);
             
             if (!instances.Any())
             {
