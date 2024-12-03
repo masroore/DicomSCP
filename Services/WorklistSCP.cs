@@ -9,6 +9,13 @@ using Microsoft.Extensions.Configuration;
 
 namespace DicomSCP.Services;
 
+public record WorklistQueryParameters(
+    string PatientId,
+    string AccessionNumber,
+    (string StartDate, string EndDate) DateRange,
+    string Modality,
+    string ScheduledStationName);
+
 public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvider, IDicomCEchoProvider
 {
     private static DicomSettings? _settings;
@@ -54,15 +61,42 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
     {
-        if (_settings?.WorklistSCP.ValidateCallingAE == true &&
-            !_settings.WorklistSCP.AllowedCallingAEs.Contains(association.CallingAE))
+        var calledAE = association.CalledAE;
+        var expectedAE = _settings?.WorklistSCP.AeTitle ?? string.Empty;
+
+        if (!string.Equals(expectedAE, calledAE, StringComparison.OrdinalIgnoreCase))
         {
-            DicomLogger.Warning("WorklistSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+            DicomLogger.Warning("WorklistSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
+                calledAE, expectedAE);
+            return SendAssociationRejectAsync(
+                DicomRejectResult.Permanent,
+                DicomRejectSource.ServiceUser,
+                DicomRejectReason.CalledAENotRecognized);
+        }
+
+        if (string.IsNullOrEmpty(association.CallingAE))
+        {
+            DicomLogger.Warning("WorklistSCP", "拒绝空的 Calling AE");
             return SendAssociationRejectAsync(
                 DicomRejectResult.Permanent,
                 DicomRejectSource.ServiceUser,
                 DicomRejectReason.CallingAENotRecognized);
         }
+
+        if (_settings?.WorklistSCP.ValidateCallingAE == true)
+        {
+            if (!_settings.WorklistSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
+            {
+                DicomLogger.Warning("WorklistSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.CallingAENotRecognized);
+            }
+        }
+
+        DicomLogger.Information("WorklistSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+            calledAE, association.CallingAE);
 
         foreach (var pc in association.PresentationContexts)
         {
@@ -107,6 +141,9 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             yield break;
         }
 
+        DicomLogger.Information("WorklistSCP", "收到工作列表查询请求 - 原始数据集: {@Dataset}", 
+            request.Dataset.ToDictionary(x => x.Tag.ToString(), x => x.ToString()));
+
         var responses = await Task.Run(() => ProcessWorklistQuery(request));
         foreach (var response in responses)
         {
@@ -119,12 +156,20 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         List<WorklistItem> worklistItems;
         try
         {
-            var filters = ExtractFilters(request.Dataset);
-            worklistItems = QueryWorklistItems(filters);
+            var parameters = ExtractQueryParameters(request);
+
+            worklistItems = _repository?.GetWorklistItems(
+                parameters.PatientId,
+                parameters.AccessionNumber,
+                parameters.DateRange,
+                parameters.Modality,
+                parameters.ScheduledStationName) ?? new List<WorklistItem>();
+
+            DicomLogger.Information("WorklistSCP", "查询到工作列表项: {Count} 条记录", worklistItems.Count);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("WorklistSCP", ex, "工作列表查询失败");
+            DicomLogger.Error("WorklistSCP", ex, "工作列表查询失败: {Message}", ex.Message);
             return new[] { new DicomCFindResponse(request, DicomStatus.ProcessingFailure) };
         }
 
@@ -178,7 +223,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             return _repository.GetWorklistItems(
                 filters.PatientId,
                 filters.AccessionNumber,
-                filters.ScheduledDateTime,
+                (filters.ScheduledDateTime, filters.ScheduledDateTime),
                 filters.Modality,
                 filters.ScheduledStationName);
         }
@@ -304,16 +349,113 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         }
     }
 
-    private (string PatientId, string AccessionNumber, string ScheduledDateTime, 
-             string Modality, string ScheduledStationName) ExtractFilters(DicomDataset dataset)
+    private WorklistQueryParameters ExtractQueryParameters(DicomCFindRequest request)
     {
-        return (
-            dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty),
-            dataset.GetSingleValueOrDefault(DicomTag.AccessionNumber, string.Empty),
-            dataset.GetSingleValueOrDefault(DicomTag.ScheduledProcedureStepStartDate, string.Empty),
-            dataset.GetSingleValueOrDefault(DicomTag.Modality, string.Empty),
-            dataset.GetSingleValueOrDefault(DicomTag.ScheduledStationName, string.Empty)
+        // 记录原始请求参数
+        DicomLogger.Debug("WorklistSCP", "接收到查询请求: {@Tags}", 
+            request.Dataset.Where(x => !x.Tag.IsPrivate)
+                         .ToDictionary(x => x.Tag.ToString(), x => x.ToString()));
+
+        var modality = GetModality(request.Dataset);
+        var dateRange = GetDateRange(request.Dataset);
+        
+        var parameters = new WorklistQueryParameters(
+            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientID, string.Empty),
+            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
+            dateRange,
+            modality,
+            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.ScheduledStationName, string.Empty)
         );
+
+        DicomLogger.Information("WorklistSCP", "解析后的查询参数 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}, " +
+            "日期范围: {StartDate} - {EndDate}, Modality: {Modality}, StationName: {StationName}",
+            parameters.PatientId,
+            parameters.AccessionNumber,
+            parameters.DateRange.StartDate,
+            parameters.DateRange.EndDate,
+            parameters.Modality,
+            parameters.ScheduledStationName);
+
+        return parameters;
+    }
+
+    private string GetModality(DicomDataset dataset)
+    {
+        // 首先尝试从 ScheduledProcedureStep Sequence 获取
+        var modality = string.Empty;
+        if (dataset.Contains(DicomTag.ScheduledProcedureStepSequence))
+        {
+            var stepSequence = dataset.GetSequence(DicomTag.ScheduledProcedureStepSequence);
+            if (stepSequence.Items.Any())
+            {
+                modality = stepSequence.Items[0].GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
+                if (!string.IsNullOrEmpty(modality))
+                {
+                    DicomLogger.Debug("WorklistSCP", "从 ScheduledProcedureStep 获取到 Modality: {Modality}", modality);
+                    return modality;
+                }
+            }
+        }
+
+        // 如果没有找到，试从根级别获取
+        modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
+        DicomLogger.Debug("WorklistSCP", "从根级别获取到 Modality: {Modality}", modality);
+        return modality;
+    }
+
+    private (string StartDate, string EndDate) GetDateRange(DicomDataset dataset)
+    {
+        var today = DateTime.Now.ToString("yyyyMMdd");
+        string startDate, endDate;
+
+        if (dataset.Contains(DicomTag.ScheduledProcedureStepStartDate))
+        {
+            var dateElement = dataset.GetDicomItem<DicomElement>(DicomTag.ScheduledProcedureStepStartDate);
+            var values = dateElement?.Get<string[]>() ?? Array.Empty<string>();
+
+            if (values.Length > 0)
+            {
+                var validDates = values
+                    .Where(v => !string.IsNullOrEmpty(v) && v.Length == 8)
+                    .ToList();
+
+                if (validDates.Any())
+                {
+                    startDate = validDates.Min() ?? today;
+                    endDate = today;
+                    var validDatesStr = string.Join(",", validDates);
+                    DicomLogger.Debug("WorklistSCP", "日期处理: 有效日期={ValidDates}, 选择的日期范围: {StartDate} - {EndDate}", 
+                        validDatesStr, startDate, endDate);
+                }
+                else
+                {
+                    // 如果传了日期但无效，使用今天的日期范围
+                    startDate = today;
+                    endDate = today;
+                    DicomLogger.Debug("WorklistSCP", "日期处理: 无效日期, 使用今天: {Today}", today);
+                }
+            }
+            else
+            {
+                // 传了空的日期值，使用今天的日期范围
+                startDate = today;
+                endDate = today;
+                DicomLogger.Debug("WorklistSCP", "日期处理: 空日期值, 使用今天: {Today}", today);
+            }
+        }
+        else
+        {
+            // 没有传日期参数，使用过去30天到未来30天的范围
+            startDate = DateTime.Now.AddDays(-30).ToString("yyyyMMdd");
+            endDate = DateTime.Now.AddDays(30).ToString("yyyyMMdd");
+            DicomLogger.Debug("WorklistSCP", "日期处理: 未传日期, 使用默认范围: {StartDate} - {EndDate}", 
+                startDate, endDate);
+        }
+
+        var dateRange = (StartDate: startDate, EndDate: endDate);
+        DicomLogger.Information("WorklistSCP", "最终查询日期范围: {StartDate} - {EndDate}", 
+            dateRange.StartDate, dateRange.EndDate);
+        return dateRange;
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)

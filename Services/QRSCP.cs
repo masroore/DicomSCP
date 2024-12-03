@@ -64,50 +64,73 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             DicomLogger.Information("QRSCP", "收到关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
                 association.CalledAE, association.CallingAE);
 
-            if (_settings.QRSCP.ValidateCallingAE)
-            {
-                if (string.IsNullOrEmpty(association.CallingAE))
-                {
-                    DicomLogger.Warning("QRSCP", "拒绝空的 Calling AE");
-                    return SendAssociationRejectAsync(
-                        DicomRejectResult.Permanent,
-                        DicomRejectSource.ServiceUser,
-                        DicomRejectReason.CallingAENotRecognized);
-                }
+            // 验证 Called AE
+            var calledAE = association.CalledAE;
+            var expectedAE = _settings?.QRSCP.AeTitle ?? string.Empty;
 
-                if (!_settings.QRSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
-                {
-                    DicomLogger.Warning("QRSCP", "拒绝未授权的 Calling AE: {CallingAE}", association.CallingAE);
-                    return SendAssociationRejectAsync(
-                        DicomRejectResult.Permanent,
-                        DicomRejectSource.ServiceUser,
-                        DicomRejectReason.CallingAENotRecognized);
-                }
-            }
-
-            if (!string.Equals(_settings.QRSCP.AeTitle, association.CalledAE, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(expectedAE, calledAE, StringComparison.OrdinalIgnoreCase))
             {
                 DicomLogger.Warning("QRSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
-                    association.CalledAE, _settings.QRSCP.AeTitle);
+                    calledAE, expectedAE);
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,
                     DicomRejectSource.ServiceUser,
                     DicomRejectReason.CalledAENotRecognized);
             }
 
+            // 验证 Calling AE
+            if (string.IsNullOrEmpty(association.CallingAE))
+            {
+                DicomLogger.Warning("QRSCP", "拒绝空的 Calling AE");
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.CallingAENotRecognized);
+            }
+
+            // 只在配置了验证时才检查 AllowedCallingAEs
+            if (_settings?.QRSCP.ValidateCallingAE == true)
+            {
+                if (!_settings.QRSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
+                {
+                    DicomLogger.Warning("QRSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+                    return SendAssociationRejectAsync(
+                        DicomRejectResult.Permanent,
+                        DicomRejectSource.ServiceUser,
+                        DicomRejectReason.CallingAENotRecognized);
+                }
+            }
+
+            DicomLogger.Information("QRSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+                calledAE, association.CallingAE);
+
             foreach (var pc in association.PresentationContexts)
             {
-                // 让 fo-dicom 处理传输语法协商
-                pc.AcceptTransferSyntaxes(pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None 
-                    ? AcceptedImageTransferSyntaxes 
-                    : AcceptedTransferSyntaxes);
+                // 检查是否支持请求的服务
+                if (pc.AbstractSyntax == DicomUID.Verification ||                                // C-ECHO
+                    pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelFind || // C-FIND
+                    pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelMove || // C-MOVE
+                    pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelGet)    // C-GET
+                {
+                    DicomLogger.Information("QRSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
+                        association.CallingAE, pc.AbstractSyntax.Name);
+
+                    // 让 fo-dicom 处理传输语法协商
+                    pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
+                }
+                else
+                {
+                    DicomLogger.Warning("QRSCP", "拒绝不支持的服务 - AET: {CallingAE}, 服务: {Service}", 
+                        association.CallingAE, pc.AbstractSyntax.Name);
+                    pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
+                }
             }
 
             return SendAssociationAcceptAsync(association);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "处理关联请求时发生错误");
+            DicomLogger.Error("QRSCP", ex, "处理关联请求失败");
             return SendAssociationRejectAsync(
                 DicomRejectResult.Permanent,
                 DicomRejectSource.ServiceUser,
@@ -185,12 +208,24 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             // 从请求中获取查询参数
             var queryParams = ExtractStudyQueryParameters(request);
             
+            DicomLogger.Information("QRSCP", "Study级查询参数 - PatientId: {PatientId}, PatientName: {PatientName}, " +
+                "AccessionNumber: {AccessionNumber}, 日期范围: {StartDate} - {EndDate}, Modality: {Modality}",
+                queryParams.PatientId,
+                queryParams.PatientName,
+                queryParams.AccessionNumber,
+                queryParams.DateRange.StartDate,
+                queryParams.DateRange.EndDate,
+                queryParams.Modalities);
+
             // 从数据库查询数据
             var studies = await Task.Run(() => _repository.GetStudies(
                 queryParams.PatientId,
                 queryParams.PatientName,
                 queryParams.AccessionNumber,
-                queryParams.StudyDate));
+                queryParams.DateRange,
+                queryParams.Modalities));
+
+            DicomLogger.Information("QRSCP", "Study级查询结果 - 记录数: {Count}", studies.Count);
 
             // 构建响应
             foreach (var study in studies)
@@ -201,7 +236,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "Study级失败");
+            DicomLogger.Error("QRSCP", ex, "Study级查询失败: {Message}", ex.Message);
             responses.Add(new DicomCFindResponse(request, DicomStatus.ProcessingFailure));
         }
 
@@ -212,21 +247,148 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         string PatientId,
         string PatientName,
         string AccessionNumber,
-        string StudyDate);
+        (string StartDate, string EndDate) DateRange,
+        string[] Modalities);
 
     private StudyQueryParameters ExtractStudyQueryParameters(DicomCFindRequest request)
     {
-        return new StudyQueryParameters(
-            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientID, string.Empty),
-            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty),
-            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
-            request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, string.Empty));
+        // 处理可能为 null 的字符串
+        string ProcessValue(string? value) => 
+            (value?.Replace("*", "")) ?? string.Empty;
+
+        // 记录原始日期值
+        var studyDate = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, string.Empty);
+        var studyTime = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyTime, string.Empty);
+        if (!string.IsNullOrEmpty(studyDate))
+        {
+            DicomLogger.Debug("QRSCP", "查询日期: {Date}", studyDate);
+        }
+
+        // 处理日期范围
+        (string StartDate, string EndDate) ProcessDateRange(string? dateValue)
+        {
+            if (string.IsNullOrEmpty(dateValue))
+                return (string.Empty, string.Empty);  // 返回空，查询所有记录
+
+            // 移除可能的 VR 和标签信息
+            var cleanDateValue = dateValue;
+            if (dateValue.Contains("DA"))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(dateValue, @"\d{8}");
+                if (match.Success)
+                {
+                    cleanDateValue = match.Value;
+                }
+            }
+
+            // 处理 DICOM 日期范围格式
+            if (cleanDateValue.Contains("-"))
+            {
+                var parts = cleanDateValue.Split('-');
+                if (parts.Length == 2)
+                {
+                    var startDate = parts[0].Trim();
+                    var endDate = parts[1].Trim();
+
+                    // 处理开放式范围
+                    if (string.IsNullOrEmpty(startDate))
+                    {
+                        startDate = "19000101";  // 使用最小日期
+                    }
+                    if (string.IsNullOrEmpty(endDate))
+                    {
+                        endDate = "99991231";    // 使用最大日期
+                    }
+
+                    return (startDate, endDate);
+                }
+            }
+            
+            // 如果是单个日期，开始和结束日期相同
+            return (cleanDateValue, cleanDateValue);
+        }
+
+        var dateRange = ProcessDateRange(studyDate);
+        DicomLogger.Debug("QRSCP", "日期范围处理: 原始值={Original}, 开始={Start}, 结束={End}", 
+            studyDate,
+            dateRange.StartDate,
+            dateRange.EndDate);
+
+        // 处理 Modality 列表
+        string[] ProcessModalities(DicomDataset dataset)
+        {
+            var modalities = new List<string>();
+
+            // 尝试获取 ModalitiesInStudy
+            if (dataset.Contains(DicomTag.ModalitiesInStudy))
+            {
+                try
+                {
+                    var modalityValues = dataset.GetValues<string>(DicomTag.ModalitiesInStudy);
+                    if (modalityValues != null && modalityValues.Length > 0)
+                    {
+                        modalities.AddRange(modalityValues.Where(m => !string.IsNullOrEmpty(m)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DicomLogger.Warning("QRSCP", ex, "获取 ModalitiesInStudy 失败");
+                }
+            }
+
+            // 尝试获取单个 Modality
+            var singleModality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
+            if (!string.IsNullOrEmpty(singleModality) && !modalities.Contains(singleModality))
+            {
+                modalities.Add(singleModality);
+            }
+
+            DicomLogger.Debug("QRSCP", "处理设备类型: {@Modalities}", modalities);
+            return modalities.ToArray();
+        }
+
+        var parameters = new StudyQueryParameters(
+            ProcessValue(request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientID, string.Empty)),
+            ProcessValue(request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty)),
+            ProcessValue(request.Dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty)),
+            dateRange,
+            ProcessModalities(request.Dataset));
+
+        DicomLogger.Debug("QRSCP", "查询参数 - PatientId: {PatientId}, PatientName: {PatientName}, " +
+            "AccessionNumber: {AccessionNumber}, 日期范围: {StartDate} - {EndDate}, 设备类型: {Modalities}",
+            parameters.PatientId,
+            parameters.PatientName,
+            parameters.AccessionNumber,
+            parameters.DateRange.StartDate,
+            parameters.DateRange.EndDate,
+            string.Join(",", parameters.Modalities));
+
+        return parameters;
     }
 
     private DicomCFindResponse CreateStudyResponse(DicomCFindRequest request, Study study)
     {
         var response = new DicomCFindResponse(request, DicomStatus.Pending);
         var dataset = new DicomDataset();
+
+        // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
+        var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+        DicomLogger.Debug("QRSCP", "请求的字符集: {CharacterSet}", requestedCharacterSet);
+        
+        // 根据请求的字符集设置响应的字符集
+        switch (requestedCharacterSet.ToUpperInvariant())
+        {
+            case "ISO_IR 100":  // Latin1
+                dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
+                break;
+            case "GB18030":     // 中文简体
+                dataset.Add(DicomTag.SpecificCharacterSet, "GB18030");
+                break;
+            case "ISO_IR 192":  // UTF-8
+            default:
+                dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+                break;
+        }
 
         AddCommonTags(dataset, request.Dataset);
 
@@ -236,10 +398,44 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
               .Add(DicomTag.PatientName, study.PatientName ?? string.Empty)
               .Add(DicomTag.PatientID, study.PatientId ?? string.Empty)
               .Add(DicomTag.StudyDescription, study.StudyDescription ?? string.Empty)
-              .Add(DicomTag.Modality, study.Modality ?? string.Empty)
+              .Add(DicomTag.ModalitiesInStudy, study.Modality ?? string.Empty)
               .Add(DicomTag.AccessionNumber, study.AccessionNumber ?? string.Empty);
 
-        CopyRequestTags(request.Dataset, dataset);
+        response.Dataset = dataset;
+        return response;
+    }
+
+    private DicomCFindResponse CreateSeriesResponse(DicomCFindRequest request, Series series)
+    {
+        var response = new DicomCFindResponse(request, DicomStatus.Pending);
+        var dataset = new DicomDataset();
+
+        // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
+        var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+        DicomLogger.Debug("QRSCP", "请求的字符集: {CharacterSet}", requestedCharacterSet);
+        
+        // 根据请求的字符集设置响应的字符集
+        switch (requestedCharacterSet.ToUpperInvariant())
+        {
+            case "ISO_IR 100":  // Latin1
+                dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
+                break;
+            case "GB18030":     // 中文简体
+                dataset.Add(DicomTag.SpecificCharacterSet, "GB18030");
+                break;
+            case "ISO_IR 192":  // UTF-8
+            default:
+                dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+                break;
+        }
+
+        AddCommonTags(dataset, request.Dataset);
+
+        dataset.Add(DicomTag.SeriesInstanceUID, series.SeriesInstanceUid)
+              .Add(DicomTag.StudyInstanceUID, series.StudyInstanceUid)
+              .Add(DicomTag.Modality, series.Modality ?? string.Empty)
+              .Add(DicomTag.SeriesNumber, series.SeriesNumber ?? string.Empty)
+              .Add(DicomTag.SeriesDescription, series.SeriesDescription ?? string.Empty);
 
         response.Dataset = dataset;
         return response;
@@ -335,7 +531,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 var validSopInstanceUid = ValidateUID(instance.SopInstanceUid);
                 var validSopClassUid = ValidateUID(instance.SopClassUid);
 
-                // 设置必要的字段
+                // ��置必要的字段
                 dataset.Add(DicomTag.StudyInstanceUID, validStudyUid);
                 dataset.Add(DicomTag.SeriesInstanceUID, validSeriesUid);
                 dataset.Add(DicomTag.SOPInstanceUID, validSopInstanceUid);
@@ -401,13 +597,13 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         // 获取请中的字符集
         var requestedCharacterSet = requestDataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
 
-        // 如果请求的字符集持列表中，使用请求的字符集
+        // 如果请求的字符持列表中，使用请求的字符集
         if (SupportedCharacterSets.Contains(requestedCharacterSet))
         {
             return requestedCharacterSet;
         }
 
-        // 否则默认使用 UTF-8
+        // 否则��认使用 UTF-8
         return "ISO_IR 192";
     }
 
@@ -577,7 +773,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             yield break;
         }
 
-        DicomLogger.Information("QRSCP", "开始 C-GET 操作 - 总实例数: {Total}", instances.Count());
+        DicomLogger.Information("QRSCP", "始 C-GET 操作 - 总实例数: {Total}", instances.Count());
 
         var failedCount = 0;
         var successCount = 0;

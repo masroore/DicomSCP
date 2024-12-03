@@ -11,7 +11,7 @@ namespace DicomSCP.Services;
 
 public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvider, IDicomCEchoProvider
 {
-    private DicomSettings Settings => DicomServiceProvider.GetRequiredService<IOptions<DicomSettings>>().Value;
+    private readonly DicomSettings _settings;
     private readonly DicomRepository _repository;
     private readonly string _printPath;
     private readonly string _relativePrintPath = "prints";
@@ -52,8 +52,9 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
+            _settings = DicomServiceProvider.GetRequiredService<IOptions<DicomSettings>>().Value;
             _repository = DicomServiceProvider.GetRequiredService<DicomRepository>();
-            _printPath = Path.Combine(Settings.StoragePath, _relativePrintPath);
+            _printPath = Path.Combine(_settings.StoragePath, _relativePrintPath);
             Directory.CreateDirectory(_printPath);
             DicomLogger.Information("PrintSCP", "PrintSCP服务初始化完成");
         }
@@ -133,19 +134,33 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            // 验证调用方 AE Title
-            if (Settings.PrintSCP.ValidateCallingAE)
-            {
-                if (string.IsNullOrEmpty(association.CallingAE))
-                {
-                    DicomLogger.Warning("PrintSCP", "拒绝空的 Calling AE");
-                    return SendAssociationRejectAsync(
-                        DicomRejectResult.Permanent,
-                        DicomRejectSource.ServiceUser,
-                        DicomRejectReason.CallingAENotRecognized);
-                }
+            // 验证 Called AE
+            var calledAE = association.CalledAE;
+            var expectedAE = _settings?.PrintSCP.AeTitle ?? string.Empty;
 
-                if (!Settings.PrintSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
+            if (!string.Equals(expectedAE, calledAE, StringComparison.OrdinalIgnoreCase))
+            {
+                DicomLogger.Warning("PrintSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
+                    calledAE, expectedAE);
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.CalledAENotRecognized);
+            }
+
+            // 验证 Calling AE
+            if (string.IsNullOrEmpty(association.CallingAE))
+            {
+                DicomLogger.Warning("PrintSCP", "拒绝空的 Calling AE");
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.CallingAENotRecognized);
+            }
+
+            if (_settings?.PrintSCP.ValidateCallingAE == true)
+            {
+                if (!_settings.PrintSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
                 {
                     DicomLogger.Warning("PrintSCP", "拒绝未授权的 Calling AE: {CallingAE}", association.CallingAE);
                     return SendAssociationRejectAsync(
@@ -157,13 +172,18 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             foreach (var pc in association.PresentationContexts)
             {
+                // 检查是否支持请求的服务
                 if (SupportedSOPClasses.Contains(pc.AbstractSyntax))
                 {
                     pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
+                    DicomLogger.Information("PrintSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
+                        association.CallingAE, pc.AbstractSyntax.Name);
                 }
                 else
                 {
                     pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
+                    DicomLogger.Warning("PrintSCP", "拒绝不支持的服务 - AET: {CallingAE}, 服务: {Service}", 
+                        association.CallingAE, pc.AbstractSyntax.Name);
                 }
             }
 

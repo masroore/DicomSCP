@@ -102,6 +102,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 StudyTime TEXT,
                 StudyDescription TEXT,
                 AccessionNumber TEXT,
+                Modality TEXT,
                 CreateTime DATETIME,
                 FOREIGN KEY(PatientId) REFERENCES Patients(PatientId)
             )";
@@ -398,6 +399,7 @@ public class DicomRepository : BaseRepository, IDisposable
             StudyTime = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyTime, string.Empty),
             StudyDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDescription, string.Empty),
             AccessionNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
+            Modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty),
             CreateTime = now
         });
 
@@ -424,9 +426,9 @@ public class DicomRepository : BaseRepository, IDisposable
 
     private void HandleFailedBatch(List<(DicomDataset Dataset, string FilePath)> failedItems)
     {
-        // 可以实现失败处理逻辑，比如：
+        // 可以实现失败理逻辑，比如：
         // 1. 写入错误日志文件
-        // 2. 存入特定的错误表
+        // 2. 存入特定的误表
         // 3. 送告警通知
         // 4. 放入重试队列等
     }
@@ -435,7 +437,7 @@ public class DicomRepository : BaseRepository, IDisposable
     {
         _dataQueue.Enqueue((dataset, filePath));
         
-        // 当队列达到批处理大小的80%时，主动触发处理
+        // 当队列达到批处理小的80%时，主动触发处理
         if (_dataQueue.Count >= _batchSize * 0.8)
         {
             await ProcessQueueAsync();
@@ -611,40 +613,39 @@ public class DicomRepository : BaseRepository, IDisposable
     public List<WorklistItem> GetWorklistItems(
         string patientId,
         string accessionNumber,
-        string scheduledDateTime,
+        (string StartDate, string EndDate) dateRange,
         string modality,
         string scheduledStationName)
     {
         try
         {
             using var connection = CreateConnection();
-            var sql = @"SELECT * FROM Worklist 
-                WHERE (@PatientId IS NULL OR @PatientId = '' OR PatientId LIKE @PatientId)
-                AND (@AccessionNumber IS NULL OR @AccessionNumber = '' OR AccessionNumber LIKE @AccessionNumber)
-                AND (@ScheduledDateTime IS NULL OR @ScheduledDateTime = '' OR ScheduledDateTime LIKE @ScheduledDateTime)
-                AND (@Modality IS NULL OR @Modality = '' OR Modality = @Modality)
-                AND (@ScheduledStationName IS NULL OR @ScheduledStationName = '' OR ScheduledStationName = @ScheduledStationName)
-                AND Status = 'SCHEDULED'";
+            var sql = @"
+                SELECT * FROM Worklist 
+                WHERE 1=1
+                AND (@PatientId = '' OR PatientId LIKE @PatientId)
+                AND (@AccessionNumber = '' OR AccessionNumber LIKE @AccessionNumber)
+                AND (@StartDate = '' OR @EndDate = '' OR 
+                     substr(ScheduledDateTime, 1, 8) >= @StartDate AND 
+                     substr(ScheduledDateTime, 1, 8) <= @EndDate)
+                AND (@Modality = '' OR Modality = @Modality)
+                AND (@ScheduledStationName = '' OR ScheduledStationName = @ScheduledStationName)
+                AND Status = 'SCHEDULED'
+                ORDER BY CreateTime DESC";
 
-            LogDebug("执��工作表查询 - SQL: {Sql}, 参数: {@Parameters}", sql, new
+            var parameters = new
             {
-                PatientId = patientId,
-                AccessionNumber = accessionNumber,
-                ScheduledDateTime = scheduledDateTime,
-                Modality = modality,
-                ScheduledStationName = scheduledStationName
-            });
+                PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
+                AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
+                StartDate = dateRange.StartDate,
+                EndDate = dateRange.EndDate,
+                Modality = string.IsNullOrEmpty(modality) ? "" : modality,
+                ScheduledStationName = string.IsNullOrEmpty(scheduledStationName) ? "" : scheduledStationName
+            };
 
-            var items = connection.Query<WorklistItem>(sql,
-                new
-                {
-                    PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
-                    AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
-                    ScheduledDateTime = string.IsNullOrEmpty(scheduledDateTime) ? "" : $"%{scheduledDateTime}%",
-                    Modality = string.IsNullOrEmpty(modality) ? "" : modality,
-                    ScheduledStationName = string.IsNullOrEmpty(scheduledStationName) ? "" : scheduledStationName
-                });
+            LogDebug("执行工作列表查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
 
+            var items = connection.Query<WorklistItem>(sql, parameters);
             var result = items?.ToList() ?? new List<WorklistItem>();
             LogInformation("工作列表查询完成 - 返回记录数: {Count}", result.Count);
             return result;
@@ -656,40 +657,47 @@ public class DicomRepository : BaseRepository, IDisposable
         }
     }
 
-    public List<Study> GetStudies(string patientId, string patientName, string accessionNumber, string studyDate)
+    public List<Study> GetStudies(
+        string patientId, 
+        string patientName, 
+        string accessionNumber, 
+        (string StartDate, string EndDate) dateRange,
+        string[] modalities)
     {
         try
         {
             using var connection = CreateConnection();
             var sql = @"
-                SELECT s.*, p.PatientName, p.PatientSex, p.PatientBirthDate,
-                       (SELECT Modality FROM Series WHERE StudyInstanceUid = s.StudyInstanceUid LIMIT 1) as Modality
+                SELECT s.*, p.PatientName, p.PatientSex, p.PatientBirthDate
                 FROM Studies s
                 LEFT JOIN Patients p ON s.PatientId = p.PatientId
-                WHERE (@PatientId IS NULL OR @PatientId = '' OR s.PatientId LIKE @PatientId)
-                AND (@PatientName IS NULL OR @PatientName = '' OR p.PatientName LIKE @PatientName)
-                AND (@AccessionNumber IS NULL OR @AccessionNumber = '' OR s.AccessionNumber LIKE @AccessionNumber)
-                AND (@StudyDate IS NULL OR @StudyDate = '' OR s.StudyDate LIKE @StudyDate)
+                WHERE 1=1
+                AND (@PatientId = '' OR s.PatientId LIKE @PatientId)
+                AND (@PatientName = '' OR p.PatientName LIKE @PatientName)
+                AND (@AccessionNumber = '' OR s.AccessionNumber LIKE @AccessionNumber)
+                AND (@StartDate = '' OR s.StudyDate >= @StartDate)
+                AND (@EndDate = '' OR s.StudyDate <= @EndDate)
+                AND (@ModCount = 0 OR s.Modality IN @Modalities)
                 ORDER BY s.CreateTime DESC";
 
-            LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, new
-            {
-                PatientId = patientId,
-                PatientName = patientName,
-                AccessionNumber = accessionNumber,
-                StudyDate = studyDate
-            });
-
-            var studies = connection.Query<Study>(sql, new
+            var parameters = new
             {
                 PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
                 PatientName = string.IsNullOrEmpty(patientName) ? "" : $"%{patientName}%",
                 AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
-                StudyDate = string.IsNullOrEmpty(studyDate) ? "" : $"{studyDate}%"
-            });
+                StartDate = dateRange.StartDate,
+                EndDate = dateRange.EndDate,
+                ModCount = modalities?.Length ?? 0,
+                Modalities = (modalities?.Length ?? 0) > 0 ? modalities : new[] { "" }
+            };
 
+            LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
+
+            var studies = connection.Query<Study>(sql, parameters);
             var result = studies?.ToList() ?? new List<Study>();
-            LogInformation("检查查询完成 - 返回记录数: {Count}", result.Count);
+            var modalitiesStr = modalities != null ? string.Join(",", modalities) : string.Empty;
+            LogInformation("检查查询完成 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}, 设备类型: {Modalities}", 
+                result.Count, dateRange.StartDate, dateRange.EndDate, modalitiesStr);
             return result;
         }
         catch (Exception ex)
@@ -818,7 +826,7 @@ public class DicomRepository : BaseRepository, IDisposable
     {
         try
         {
-            // 确保时间是本地时间
+            // 确保时间是地时间
             if (job.CreateTime == default)
             {
                 job.CreateTime = DateTime.Now;
@@ -1194,6 +1202,32 @@ public class DicomRepository : BaseRepository, IDisposable
             LogError(ex, "Patient查询失败 - PatientId: {PatientId}, PatientName: {PatientName}", 
                 patientId, patientName);
             return Enumerable.Empty<Patient>();
+        }
+    }
+
+    public async Task UpdateStudyModalityAsync(string studyInstanceUid, string modality)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                UPDATE Studies 
+                SET Modality = @Modality 
+                WHERE StudyInstanceUid = @StudyInstanceUid 
+                AND (Modality IS NULL OR Modality = '')";
+
+            await connection.ExecuteAsync(sql, new { 
+                StudyInstanceUid = studyInstanceUid, 
+                Modality = modality 
+            });
+
+            LogDebug("更新Study Modality - StudyInstanceUID: {StudyInstanceUid}, Modality: {Modality}", 
+                studyInstanceUid, modality);
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "更新Study Modality失败 - StudyInstanceUID: {StudyInstanceUid}, Modality: {Modality}", 
+                studyInstanceUid, modality);
         }
     }
 }

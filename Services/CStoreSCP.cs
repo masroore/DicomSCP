@@ -108,51 +108,76 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
     {
-        DicomLogger.Information("StoreSCP",
-            "收到DICOM关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
-            association.CalledAE, 
-            association.CallingAE);
-
-        var advancedSettings = _settings.Advanced;
-        
-        // 应用验配置
-        if (advancedSettings.ValidateCallingAE && 
-            !advancedSettings.AllowedCallingAEs.Contains(association.CallingAE))
+        try
         {
-            DicomLogger.Warning("StoreSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
-            return SendAssociationRejectAsync(
-                DicomRejectResult.Permanent,
-                DicomRejectSource.ServiceUser,
-                DicomRejectReason.CallingAENotRecognized);
-        }
+            // 验证 Called AE
+            var calledAE = association.CalledAE;
+            var expectedAE = _settings?.AeTitle ?? string.Empty;
 
-        foreach (var pc in association.PresentationContexts)
-        {
-            if (pc.AbstractSyntax == DicomUID.Verification)
+            if (!string.Equals(expectedAE, calledAE, StringComparison.OrdinalIgnoreCase))
             {
-                pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                DicomLogger.Information("StoreSCP", "DICOM服务 - 动作: {Action}, 类型: {Type}", "接受", "C-ECHO");
+                DicomLogger.Warning("StoreSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
+                    calledAE, expectedAE);
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.CalledAENotRecognized);
             }
-            else if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)
+
+            // 验证 Calling AE
+            if (string.IsNullOrEmpty(association.CallingAE))
             {
-                bool isImageStorage = IsImageStorage(pc.AbstractSyntax);
-                
-                if (isImageStorage)
+                DicomLogger.Warning("StoreSCP", "拒绝空的 Calling AE");
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.CallingAENotRecognized);
+            }
+
+            // 只在配置了验证时才检查 AllowedCallingAEs
+            if (_settings?.Advanced.ValidateCallingAE == true)
+            {
+                if (!_settings.Advanced.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
                 {
-                    pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);
-                    DicomLogger.Information("StoreSCP", "DICOM服务 - 动作: {Action}, 类型: {Type}, 传: {Transfer}", 
-                        "接受", pc.AbstractSyntax.Name, "支持压缩传输");
+                    DicomLogger.Warning("StoreSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+                    return SendAssociationRejectAsync(
+                        DicomRejectResult.Permanent,
+                        DicomRejectSource.ServiceUser,
+                        DicomRejectReason.CallingAENotRecognized);
+                }
+            }
+
+            DicomLogger.Information("StoreSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+                calledAE, association.CallingAE);
+
+            foreach (var pc in association.PresentationContexts)
+            {
+                // 检查是否支持请求的服务
+                if (pc.AbstractSyntax == DicomUID.Verification ||                    // C-ECHO
+                    pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)  // Storage
+                {
+                    pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
+                    DicomLogger.Information("StoreSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
+                        association.CallingAE, pc.AbstractSyntax.Name);
                 }
                 else
                 {
-                    pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                    DicomLogger.Information("StoreSCP", "接受非图像存储服务: {ServiceName}, {TransferType}", 
-                        pc.AbstractSyntax.Name, "仅支持基本传输");
+                    pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
+                    DicomLogger.Warning("StoreSCP", "拒绝不支持的服务 - AET: {CallingAE}, 服务: {Service}", 
+                        association.CallingAE, pc.AbstractSyntax.Name);
                 }
             }
-        }
 
-        return SendAssociationAcceptAsync(association);
+            return SendAssociationAcceptAsync(association);
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("StoreSCP", ex, "处理关联请求失败");
+            return SendAssociationRejectAsync(
+                DicomRejectResult.Permanent,
+                DicomRejectSource.ServiceUser,
+                DicomRejectReason.NoReasonGiven);
+        }
     }
 
     private bool IsImageStorage(DicomUID sopClass)
@@ -391,6 +416,9 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         try 
                         {
                             await _repository.SaveDicomDataAsync(request.Dataset, relativePath);
+                            // 更新 Study 的 Modality
+                            var modality = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
+                            await _repository.UpdateStudyModalityAsync(studyUid, modality);
                         }
                         catch (Exception ex)
                         {
