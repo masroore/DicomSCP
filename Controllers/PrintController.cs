@@ -4,9 +4,8 @@ using DicomSCP.Models;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using DicomSCP.Configuration;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace DicomSCP.Controllers;
 
@@ -90,77 +89,86 @@ public class PrintController : Controller
     {
         try
         {
-            var job = await _repository.GetPrintJobAsync(jobId);
+            // 获取打印任务
+            var job = await GetPrintJobAsync(jobId);
             if (job == null)
             {
                 return NotFound(new { message = "打印任务不存在" });
             }
 
-            if (string.IsNullOrEmpty(job.ImagePath))
-            {
-                return NotFound(new { message = "打印任务的图像路径不存在" });
-            }
-
-            // 构建完整的物理路径，使用配置的StoragePath
-            var storagePath = _settings.StoragePath ?? "received_files";
-            if (!Path.IsPathRooted(storagePath))
-            {
-                storagePath = Path.Combine(_environment.ContentRootPath, storagePath);
-            }
-            var fullPath = Path.Combine(storagePath, job.ImagePath);
-
+            // 获取图像文件路径
+            var fullPath = GetImageFullPath(job);
             if (!System.IO.File.Exists(fullPath))
             {
-                return NotFound(new { message = $"打印任务的图像文件不存在: {fullPath}" });
+                return NotFound(new { message = $"打印任务的图像文件不存在: {job.ImagePath}" });
             }
 
-            // 读取DICOM文件
-            var dicomFile = await DicomFile.OpenAsync(fullPath);
-            var dicomImage = new DicomImage(dicomFile.Dataset);
-
-            // 设置图像渲染参数
-            var image = dicomImage.RenderImage();
-            
-            // 获取图像参数
-            int width = image.Width;
-            int height = image.Height;
-
-            // 获取像素数据
-            var pixelData = image.AsBytes();
-
-            // 创建新的内存流
-            using var memoryStream = new MemoryStream();
-            using (var bitmap = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppRgb))
-            {
-                // 锁定位图数据
-                var bitmapData = bitmap.LockBits(
-                    new System.Drawing.Rectangle(0, 0, width, height),
-                    System.Drawing.Imaging.ImageLockMode.WriteOnly,
-                    System.Drawing.Imaging.PixelFormat.Format32bppRgb);
-
-                try
-                {
-                    // 复制像素数据
-                    System.Runtime.InteropServices.Marshal.Copy(pixelData, 0, bitmapData.Scan0, pixelData.Length);
-                }
-                finally
-                {
-                    // 解锁位图
-                    bitmap.UnlockBits(bitmapData);
-                }
-
-                // 保存为PNG
-                bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Png);
-            }
-
-            memoryStream.Position = 0;
-            // 返回PNG图像
-            return File(memoryStream.ToArray(), "image/png");
+            // 转换图像并返回
+            return await ConvertDicomToImageAsync(fullPath);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "获取打印任务图像时发生错误: {Message}", ex.Message);
             return StatusCode(500, new { message = "获取打印任务图像失败" });
         }
+    }
+
+    private async Task<PrintJob?> GetPrintJobAsync(string jobId)
+    {
+        var job = await _repository.GetPrintJobAsync(jobId);
+        if (job == null || string.IsNullOrEmpty(job.ImagePath))
+        {
+            return null;
+        }
+        return job;
+    }
+
+    private string GetImageFullPath(PrintJob job)
+    {
+        var storagePath = _settings.StoragePath ?? "received_files";
+        if (!Path.IsPathRooted(storagePath))
+        {
+            storagePath = Path.Combine(_environment.ContentRootPath, storagePath);
+        }
+        return Path.Combine(storagePath, job.ImagePath);
+    }
+
+    private async Task<IActionResult> ConvertDicomToImageAsync(string dicomFilePath)
+    {
+        // 读取DICOM文件
+        var dicomFile = await DicomFile.OpenAsync(dicomFilePath);
+        var dicomImage = new DicomImage(dicomFile.Dataset);
+
+        // 设置图像渲染参数并获取图像数据
+        var image = dicomImage.RenderImage();
+        var pixelData = image.AsBytes();
+
+        // 使用ImageSharp创建图像
+        using var memoryStream = new MemoryStream();
+        using (var outputImage = new Image<Rgba32>(image.Width, image.Height))
+        {
+            // 复制像素数据
+            var stride = image.Width * 4; // 4 bytes per pixel (RGBA)
+            for (int y = 0; y < image.Height; y++)
+            {
+                var rowStart = y * stride;
+                for (int x = 0; x < image.Width; x++)
+                {
+                    var offset = rowStart + (x * 4);
+                    outputImage[x, y] = new Rgba32(
+                        pixelData[offset],     // R
+                        pixelData[offset + 1], // G
+                        pixelData[offset + 2], // B
+                        pixelData[offset + 3]  // A
+                    );
+                }
+            }
+
+            // 保存为PNG
+            await outputImage.SaveAsPngAsync(memoryStream);
+        }
+
+        memoryStream.Position = 0;
+        return new FileContentResult(memoryStream.ToArray(), "image/png");
     }
 } 
