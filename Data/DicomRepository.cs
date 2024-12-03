@@ -807,293 +807,394 @@ public class DicomRepository : BaseRepository, IDisposable
         command.ExecuteNonQuery();
     }
 
-    // 添加打印任务
-    public async Task<string> AddPrintJobAsync(PrintJob job)
-    {
-        using var connection = CreateConnection();
-        var sql = @"
-            INSERT INTO PrintJobs (
-                JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                Status, ImagePath, PrinterName, ErrorMessage,
-                PatientId, PatientName, AccessionNumber,
-                FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            ) VALUES (
-                @JobId, @FilmSessionId, @FilmBoxId, @ImageBoxId, @CallingAE,
-                @Status, @ImagePath, @PrinterName, @ErrorMessage,
-                @PatientId, @PatientName, @AccessionNumber,
-                @FilmSize, @FilmOrientation, @FilmLayout, @MagnificationType,
-                @BorderDensity, @EmptyImageDensity, @MinDensity, @MaxDensity,
-                @TrimValue, @ConfigurationInfo, @CreateTime, @UpdateTime
-            )";
+    #region PrintSCP Operations
 
-        await connection.ExecuteAsync(sql, new
+    /// <summary>
+    /// 添加新的打印任务
+    /// </summary>
+    public async Task<bool> AddPrintJobAsync(PrintJob job)
+    {
+        try
         {
-            job.JobId,
-            job.FilmSessionId,
-            job.FilmBoxId,
-            job.ImageBoxId,
-            job.CallingAE,
-            job.Status,
-            job.ImagePath,
-            job.PrinterName,
-            job.ErrorMessage,
-            job.PatientId,
-            job.PatientName,
-            job.AccessionNumber,
-            job.FilmSize,
-            job.FilmOrientation,
-            job.FilmLayout,
-            job.MagnificationType,
-            job.BorderDensity,
-            job.EmptyImageDensity,
-            job.MinDensity,
-            job.MaxDensity,
-            TrimValue = job.Trim,
-            job.ConfigurationInfo,
-            job.CreateTime,
-            job.UpdateTime
-        });
-        return job.JobId;
-    }
+            using var connection = CreateConnection();
+            var sql = @"
+                INSERT INTO PrintJobs (
+                    JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                    Status, ImagePath, PrinterName, ErrorMessage,
+                    PatientId, PatientName, AccessionNumber,
+                    FilmSize, FilmOrientation, FilmLayout, MagnificationType,
+                    BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
+                    TrimValue, ConfigurationInfo, CreateTime, UpdateTime
+                ) VALUES (
+                    @JobId, @FilmSessionId, @FilmBoxId, @ImageBoxId, @CallingAE,
+                    @Status, @ImagePath, @PrinterName, @ErrorMessage,
+                    @PatientId, @PatientName, @AccessionNumber,
+                    @FilmSize, @FilmOrientation, @FilmLayout, @MagnificationType,
+                    @BorderDensity, @EmptyImageDensity, @MinDensity, @MaxDensity,
+                    @TrimValue, @ConfigurationInfo, @CreateTime, @UpdateTime
+                )";
 
-    // 更新打印任务状态
-    public async Task UpdatePrintJobStatusAsync(string jobId, string status, string? imagePath = null)
-    {
-        using var connection = CreateConnection();
-        var sql = @"
-            UPDATE PrintJobs 
-            SET Status = @Status, 
-                ImagePath = COALESCE(@ImagePath, ImagePath),
-                UpdateTime = @UpdateTime
-            WHERE JobId = @JobId";
+            var parameters = new
+            {
+                job.JobId,
+                job.FilmSessionId,
+                job.FilmBoxId,
+                ImageBoxId = job.ImageBoxId ?? (object)DBNull.Value,
+                job.CallingAE,
+                job.Status,
+                ImagePath = job.ImagePath ?? (object)DBNull.Value,
+                PrinterName = job.PrinterName ?? (object)DBNull.Value,
+                ErrorMessage = job.ErrorMessage ?? (object)DBNull.Value,
+                PatientId = job.PatientId ?? (object)DBNull.Value,
+                PatientName = job.PatientName ?? (object)DBNull.Value,
+                AccessionNumber = job.AccessionNumber ?? (object)DBNull.Value,
+                FilmSize = job.FilmSize ?? (object)DBNull.Value,
+                FilmOrientation = job.FilmOrientation ?? (object)DBNull.Value,
+                FilmLayout = job.FilmLayout ?? (object)DBNull.Value,
+                MagnificationType = job.MagnificationType ?? (object)DBNull.Value,
+                BorderDensity = job.BorderDensity ?? (object)DBNull.Value,
+                EmptyImageDensity = job.EmptyImageDensity ?? (object)DBNull.Value,
+                MinDensity = job.MinDensity ?? (object)DBNull.Value,
+                MaxDensity = job.MaxDensity ?? (object)DBNull.Value,
+                TrimValue = job.Trim ?? (object)DBNull.Value,
+                ConfigurationInfo = job.ConfigurationInfo ?? (object)DBNull.Value,
+                job.CreateTime,
+                UpdateTime = job.UpdateTime ?? DateTime.UtcNow
+            };
 
-        await connection.ExecuteAsync(sql, new { 
-            JobId = jobId, 
-            Status = status, 
-            ImagePath = imagePath,
-            UpdateTime = DateTime.UtcNow
-        });
-    }
-
-    // 更新打印任务
-    public async Task UpdatePrintJobAsync(string filmSessionId, string? filmBoxId = null, Dictionary<string, string>? printParams = null, Dictionary<string, string>? patientInfo = null)
-    {
-        if (string.IsNullOrEmpty(filmSessionId))
-            return;
-
-        using var connection = CreateConnection();
-        var updateFields = new List<string>();
-        var parameters = new DynamicParameters();
-        parameters.Add("@FilmSessionId", filmSessionId);
-
-        if (filmBoxId != null)
-        {
-            updateFields.Add("FilmBoxId = @FilmBoxId");
-            parameters.Add("@FilmBoxId", filmBoxId);
+            var rowsAffected = await connection.ExecuteAsync(sql, parameters);
+            LogDebug("添加打印任务 - JobId: {JobId}, FilmSessionId: {FilmSessionId}", job.JobId, job.FilmSessionId);
+            return rowsAffected > 0;
         }
-
-        if (printParams != null)
+        catch (Exception ex)
         {
-            if (printParams.TryGetValue("FilmSize", out var filmSize))
-            {
-                updateFields.Add("FilmSize = @FilmSize");
-                parameters.Add("@FilmSize", filmSize);
-            }
-            if (printParams.TryGetValue("FilmOrientation", out var orientation))
-            {
-                updateFields.Add("FilmOrientation = @FilmOrientation");
-                parameters.Add("@FilmOrientation", orientation);
-            }
-            if (printParams.TryGetValue("FilmLayout", out var layout))
-            {
-                updateFields.Add("FilmLayout = @FilmLayout");
-                parameters.Add("@FilmLayout", layout);
-            }
-            if (printParams.TryGetValue("MagnificationType", out var magnification))
-            {
-                updateFields.Add("MagnificationType = @MagnificationType");
-                parameters.Add("@MagnificationType", magnification);
-            }
-            if (printParams.TryGetValue("BorderDensity", out var borderDensity))
-            {
-                updateFields.Add("BorderDensity = @BorderDensity");
-                parameters.Add("@BorderDensity", borderDensity);
-            }
-            if (printParams.TryGetValue("EmptyImageDensity", out var emptyDensity))
-            {
-                updateFields.Add("EmptyImageDensity = @EmptyImageDensity");
-                parameters.Add("@EmptyImageDensity", emptyDensity);
-            }
-            if (printParams.TryGetValue("MinDensity", out var minDensity))
-            {
-                updateFields.Add("MinDensity = @MinDensity");
-                parameters.Add("@MinDensity", minDensity);
-            }
-            if (printParams.TryGetValue("MaxDensity", out var maxDensity))
-            {
-                updateFields.Add("MaxDensity = @MaxDensity");
-                parameters.Add("@MaxDensity", maxDensity);
-            }
-            if (printParams.TryGetValue("Trim", out var trim))
-            {
-                updateFields.Add("TrimValue = @TrimValue");
-                parameters.Add("@TrimValue", trim);
-            }
-            if (printParams.TryGetValue("ConfigurationInfo", out var config))
-            {
-                updateFields.Add("ConfigurationInfo = @ConfigurationInfo");
-                parameters.Add("@ConfigurationInfo", config);
-            }
+            LogError(ex, "添加打印任务失败 - JobId: {JobId}", job.JobId);
+            throw;
         }
+    }
 
-        if (patientInfo != null)
+    /// <summary>
+    /// 更新打印任务状态和图像路径
+    /// </summary>
+    public async Task<bool> UpdatePrintJobStatusAsync(string jobId, string status, string? imagePath = null)
+    {
+        try
         {
-            if (patientInfo.TryGetValue("PatientId", out var patientId))
+            using var connection = CreateConnection();
+            var sql = imagePath != null
+                ? "UPDATE PrintJobs SET Status = @Status, ImagePath = @ImagePath, UpdateTime = @UpdateTime WHERE JobId = @JobId"
+                : "UPDATE PrintJobs SET Status = @Status, UpdateTime = @UpdateTime WHERE JobId = @JobId";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@JobId", jobId);
+            parameters.Add("@Status", status);
+            parameters.Add("@UpdateTime", DateTime.UtcNow);
+            if (imagePath != null)
             {
-                updateFields.Add("PatientId = @PatientId");
-                parameters.Add("@PatientId", patientId);
+                parameters.Add("@ImagePath", imagePath);
             }
-            if (patientInfo.TryGetValue("PatientName", out var patientName))
-            {
-                updateFields.Add("PatientName = @PatientName");
-                parameters.Add("@PatientName", patientName);
-            }
-            if (patientInfo.TryGetValue("AccessionNumber", out var accessionNumber))
-            {
-                updateFields.Add("AccessionNumber = @AccessionNumber");
-                parameters.Add("@AccessionNumber", accessionNumber);
-            }
+
+            var rowsAffected = await connection.ExecuteAsync(sql, parameters);
+            LogDebug("更新打印任务状态 - JobId: {JobId}, Status: {Status}", jobId, status);
+            return rowsAffected > 0;
         }
-
-        updateFields.Add("UpdateTime = @UpdateTime");
-        parameters.Add("@UpdateTime", DateTime.UtcNow);
-
-        var sql = $@"
-            UPDATE PrintJobs 
-            SET {string.Join(", ", updateFields)}
-            WHERE FilmSessionId = @FilmSessionId";
-
-        await connection.ExecuteAsync(sql, parameters);
+        catch (Exception ex)
+        {
+            LogError(ex, "更新打印任务状态失败 - JobId: {JobId}", jobId);
+            throw;
+        }
     }
 
-    // 获取打印作业列表
-    public async Task<List<PrintJob>> GetPrintJobsAsync()
+    /// <summary>
+    /// 更新打印任务信息
+    /// </summary>
+    public async Task<bool> UpdatePrintJobAsync(
+        string filmSessionId,
+        string? filmBoxId = null,
+        Dictionary<string, string>? printParams = null,
+        Dictionary<string, string>? patientInfo = null)
     {
-        using var connection = CreateConnection();
-        var sql = @"
-            SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                   Status, ImagePath, PrinterName, ErrorMessage,
-                   PatientId, PatientName, AccessionNumber,
-                   FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                   BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                   TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            FROM PrintJobs
-            ORDER BY CreateTime DESC";
+        try
+        {
+            using var connection = CreateConnection();
+            var parameters = new DynamicParameters();
+            var updateClauses = new List<string>();
 
-        var jobs = await connection.QueryAsync<PrintJob>(sql);
-        return jobs.ToList();
+            parameters.Add("@FilmSessionId", filmSessionId);
+            parameters.Add("@UpdateTime", DateTime.UtcNow);
+
+            if (filmBoxId != null)
+            {
+                updateClauses.Add("FilmBoxId = @FilmBoxId");
+                parameters.Add("@FilmBoxId", filmBoxId);
+            }
+
+            if (printParams != null)
+            {
+                if (printParams.TryGetValue("FilmSize", out var filmSize))
+                {
+                    updateClauses.Add("FilmSize = @FilmSize");
+                    parameters.Add("@FilmSize", filmSize);
+                }
+                if (printParams.TryGetValue("FilmOrientation", out var orientation))
+                {
+                    updateClauses.Add("FilmOrientation = @FilmOrientation");
+                    parameters.Add("@FilmOrientation", orientation);
+                }
+                if (printParams.TryGetValue("FilmLayout", out var layout))
+                {
+                    updateClauses.Add("FilmLayout = @FilmLayout");
+                    parameters.Add("@FilmLayout", layout);
+                }
+                if (printParams.TryGetValue("MagnificationType", out var magnification))
+                {
+                    updateClauses.Add("MagnificationType = @MagnificationType");
+                    parameters.Add("@MagnificationType", magnification);
+                }
+                if (printParams.TryGetValue("BorderDensity", out var borderDensity))
+                {
+                    updateClauses.Add("BorderDensity = @BorderDensity");
+                    parameters.Add("@BorderDensity", borderDensity);
+                }
+                if (printParams.TryGetValue("EmptyImageDensity", out var emptyDensity))
+                {
+                    updateClauses.Add("EmptyImageDensity = @EmptyImageDensity");
+                    parameters.Add("@EmptyImageDensity", emptyDensity);
+                }
+                if (printParams.TryGetValue("MinDensity", out var minDensity))
+                {
+                    updateClauses.Add("MinDensity = @MinDensity");
+                    parameters.Add("@MinDensity", minDensity);
+                }
+                if (printParams.TryGetValue("MaxDensity", out var maxDensity))
+                {
+                    updateClauses.Add("MaxDensity = @MaxDensity");
+                    parameters.Add("@MaxDensity", maxDensity);
+                }
+                if (printParams.TryGetValue("Trim", out var trim))
+                {
+                    updateClauses.Add("TrimValue = @TrimValue");
+                    parameters.Add("@TrimValue", trim);
+                }
+                if (printParams.TryGetValue("ConfigurationInfo", out var config))
+                {
+                    updateClauses.Add("ConfigurationInfo = @ConfigurationInfo");
+                    parameters.Add("@ConfigurationInfo", config);
+                }
+            }
+
+            if (patientInfo != null)
+            {
+                if (patientInfo.TryGetValue("PatientId", out var patientId))
+                {
+                    updateClauses.Add("PatientId = @PatientId");
+                    parameters.Add("@PatientId", patientId);
+                }
+                if (patientInfo.TryGetValue("PatientName", out var patientName))
+                {
+                    updateClauses.Add("PatientName = @PatientName");
+                    parameters.Add("@PatientName", patientName);
+                }
+                if (patientInfo.TryGetValue("AccessionNumber", out var accessionNumber))
+                {
+                    updateClauses.Add("AccessionNumber = @AccessionNumber");
+                    parameters.Add("@AccessionNumber", accessionNumber);
+                }
+            }
+
+            if (updateClauses.Count == 0)
+            {
+                return false;
+            }
+
+            updateClauses.Add("UpdateTime = @UpdateTime");
+            var sql = $"UPDATE PrintJobs SET {string.Join(", ", updateClauses)} WHERE FilmSessionId = @FilmSessionId";
+
+            var rowsAffected = await connection.ExecuteAsync(sql, parameters);
+            LogDebug("更新打印任务 - FilmSessionId: {FilmSessionId}, 更新字段: {Fields}", 
+                filmSessionId, string.Join(", ", updateClauses));
+            return rowsAffected > 0;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "更新打印任务失败 - FilmSessionId: {FilmSessionId}", filmSessionId);
+            throw;
+        }
     }
 
-    // 获取单个打印作业
-    public async Task<PrintJob?> GetPrintJobAsync(string jobId)
-    {
-        using var connection = CreateConnection();
-        var sql = @"
-            SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                   Status, ImagePath, PrinterName, ErrorMessage,
-                   PatientId, PatientName, AccessionNumber,
-                   FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                   BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                   TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            FROM PrintJobs
-            WHERE JobId = @JobId";
-
-        return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { JobId = jobId });
-    }
-
-    // 删除打印作业
-    public async Task<bool> DeletePrintJobAsync(string jobId)
-    {
-        using var connection = CreateConnection();
-        var sql = "DELETE FROM PrintJobs WHERE JobId = @JobId";
-        var rowsAffected = await connection.ExecuteAsync(sql, new { JobId = jobId });
-        return rowsAffected > 0;
-    }
-
-    // 根据FilmBoxId获取打印任务
+    /// <summary>
+    /// 根据FilmBoxId获取打印任务
+    /// </summary>
     public async Task<PrintJob?> GetPrintJobByFilmBoxIdAsync(string filmBoxId)
     {
-        if (string.IsNullOrEmpty(filmBoxId))
-            return null;
+        try
+        {
+            if (string.IsNullOrEmpty(filmBoxId))
+                return null;
 
-        using var connection = CreateConnection();
-        var sql = @"
-            SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                   Status, ImagePath, PrinterName, ErrorMessage,
-                   PatientId, PatientName, AccessionNumber,
-                   FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                   BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                   TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            FROM PrintJobs
-            WHERE FilmBoxId = @FilmBoxId";
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                       Status, ImagePath, PrinterName, ErrorMessage,
+                       PatientId, PatientName, AccessionNumber,
+                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
+                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
+                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
+                FROM PrintJobs
+                WHERE FilmBoxId = @FilmBoxId";
 
-        return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { FilmBoxId = filmBoxId });
+            var job = await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { FilmBoxId = filmBoxId });
+            LogDebug("获取打印任务 - FilmBoxId: {FilmBoxId}, 找到: {Found}", filmBoxId, job != null);
+            return job;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "获取打印任务失败 - FilmBoxId: {FilmBoxId}", filmBoxId);
+            throw;
+        }
     }
 
-    // 获取最近的打印任务
-    public async Task<PrintJob?> GetMostRecentPrintJobAsync()
-    {
-        using var connection = CreateConnection();
-        var sql = @"
-            SELECT TOP 1 JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                   Status, ImagePath, PrinterName, ErrorMessage,
-                   PatientId, PatientName, AccessionNumber,
-                   FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                   BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                   TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            FROM PrintJobs
-            WHERE FilmBoxId IS NOT NULL
-            ORDER BY CreateTime DESC";
-
-        return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql);
-    }
-
-    // 获取最近的待处理打印任务
-    public async Task<PrintJob?> GetMostRecentPendingPrintJobAsync()
-    {
-        using var connection = CreateConnection();
-        var sql = @"
-            SELECT TOP 1 JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                   Status, ImagePath, PrinterName, ErrorMessage,
-                   PatientId, PatientName, AccessionNumber,
-                   FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                   BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                   TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            FROM PrintJobs
-            WHERE FilmBoxId IS NOT NULL
-            AND Status = 'PENDING'
-            ORDER BY CreateTime DESC";
-
-        return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql);
-    }
-
-    // 获取指定状态的打印任务
+    /// <summary>
+    /// 获取指定状态的打印任务列表
+    /// </summary>
     public async Task<IEnumerable<PrintJob>> GetPrintJobsByStatusAsync(string status)
     {
-        using var connection = CreateConnection();
-        var sql = @"
-            SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                   Status, ImagePath, PrinterName, ErrorMessage,
-                   PatientId, PatientName, AccessionNumber,
-                   FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                   BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                   TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-            FROM PrintJobs
-            WHERE Status = @Status
-            ORDER BY CreateTime DESC";
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                       Status, ImagePath, PrinterName, ErrorMessage,
+                       PatientId, PatientName, AccessionNumber,
+                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
+                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
+                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
+                FROM PrintJobs
+                WHERE Status = @Status
+                ORDER BY CreateTime DESC";
 
-        return await connection.QueryAsync<PrintJob>(sql, new { Status = status });
+            var jobs = await connection.QueryAsync<PrintJob>(sql, new { Status = status });
+            LogDebug("获取打印任务列表 - Status: {Status}, 数量: {Count}", status, jobs.Count());
+            return jobs;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "获取打印任务列表失败 - Status: {Status}", status);
+            throw;
+        }
     }
+
+    /// <summary>
+    /// 获取最近的打印任务
+    /// </summary>
+    public async Task<PrintJob?> GetMostRecentPrintJobAsync()
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT TOP 1 JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                       Status, ImagePath, PrinterName, ErrorMessage,
+                       PatientId, PatientName, AccessionNumber,
+                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
+                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
+                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
+                FROM PrintJobs
+                WHERE FilmBoxId IS NOT NULL
+                ORDER BY CreateTime DESC";
+
+            var job = await connection.QueryFirstOrDefaultAsync<PrintJob>(sql);
+            LogDebug("获取最近打印任务 - 找到: {Found}", job != null);
+            return job;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "获取最近打印任务失败");
+            throw;
+        }
+    }
+
+    #endregion
+
+    #region Print Management API
+
+    /// <summary>
+    /// 获取所有打印任务列表
+    /// </summary>
+    public async Task<List<PrintJob>> GetPrintJobsAsync()
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                       Status, ImagePath, PrinterName, ErrorMessage,
+                       PatientId, PatientName, AccessionNumber,
+                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
+                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
+                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
+                FROM PrintJobs
+                ORDER BY CreateTime DESC";
+
+            var jobs = await connection.QueryAsync<PrintJob>(sql);
+            LogDebug("获取打印任务列表 - 数量: {Count}", jobs.Count());
+            return jobs.ToList();
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "获取打印任务列表失败");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 获取单个打印任务
+    /// </summary>
+    public async Task<PrintJob?> GetPrintJobAsync(string jobId)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
+                       Status, ImagePath, PrinterName, ErrorMessage,
+                       PatientId, PatientName, AccessionNumber,
+                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
+                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
+                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
+                FROM PrintJobs
+                WHERE JobId = @JobId";
+
+            var job = await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { JobId = jobId });
+            LogDebug("获取打印任务 - JobId: {JobId}, 找到: {Found}", jobId, job != null);
+            return job;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "获取打印任务失败 - JobId: {JobId}", jobId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 删除打印任务
+    /// </summary>
+    public async Task<bool> DeletePrintJobAsync(string jobId)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = "DELETE FROM PrintJobs WHERE JobId = @JobId";
+            var rowsAffected = await connection.ExecuteAsync(sql, new { JobId = jobId });
+            LogDebug("删除打印任务 - JobId: {JobId}, 成功: {Success}", jobId, rowsAffected > 0);
+            return rowsAffected > 0;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "删除打印任务失败 - JobId: {JobId}", jobId);
+            throw;
+        }
+    }
+
+    #endregion
 }
