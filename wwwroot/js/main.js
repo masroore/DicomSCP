@@ -1178,13 +1178,6 @@ document.getElementById('qr-nextPage').onclick = () => {
     }
 };
 
-// 根据页面类型加载数据
-if (page === 'logs') {
-    if (!window.logManager) {
-        window.logManager = new LogManager();
-    }
-}
-
 function formatQRDate(dateString) {
     if (!dateString) return '';
     const date = new Date(dateString);

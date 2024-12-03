@@ -277,10 +277,21 @@
                 <div class="card mb-3">
                     <div class="card-body">
                         <form id="imagesSearchForm" class="row g-3">
-                            <div class="d-flex align-items-center justify-content-start gap-2">
-                                <div class="d-flex align-items-center">
-                                    <label class="form-label me-1 mb-0" style="width: 65px;">类型</label>
-                                    <select class="form-select" style="width: 120px;" id="searchImagesModality">
+                            <div class="col-md-2">
+                                <label class="form-label">患者ID</label>
+                                <input type="text" class="form-control" id="searchPatientId">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="searchPatientName">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="searchAccessionNumber">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">检查类型</label>
+                                <select class="form-select" id="searchModality">
                                         <option value="">全部</option>
                                         <option value="CT">CT</option>
                                         <option value="MR">MR</option>
@@ -288,26 +299,13 @@
                                         <option value="US">US</option>
                                     </select>
                                 </div>
-                                <div class="d-flex align-items-center">
-                                    <label class="form-label me-1 mb-0" style="width: 65px;">患者ID</label>
-                                    <input type="text" class="form-control" style="width: 150px;" id="searchImagesPatientId">
+                            <div class="col-md-2">
+                                <label class="form-label">设备名称</label>
+                                <input type="text" class="form-control" id="searchStationName">
                                 </div>
-                                <div class="d-flex align-items-center">
-                                    <label class="form-label me-1 mb-0" style="width: 45px;">姓名</label>
-                                    <input type="text" class="form-control" style="width: 150px;" id="searchImagesPatientName">
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    <label class="form-label me-1 mb-0" style="width: 65px;">检查号</label>
-                                    <input type="text" class="form-control" style="width: 150px;" id="searchImagesAccessionNumber">
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    <label class="form-label me-1 mb-0" style="width: 45px;">日期</label>
-                                    <input type="date" class="form-control" style="width: 150px;" id="searchImagesStudyDate">
-                                </div>
-                                <div class="d-flex align-items-center ms-2">
-                                    <button type="button" class="btn btn-primary me-2" onclick="searchImages()">查询</button>
-                                    <button type="button" class="btn btn-secondary" onclick="resetImagesSearch()">重置</button>
-                                </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="button" class="btn btn-primary" onclick="searchImages()">查询</button>
+                                <button type="button" class="btn btn-secondary ms-2" onclick="resetImagesSearch()">重置</button>
                             </div>
                         </form>
                     </div>
@@ -498,7 +496,7 @@
                                         DICOM文件
                                     </button>
                                     <button type="button" class="btn btn-outline-primary" id="folderInput">
-                                        选文件夹
+                                        选择文件夹
                                     </button>
                                 </div>
                             </div>
@@ -770,7 +768,7 @@
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="button" class="btn btn-primary" onclick="changePassword()">确认修改</button>
                 </div>
             </div>
@@ -914,7 +912,7 @@
                                         <dd>允许的调用方AE Title列表</dd>
                                         
                                         <dt>MoveDestinations</dt>
-                                        <dd>C-MOVE目标点配置列表，每个节点包含：
+                                        <dd>C-MOVE目标节点配置列表，每个节点包含：
                                             <ul>
                                                 <li>Name - 节点名称</li>
                                                 <li>AeTitle - 节点AE Title</li>
