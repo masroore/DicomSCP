@@ -281,10 +281,10 @@ public sealed class DicomServer : IDisposable
             IsRunning = IsRunning,
             Services = new ServicesStatus
             {
-                StoreScp = _servers.ContainsKey("store") && _servers["store"].IsRunning,
-                WorklistScp = _servers.ContainsKey("worklist") && _servers["worklist"].IsRunning,
-                QrScp = _servers.ContainsKey("qr") && _servers["qr"].IsRunning,
-                PrintScp = _servers.ContainsKey("print") && _servers["print"].IsRunning
+                StoreScp = _storeScp != null,
+                WorklistScp = _worklistScp != null,
+                QrScp = _qrScp != null,
+                PrintScp = _printScp != null
             }
         };
     }
