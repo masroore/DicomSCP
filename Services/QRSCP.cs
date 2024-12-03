@@ -199,7 +199,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "Study级别查询失败");
+            DicomLogger.Error("QRSCP", ex, "Study级失败");
             responses.Add(new DicomCFindResponse(request, DicomStatus.ProcessingFailure));
         }
 
@@ -402,9 +402,38 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         var failedCount = 0;
         var successCount = 0;
 
+        // 先测试目标连接
+        DicomCMoveResponse? connectionErrorResponse = null;
+        try
+        {
+            await client.AddRequestAsync(new DicomCEchoRequest());
+            await client.SendAsync();
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("QRSCP", ex, "目标节点连接失败 - AE: {AE}, Host: {Host}, Port: {Port}", 
+                destinationConfig.AeTitle, destinationConfig.HostName, destinationConfig.Port);
+            connectionErrorResponse = new DicomCMoveResponse(request, DicomStatus.QueryRetrieveMoveDestinationUnknown)
+            {
+                Dataset = new DicomDataset
+                {
+                    { DicomTag.NumberOfRemainingSuboperations, 0 },
+                    { DicomTag.NumberOfCompletedSuboperations, 0 },
+                    { DicomTag.NumberOfFailedSuboperations, instances.Count() }
+                }
+            };
+        }
+
+        if (connectionErrorResponse != null)
+        {
+            yield return connectionErrorResponse;
+            yield break;
+        }
+
         // 发送每个实例
         foreach (var instance in instances)
         {
+            DicomCMoveResponse? errorResponse = null;
             try
             {
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
@@ -427,9 +456,34 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
-                failedCount++;
-                continue;  // 发送失败直接继续下一个，不重试
+                if (IsNetworkError(ex))
+                {
+                    DicomLogger.Error("QRSCP", ex, "网络错误，中止传输 - SOPInstanceUID: {SopInstanceUid}", 
+                        instance.SopInstanceUid);
+                    
+                    errorResponse = new DicomCMoveResponse(request, DicomStatus.QueryRetrieveMoveDestinationUnknown)
+                    {
+                        Dataset = new DicomDataset
+                        {
+                            { DicomTag.NumberOfRemainingSuboperations, instances.Count() - (successCount + 1) },
+                            { DicomTag.NumberOfCompletedSuboperations, successCount },
+                            { DicomTag.NumberOfFailedSuboperations, instances.Count() - successCount }
+                        }
+                    };
+                }
+                else
+                {
+                    DicomLogger.Error("QRSCP", ex, "实例处理失败 - SOPInstanceUID: {SopInstanceUid}", 
+                        instance.SopInstanceUid);
+                    failedCount++;
+                    continue;
+                }
+            }
+
+            if (errorResponse != null)
+            {
+                yield return errorResponse;
+                yield break;
             }
 
             var pendingResponse = new DicomCMoveResponse(request, DicomStatus.Pending);
@@ -484,6 +538,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         // 发送每个实例
         foreach (var instance in instances)
         {
+            DicomCGetResponse? errorResponse = null;
             try
             {
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
@@ -504,9 +559,34 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("QRSCP", ex, "发送实例失败 - SOPInstanceUID: {SopInstanceUid}", instance.SopInstanceUid);
-                failedCount++;
-                continue;  // 发送失败直接继续下一个，不重试
+                if (IsNetworkError(ex))
+                {
+                    DicomLogger.Error("QRSCP", ex, "网络错误，中止传输 - SOPInstanceUID: {SopInstanceUid}", 
+                        instance.SopInstanceUid);
+                    
+                    errorResponse = new DicomCGetResponse(request, DicomStatus.ProcessingFailure)
+                    {
+                        Dataset = new DicomDataset
+                        {
+                            { DicomTag.NumberOfRemainingSuboperations, instances.Count() - (successCount + 1) },
+                            { DicomTag.NumberOfCompletedSuboperations, successCount },
+                            { DicomTag.NumberOfFailedSuboperations, instances.Count() - successCount }
+                        }
+                    };
+                }
+                else
+                {
+                    DicomLogger.Error("QRSCP", ex, "实例处理失败 - SOPInstanceUID: {SopInstanceUid}", 
+                        instance.SopInstanceUid);
+                    failedCount++;
+                    continue;
+                }
+            }
+
+            if (errorResponse != null)
+            {
+                yield return errorResponse;
+                yield break;
             }
 
             var pendingResponse = new DicomCGetResponse(request, DicomStatus.Pending);
@@ -559,5 +639,15 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             DicomLogger.Error("QRSCP", ex, "获取实例列表失败");
             return Enumerable.Empty<Instance>();
         }
+    }
+
+    private bool IsNetworkError(Exception ex)
+    {
+        // 检查是否是网络相关的异常
+        return ex is System.Net.Sockets.SocketException ||
+               ex is System.Net.WebException ||
+               ex is System.IO.IOException ||
+               ex is DicomNetworkException ||
+               (ex.InnerException != null && IsNetworkError(ex.InnerException));
     }
 }
