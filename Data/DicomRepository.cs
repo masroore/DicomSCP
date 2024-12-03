@@ -12,6 +12,7 @@ using System.Text;
 using DicomSCP.Data;
 using System.IO;
 using System.Text.Json;
+using System.Data;
 
 namespace DicomSCP.Data;
 
@@ -625,7 +626,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 AND (@ScheduledStationName IS NULL OR @ScheduledStationName = '' OR ScheduledStationName = @ScheduledStationName)
                 AND Status = 'SCHEDULED'";
 
-            LogDebug("执行工作表查询 - SQL: {Sql}, 参数: {@Parameters}", sql, new
+            LogDebug("执��工作表查询 - SQL: {Sql}, 参数: {@Parameters}", sql, new
             {
                 PatientId = patientId,
                 AccessionNumber = accessionNumber,
@@ -1147,4 +1148,52 @@ public class DicomRepository : BaseRepository, IDisposable
     }
 
     #endregion
+
+    public IEnumerable<Patient> GetPatients(string patientId, string patientName)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT DISTINCT 
+                    p.PatientId, 
+                    p.PatientName, 
+                    p.PatientBirthDate, 
+                    p.PatientSex 
+                FROM Patients p
+                INNER JOIN Studies s ON p.PatientId = s.PatientId 
+                WHERE 1=1";
+
+            var parameters = new DynamicParameters();
+
+            if (!string.IsNullOrEmpty(patientId))
+            {
+                sql += " AND p.PatientId LIKE @PatientId";
+                parameters.Add("@PatientId", $"%{patientId}%");
+            }
+
+            if (!string.IsNullOrEmpty(patientName))
+            {
+                sql += " AND p.PatientName LIKE @PatientName";
+                parameters.Add("@PatientName", $"%{patientName}%");
+            }
+
+            sql += " ORDER BY p.PatientName";
+
+            LogDebug("执行Patient查询 - SQL: {Sql}, PatientId: {PatientId}, PatientName: {PatientName}", 
+                sql, patientId, patientName);
+
+            var patients = connection.Query<Patient>(sql, parameters).ToList();
+
+            LogInformation("Patient查询完成 - 返回记录数: {Count}", patients.Count);
+
+            return patients;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "Patient查询失败 - PatientId: {PatientId}, PatientName: {PatientName}", 
+                patientId, patientName);
+            return Enumerable.Empty<Patient>();
+        }
+    }
 }

@@ -151,7 +151,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         if (request.Level != DicomQueryRetrieveLevel.Study && 
             request.Level != DicomQueryRetrieveLevel.Series && 
-            request.Level != DicomQueryRetrieveLevel.Image)
+            request.Level != DicomQueryRetrieveLevel.Image &&
+            request.Level != DicomQueryRetrieveLevel.Patient)
         {
             yield return new DicomCFindResponse(request, DicomStatus.QueryRetrieveIdentifierDoesNotMatchSOPClass);
             yield break;
@@ -160,6 +161,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         // 使用 fo-dicom 的查询处理
         var responses = request.Level switch
         {
+            DicomQueryRetrieveLevel.Patient => await HandlePatientLevelFind(request),
             DicomQueryRetrieveLevel.Study => await HandleStudyLevelFind(request),
             DicomQueryRetrieveLevel.Series => await HandleSeriesLevelFind(request),
             DicomQueryRetrieveLevel.Image => await HandleImageLevelFind(request),
@@ -319,34 +321,79 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         foreach (var instance in instances)
         {
-            var response = new DicomCFindResponse(request, DicomStatus.Pending);
-            var dataset = new DicomDataset();
-
-            // 添加字符集和其他通用标签
-            AddCommonTags(dataset, request.Dataset);
-
-            // 设置必要的字段
-            dataset.Add(DicomTag.StudyInstanceUID, studyInstanceUid);
-            dataset.Add(DicomTag.SeriesInstanceUID, seriesInstanceUid);
-            dataset.Add(DicomTag.SOPInstanceUID, instance.SopInstanceUid);
-            dataset.Add(DicomTag.SOPClassUID, instance.SopClassUid);
-            dataset.Add(DicomTag.InstanceNumber, instance.InstanceNumber ?? string.Empty);
-            
-            // 复制请求中的其他查询字段（如果不存在）
-            foreach (var tag in request.Dataset.Select(x => x.Tag))
+            try
             {
-                if (!dataset.Contains(tag) && request.Dataset.TryGetString(tag, out string value))
-                {
-                    dataset.Add(tag, value);
-                }
-            }
+                var response = new DicomCFindResponse(request, DicomStatus.Pending);
+                var dataset = new DicomDataset();
 
-            response.Dataset = dataset;
-            responses.Add(response);
+                // 添加字符集和其他通用标签
+                AddCommonTags(dataset, request.Dataset);
+
+                // 验证 UID 格式
+                var validStudyUid = ValidateUID(studyInstanceUid);
+                var validSeriesUid = ValidateUID(seriesInstanceUid);
+                var validSopInstanceUid = ValidateUID(instance.SopInstanceUid);
+                var validSopClassUid = ValidateUID(instance.SopClassUid);
+
+                // 设置必要的字段
+                dataset.Add(DicomTag.StudyInstanceUID, validStudyUid);
+                dataset.Add(DicomTag.SeriesInstanceUID, validSeriesUid);
+                dataset.Add(DicomTag.SOPInstanceUID, validSopInstanceUid);
+                dataset.Add(DicomTag.SOPClassUID, validSopClassUid);
+                dataset.Add(DicomTag.InstanceNumber, instance.InstanceNumber ?? string.Empty);
+
+                response.Dataset = dataset;
+                responses.Add(response);
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("QRSCP", ex, "创建Image响应失败 - SOPInstanceUID: {SopInstanceUid}", 
+                    instance.SopInstanceUid);
+                continue;
+            }
         }
 
         DicomLogger.Information("QRSCP", "Image级别查询完成 - 返回记录数: {Count}", responses.Count);
         return responses;
+    }
+
+    private string ValidateUID(string uid)
+    {
+        if (string.IsNullOrEmpty(uid)) return string.Empty;
+        
+        try
+        {
+            // 分割 UID
+            var parts = uid.Split('.');
+            var validParts = new List<string>();
+
+            foreach (var part in parts)
+            {
+                // 跳过空组件
+                if (string.IsNullOrEmpty(part))
+                {
+                    continue;
+                }
+
+                // 移除前导零并确保至少保留一个数字
+                var trimmed = part.TrimStart('0');
+                validParts.Add(string.IsNullOrEmpty(trimmed) ? "0" : trimmed);
+            }
+
+            // 确保至少有两个组件
+            if (validParts.Count < 2)
+            {
+                DicomLogger.Warning("QRSCP", "无效的UID格式 (组件数量不足): {Uid}", uid);
+                return "0.0";  // 返回一个有效的默认UID
+            }
+
+            return string.Join(".", validParts);
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("QRSCP", ex, "UID验证失败: {Uid}", uid);
+            return "0.0";  // 返回一个有效的默认UID
+        }
     }
 
     private string GetPreferredCharacterSet(DicomDataset requestDataset)
@@ -649,5 +696,44 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                ex is System.IO.IOException ||
                ex is DicomNetworkException ||
                (ex.InnerException != null && IsNetworkError(ex.InnerException));
+    }
+
+    private async Task<List<DicomCFindResponse>> HandlePatientLevelFind(DicomCFindRequest request)
+    {
+        var responses = new List<DicomCFindResponse>();
+
+        try
+        {
+            // 从请求中获取查询参数
+            var patientId = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientID, string.Empty);
+            var patientName = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty);
+
+            // 从数据库查询患者数据
+            var patients = await Task.Run(() => _repository.GetPatients(patientId, patientName));
+
+            // 构建响应
+            foreach (var patient in patients)
+            {
+                var response = new DicomCFindResponse(request, DicomStatus.Pending);
+                var dataset = new DicomDataset();
+
+                AddCommonTags(dataset, request.Dataset);
+
+                dataset.Add(DicomTag.PatientID, patient.PatientId ?? string.Empty)
+                      .Add(DicomTag.PatientName, patient.PatientName ?? string.Empty)
+                      .Add(DicomTag.PatientBirthDate, patient.PatientBirthDate ?? string.Empty)
+                      .Add(DicomTag.PatientSex, patient.PatientSex ?? string.Empty);
+
+                response.Dataset = dataset;
+                responses.Add(response);
+            }
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("QRSCP", ex, "Patient级查询失败");
+            responses.Add(new DicomCFindResponse(request, DicomStatus.ProcessingFailure));
+        }
+
+        return responses;
     }
 }

@@ -58,8 +58,14 @@ public sealed class DicomServer : IDisposable
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("DICOM", ex, "DICOM服务启动失败");
-            await StopAsync();
+            DicomLogger.Error("DICOM", ex, "DICOM服务启动失败 - AET: {AeTitle}", _settings.AeTitle);
+            _storeScp?.Dispose();
+            _worklistScp?.Dispose();
+            _qrScp?.Dispose();
+            _printScp?.Dispose();
+            _storeScp = _worklistScp = null;
+            _qrScp = null;
+            _printScp = null;
             throw;
         }
     }
@@ -98,11 +104,6 @@ public sealed class DicomServer : IDisposable
             WorklistSCP.Configure(
                 _settings,
                 _configuration,
-                _repository);
-
-            // 配置打印服务
-            PrintSCP.Configure(
-                _settings,
                 _repository);
 
             try
@@ -167,8 +168,7 @@ public sealed class DicomServer : IDisposable
                     _settings.PrintSCP.Port,
                     null,
                     Encoding.UTF8,
-                    _loggerFactory.CreateLogger<PrintSCP>(),
-                    _repository);
+                    _loggerFactory.CreateLogger<PrintSCP>());
 
                 DicomLogger.Information("DICOM", "打印服务已启动 - AET: {AeTitle}, 端口: {Port}", 
                     _settings.PrintSCP.AeTitle, _settings.PrintSCP.Port);

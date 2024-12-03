@@ -5,13 +5,14 @@ using FellowOakDicom.Printing;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
 using DicomSCP.Models;
+using Microsoft.Extensions.Options;
 
 namespace DicomSCP.Services;
 
 public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvider, IDicomCEchoProvider
 {
-    private static DicomSettings? _settings;
-    private static DicomRepository? _repository;
+    private DicomSettings Settings => DicomServiceProvider.GetRequiredService<IOptions<DicomSettings>>().Value;
+    private readonly DicomRepository _repository;
     private readonly string _printPath;
     private readonly string _relativePrintPath = "prints";
 
@@ -42,14 +43,6 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         DicomUID.Parse("1.2.840.10008.5.1.1.18")     // Basic Color Print Management Meta SOP Class
     };
 
-    public static void Configure(
-        DicomSettings settings,
-        DicomRepository repository)
-    {
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-    }
-
     public PrintSCP(
         INetworkStream stream, 
         Encoding fallbackEncoding, 
@@ -57,13 +50,18 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         DicomServiceDependencies dependencies)
         : base(stream, fallbackEncoding, log, dependencies)
     {
-        if (_settings == null || _repository == null)
+        try
         {
-            throw new InvalidOperationException("PrintSCP not configured");
+            _repository = DicomServiceProvider.GetRequiredService<DicomRepository>();
+            _printPath = Path.Combine(Settings.StoragePath, _relativePrintPath);
+            Directory.CreateDirectory(_printPath);
+            DicomLogger.Information("PrintSCP", "PrintSCP服务初始化完成");
         }
-
-        _printPath = Path.Combine(_settings.StoragePath, _relativePrintPath);
-        Directory.CreateDirectory(_printPath);
+        catch (Exception ex)
+        {
+            DicomLogger.Error("PrintSCP", ex, "PrintSCP服务初始化失败");
+            throw;
+        }
     }
 
     // 检查并创建打印目录
@@ -133,24 +131,52 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
     public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
     {
-        DicomLogger.Information("PrintSCP", "收到关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
-            association.CalledAE, association.CallingAE);
-
-        foreach (var pc in association.PresentationContexts)
+        try
         {
-            if (SupportedSOPClasses.Contains(pc.AbstractSyntax))
+            // 验证调用方 AE Title
+            if (Settings.PrintSCP.ValidateCallingAE)
             {
-                pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
-                DicomLogger.Information("PrintSCP", "接受打印服务 - {Service}", pc.AbstractSyntax.Name);
-            }
-            else
-            {
-                pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
-                DicomLogger.Warning("PrintSCP", "拒绝不支持的服务 - {Service}", pc.AbstractSyntax.Name);
-            }
-        }
+                if (string.IsNullOrEmpty(association.CallingAE))
+                {
+                    DicomLogger.Warning("PrintSCP", "拒绝空的 Calling AE");
+                    return SendAssociationRejectAsync(
+                        DicomRejectResult.Permanent,
+                        DicomRejectSource.ServiceUser,
+                        DicomRejectReason.CallingAENotRecognized);
+                }
 
-        return SendAssociationAcceptAsync(association);
+                if (!Settings.PrintSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
+                {
+                    DicomLogger.Warning("PrintSCP", "拒绝未授权的 Calling AE: {CallingAE}", association.CallingAE);
+                    return SendAssociationRejectAsync(
+                        DicomRejectResult.Permanent,
+                        DicomRejectSource.ServiceUser,
+                        DicomRejectReason.CallingAENotRecognized);
+                }
+            }
+
+            foreach (var pc in association.PresentationContexts)
+            {
+                if (SupportedSOPClasses.Contains(pc.AbstractSyntax))
+                {
+                    pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
+                }
+                else
+                {
+                    pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
+                }
+            }
+
+            return SendAssociationAcceptAsync(association);
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("PrintSCP", ex, "处理关联请求失败");
+            return SendAssociationRejectAsync(
+                DicomRejectResult.Permanent,
+                DicomRejectSource.ServiceUser,
+                DicomRejectReason.NoReasonGiven);
+        }
     }
 
     public Task OnReceiveAssociationReleaseRequestAsync()
