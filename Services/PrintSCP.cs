@@ -412,102 +412,117 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     // 处理图像盒设置请求
     private async Task<DicomStatus> HandleImageBoxSetAsync(DicomNSetRequest request)
     {
-        if (_repository == null)
+        try
         {
-            throw new InvalidOperationException("PrintSCP repository not configured");
-        }
-
-        // 记录数据集中的所有标签
-        LogDatasetTags(request.Dataset, "数据集标签列表");
-
-        // 检查图像数据
-        var grayscaleImageTag = new DicomTag(0x2020, 0x0110);  // Basic Grayscale Image Sequence
-        if (!request.Dataset.Contains(grayscaleImageTag))
-        {
-            DicomLogger.Warning("PrintSCP", "未找到图像序列");
-            return DicomStatus.InvalidAttributeValue;
-        }
-
-        var grayscaleSequence = request.Dataset.GetSequence(grayscaleImageTag);
-        if (grayscaleSequence == null || grayscaleSequence.Items.Count == 0)
-        {
-            DicomLogger.Warning("PrintSCP", "图像序列为空");
-            return DicomStatus.InvalidAttributeValue;
-        }
-
-        DicomLogger.Information("PrintSCP", "找到图像序列 - 项目数: {Count}", grayscaleSequence.Items.Count);
-
-        foreach (var sequenceItem in grayscaleSequence.Items)
-        {
-            // 记录图像序列中的标签
-            LogDatasetTags(sequenceItem, "图像序列项目标签");
-
-            // 存图像数据
-            var (success, absoluteImagePath, relativeImagePath) = await SaveImageDataAsync(sequenceItem, request.SOPInstanceUID.UID);
-            if (!success || absoluteImagePath == null || relativeImagePath == null)
+            if (_repository == null)
             {
-                continue;
+                throw new InvalidOperationException("PrintSCP repository not configured");
             }
 
-            // 从原始数据集中提取患者信息
-            var patientId = sequenceItem.GetSingleValueOrDefault(DicomTag.PatientID, "UNKNOWN");
-            var patientName = sequenceItem.GetSingleValueOrDefault(DicomTag.PatientName, "UNKNOWN");
-            var accessionNumber = sequenceItem.GetSingleValueOrDefault(DicomTag.AccessionNumber, "");
+            // 记录数据集中的所有标签
+            LogDatasetTags(request.Dataset, "数据集标签列表");
 
-            try
+            // 检查图像数据
+            var grayscaleImageTag = new DicomTag(0x2020, 0x0110);  // Basic Grayscale Image Sequence
+            if (!request.Dataset.Contains(grayscaleImageTag))
             {
-                // 尝试从FilmSession中查找最近的打印任务
-                var pendingJobs = await _repository.GetPrintJobsByStatusAsync("PENDING");
-                var latestJob = pendingJobs?.OrderByDescending(j => j.CreateTime).FirstOrDefault();
+                DicomLogger.Warning("PrintSCP", "未找到图像序列");
+                return DicomStatus.InvalidAttributeValue;
+            }
 
-                if (latestJob != null)
+            var grayscaleSequence = request.Dataset.GetSequence(grayscaleImageTag);
+            if (grayscaleSequence == null || grayscaleSequence.Items.Count == 0)
+            {
+                DicomLogger.Warning("PrintSCP", "图像序列为空");
+                return DicomStatus.InvalidAttributeValue;
+            }
+
+            DicomLogger.Information("PrintSCP", "找到图像序列 - 项目数: {Count}", grayscaleSequence.Items.Count);
+
+            foreach (var sequenceItem in grayscaleSequence.Items)
+            {
+                // 记录图像序列中的标签
+                LogDatasetTags(sequenceItem, "图像序列项目标签");
+
+                // 存图像数据
+                var (success, absoluteImagePath, relativeImagePath) = await SaveImageDataAsync(sequenceItem, request.SOPInstanceUID.UID);
+                if (!success || absoluteImagePath == null || relativeImagePath == null)
                 {
-                    // 更新现有打印任务
-                    await _repository.UpdatePrintJobAsync(
-                        filmSessionId: latestJob.FilmSessionId,
-                        patientInfo: new Dictionary<string, string>
-                        {
-                            { "PatientId", patientId },
-                            { "PatientName", patientName },
-                            { "AccessionNumber", accessionNumber }
-                        }
-                    );
-
-                    await _repository.UpdatePrintJobStatusAsync(
-                        latestJob.JobId,
-                        "PRINTING",
-                        relativeImagePath
-                    );
-
-                    DicomLogger.Information("PrintSCP", "更新打印任务成功 - JobId: {JobId}, FilmSessionId: {SessionId}, 图像路径: {Path}", 
-                        latestJob.JobId, latestJob.FilmSessionId, absoluteImagePath);
-                }
-                else
-                {
-                    // 如果没有找到待处理的任务，创建新的打印任务
-                    var newJob = await CreateNewPrintJobAsync(
-                        request.SOPInstanceUID.UID,
-                        absoluteImagePath,
-                        relativeImagePath,
-                        patientId,
-                        patientName,
-                        accessionNumber
-                    );
-
-                    DicomLogger.Information("PrintSCP", "创建新的打印任务成功 - JobId: {JobId}, FilmSessionId: {SessionId}, 图像路径: {Path}", 
-                        newJob.JobId, newJob.FilmSessionId, absoluteImagePath);
+                    continue;
                 }
 
-                return DicomStatus.Success;
-            }
-            catch (Exception ex)
-            {
-                DicomLogger.Error("PrintSCP", ex, "处理打印任务失败");
-                return DicomStatus.ProcessingFailure;
-            }
-        }
+                // 从原始数据集中提取患者信息
+                var patientId = sequenceItem.GetSingleValueOrDefault(DicomTag.PatientID, "UNKNOWN");
+                var patientName = sequenceItem.GetSingleValueOrDefault(DicomTag.PatientName, "UNKNOWN");
+                var accessionNumber = sequenceItem.GetSingleValueOrDefault(DicomTag.AccessionNumber, "");
 
-        return DicomStatus.ProcessingFailure;
+                try
+                {
+                    // 尝试从FilmSession中查找最近的打印任务
+                    var pendingJobs = await _repository.GetPrintJobsByStatusAsync("PENDING");
+                    var latestJob = pendingJobs?.OrderByDescending(j => j.CreateTime).FirstOrDefault();
+
+                    if (latestJob != null)
+                    {
+                        // 更新现有打印任务
+                        await _repository.UpdatePrintJobAsync(
+                            filmSessionId: latestJob.FilmSessionId,
+                            patientInfo: new Dictionary<string, string>
+                            {
+                                { "PatientId", patientId },
+                                { "PatientName", patientName },
+                                { "AccessionNumber", accessionNumber }
+                            }
+                        );
+
+                        // 更新状态为COMPLETED并设置图像路径
+                        await _repository.UpdatePrintJobStatusAsync(
+                            latestJob.JobId,
+                            "COMPLETED",  // 直接设置为已完成
+                            relativeImagePath
+                        );
+
+                        DicomLogger.Information("PrintSCP", "打印任务完成 - JobId: {JobId}, FilmSessionId: {SessionId}, 图像路径: {Path}", 
+                            latestJob.JobId, latestJob.FilmSessionId, absoluteImagePath);
+                    }
+                    else
+                    {
+                        // 如果没有找到待处理的任务，创建新的打印任务，并直接设置为已完成
+                        var newJob = await CreateNewPrintJobAsync(
+                            request.SOPInstanceUID.UID,
+                            absoluteImagePath,
+                            relativeImagePath,
+                            patientId,
+                            patientName,
+                            accessionNumber
+                        );
+
+                        // 立即更新为已完成状态
+                        await _repository.UpdatePrintJobStatusAsync(
+                            newJob.JobId,
+                            "COMPLETED"
+                        );
+
+                        DicomLogger.Information("PrintSCP", "创建并完成新的打印任务 - JobId: {JobId}, FilmSessionId: {SessionId}, 图像路径: {Path}", 
+                            newJob.JobId, newJob.FilmSessionId, absoluteImagePath);
+                    }
+
+                    return DicomStatus.Success;
+                }
+                catch (Exception ex)
+                {
+                    DicomLogger.Error("PrintSCP", ex, "处理打印任务失败");
+                    return DicomStatus.ProcessingFailure;
+                }
+            }
+
+            return DicomStatus.ProcessingFailure;
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("PrintSCP", ex, "处理图像盒设置请求失败");
+            return DicomStatus.ProcessingFailure;
+        }
     }
 
     public async Task<DicomNSetResponse> OnNSetRequestAsync(DicomNSetRequest request)

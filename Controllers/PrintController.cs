@@ -6,6 +6,8 @@ using FellowOakDicom.Imaging;
 using DicomSCP.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Processing;
 
 namespace DicomSCP.Controllers;
 
@@ -85,10 +87,20 @@ public class PrintController : Controller
     }
 
     [HttpGet("{jobId}/image")]
-    public async Task<IActionResult> GetPrintJobImage(string jobId)
+    public async Task<IActionResult> GetPrintJobImage(string jobId, [FromQuery] int? width = null, [FromQuery] int? height = null)
     {
         try
         {
+            // 参数验证
+            if (width.HasValue && width.Value <= 0)
+            {
+                return BadRequest(new { message = "宽度必须大于0" });
+            }
+            if (height.HasValue && height.Value <= 0)
+            {
+                return BadRequest(new { message = "高度必须大于0" });
+            }
+
             // 获取打印任务
             var job = await GetPrintJobAsync(jobId);
             if (job == null)
@@ -103,8 +115,8 @@ public class PrintController : Controller
                 return NotFound(new { message = $"打印任务的图像文件不存在: {job.ImagePath}" });
             }
 
-            // 转换图像并返回
-            return await ConvertDicomToImageAsync(fullPath);
+            // 转换图像并返回，支持指定尺寸
+            return await ConvertDicomToImageAsync(fullPath, width, height);
         }
         catch (Exception ex)
         {
@@ -133,42 +145,87 @@ public class PrintController : Controller
         return Path.Combine(storagePath, job.ImagePath);
     }
 
-    private async Task<IActionResult> ConvertDicomToImageAsync(string dicomFilePath)
+    private async Task<IActionResult> ConvertDicomToImageAsync(string dicomFilePath, int? width = null, int? height = null)
     {
         // 读取DICOM文件
         var dicomFile = await DicomFile.OpenAsync(dicomFilePath);
         var dicomImage = new DicomImage(dicomFile.Dataset);
-
-        // 设置图像渲染参数并获取图像数据
+        
+        // 获取原始图像数据
         var image = dicomImage.RenderImage();
-        var pixelData = image.AsBytes();
+        
+        // 计算目标尺寸
+        var (targetWidth, targetHeight) = CalculateTargetSize(
+            originalWidth: image.Width,
+            originalHeight: image.Height,
+            requestedWidth: width,
+            requestedHeight: height);
 
-        // 使用ImageSharp创建图像
         using var memoryStream = new MemoryStream();
-        using (var outputImage = new Image<Rgba32>(image.Width, image.Height))
+        using (var outputImage = Image.LoadPixelData<Rgba32>(
+            image.AsBytes(), 
+            image.Width, 
+            image.Height))
         {
-            // 复制像素数据
-            var stride = image.Width * 4; // 4 bytes per pixel (RGBA)
-            for (int y = 0; y < image.Height; y++)
+            // 调整图像大小
+            if (targetWidth != image.Width || targetHeight != image.Height)
             {
-                var rowStart = y * stride;
-                for (int x = 0; x < image.Width; x++)
+                outputImage.Mutate(x => x.Resize(new ResizeOptions
                 {
-                    var offset = rowStart + (x * 4);
-                    outputImage[x, y] = new Rgba32(
-                        pixelData[offset],     // R
-                        pixelData[offset + 1], // G
-                        pixelData[offset + 2], // B
-                        pixelData[offset + 3]  // A
-                    );
-                }
+                    Size = new Size(targetWidth, targetHeight),
+                    Mode = ResizeMode.Max,  // 保持宽高比
+                    Sampler = KnownResamplers.Lanczos3  // 使用Lanczos算法提供更好的质量
+                }));
             }
 
+            // 配置PNG编码器选项，优化输出大小
+            var encoder = new PngEncoder
+            {
+                CompressionLevel = PngCompressionLevel.BestSpeed,  // 使用最快的压缩方式
+                FilterMethod = PngFilterMethod.None,  // 不使用过滤，提高性能
+                ColorType = PngColorType.Rgb  // 使用RGB格式，不包含Alpha通道
+            };
+
             // 保存为PNG
-            await outputImage.SaveAsPngAsync(memoryStream);
+            await outputImage.SaveAsPngAsync(memoryStream, encoder);
         }
 
         memoryStream.Position = 0;
         return new FileContentResult(memoryStream.ToArray(), "image/png");
+    }
+
+    /// <summary>
+    /// 计算目标图像尺寸
+    /// </summary>
+    private (int width, int height) CalculateTargetSize(
+        int originalWidth, 
+        int originalHeight,
+        int? requestedWidth,
+        int? requestedHeight)
+    {
+        // 如果没有指定任何尺寸，返回原始尺寸
+        if (!requestedWidth.HasValue && !requestedHeight.HasValue)
+        {
+            return (originalWidth, originalHeight);
+        }
+
+        float originalRatio = (float)originalWidth / originalHeight;
+
+        // 同时指定宽度和高度
+        if (requestedWidth.HasValue && requestedHeight.HasValue)
+        {
+            return (requestedWidth.Value, requestedHeight.Value);
+        }
+
+        // 只指定宽度
+        if (requestedWidth.HasValue)
+        {
+            int height = (int)(requestedWidth.Value / originalRatio);
+            return (requestedWidth.Value, height);
+        }
+
+        // 只指定高度
+        int width = (int)(requestedHeight!.Value * originalRatio);
+        return (width, requestedHeight.Value);
     }
 } 
