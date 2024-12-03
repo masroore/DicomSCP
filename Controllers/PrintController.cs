@@ -1,73 +1,74 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Data;
 using DicomSCP.Models;
-using DicomSCP.Services;
+using FellowOakDicom;
+using FellowOakDicom.Imaging;
 
 namespace DicomSCP.Controllers;
 
 [ApiController]
-[Route("api/print")]
-public class PrintController : ControllerBase
+[Route("api/[controller]")]
+public class PrintController : Controller
 {
     private readonly DicomRepository _repository;
+    private readonly ILogger<PrintController> _logger;
 
-    public PrintController(DicomRepository repository)
+    public PrintController(DicomRepository repository, ILogger<PrintController> logger)
     {
         _repository = repository;
+        _logger = logger;
     }
 
-    [HttpGet("jobs")]
-    public async Task<IActionResult> GetJobs()
+    [HttpGet]
+    public async Task<IActionResult> GetPrintJobs()
     {
         try
         {
-            var jobs = await _repository.GetPrintJobsAsync();
-            return Ok(jobs);
+            var items = await _repository.GetPrintJobsAsync();
+            return Ok(items);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 获取打印作业列表失败");
-            return StatusCode(500, "获取打印作业列表失败");
+            _logger.LogError(ex, "获取打印任务时发生错误");
+            return StatusCode(500, new { message = "获取打印任务失败" });
         }
     }
 
-    [HttpPost("jobs/{jobId}/start")]
-    public async Task<IActionResult> StartJob(string jobId)
+    [HttpGet("{jobId}")]
+    public async Task<IActionResult> GetPrintJob(string jobId)
     {
         try
         {
             var job = await _repository.GetPrintJobAsync(jobId);
             if (job == null)
             {
-                return NotFound("打印作业不存在");
+                return NotFound(new { message = "打印任务不存在" });
             }
-
-            await _repository.UpdatePrintJobStatusAsync(jobId, "PRINTING");
-            return Ok();
+            return Ok(job);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 启动打印作业失败 - JobId: {JobId}", jobId);
-            return StatusCode(500, "启动打印作业失败");
+            _logger.LogError(ex, "获取打印任务详情时发生错误");
+            return StatusCode(500, new { message = "获取打印任务详情失败" });
         }
     }
 
-    [HttpDelete("jobs/{jobId}")]
-    public async Task<IActionResult> DeleteJob(string jobId)
+    [HttpDelete("{jobId}")]
+    public async Task<IActionResult> DeletePrintJob(string jobId)
     {
         try
         {
-            var success = await _repository.DeletePrintJobAsync(jobId);
-            if (!success)
+            var result = await _repository.DeletePrintJobAsync(jobId);
+            if (!result)
             {
-                return NotFound("打印作业不存在");
+                return NotFound(new { message = "打印任务不存在" });
             }
-            return NoContent();
+            return Ok(new { message = "删除成功" });
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 删除打印作业失败 - JobId: {JobId}", jobId);
-            return StatusCode(500, "删除打印作业失败");
+            _logger.LogError(ex, "删除��印任务时发生错误");
+            return StatusCode(500, new { message = "删除打印任务失败" });
         }
     }
 } 

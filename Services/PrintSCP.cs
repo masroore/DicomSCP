@@ -15,6 +15,11 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     private readonly string _printPath;
     private readonly string _relativePrintPath = "prints";
 
+    // 添加缺失的字段
+    private DicomFilmSession? _currentFilmSession;
+    private DicomFilmBox? _currentFilmBox;
+    private string? _callingAE;
+
     // 支持的传输语法
     private static readonly DicomTransferSyntax[] AcceptedTransferSyntaxes = new[]
     {
@@ -179,6 +184,13 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             throw new InvalidOperationException("PrintSCP repository not configured");
         }
 
+        // 创建并保存 FilmSession
+        _currentFilmSession = new DicomFilmSession(request.Dataset)
+        {
+            SOPInstanceUID = request.SOPInstanceUID.UID
+        };
+        _callingAE = Association.CallingAE;
+
         // 创建打印任务
         var job = new PrintJob
         {
@@ -186,7 +198,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             FilmSessionId = request.SOPInstanceUID.UID,
             CallingAE = Association.CallingAE,
             Status = "PENDING",
-            CreateTime = DateTime.UtcNow
+            CreateTime = DateTime.Now,
+            UpdateTime = DateTime.Now
         };
 
         DicomLogger.Information("PrintSCP", 
@@ -210,9 +223,21 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         // 记录数据集中的所有标签
         LogDatasetTags(request.Dataset, "胶片盒参数标签列表");
 
-        // 获取打印参数
-        var filmBoxParams = ExtractFilmBoxParameters(request.Dataset);
-        DicomLogger.Information("PrintSCP", "片盒参数: {@Parameters}", filmBoxParams);
+        // 创建并保存 FilmBox
+        _currentFilmBox = new DicomFilmBox(request.Dataset)
+        {
+            SOPInstanceUID = request.SOPInstanceUID.UID,
+            FilmSizeID = request.Dataset.GetSingleValueOrDefault(DicomTag.FilmSizeID, ""),
+            FilmOrientation = request.Dataset.GetSingleValueOrDefault(DicomTag.FilmOrientation, ""),
+            ImageDisplayFormat = request.Dataset.GetSingleValueOrDefault(DicomTag.ImageDisplayFormat, ""),
+            MagnificationType = request.Dataset.GetSingleValueOrDefault(DicomTag.MagnificationType, ""),
+            BorderDensity = request.Dataset.GetSingleValueOrDefault(DicomTag.BorderDensity, ""),
+            EmptyImageDensity = request.Dataset.GetSingleValueOrDefault(DicomTag.EmptyImageDensity, ""),
+            MinDensity = request.Dataset.GetSingleValueOrDefault(DicomTag.MinDensity, ""),
+            MaxDensity = request.Dataset.GetSingleValueOrDefault(DicomTag.MaxDensity, ""),
+            Trim = request.Dataset.GetSingleValueOrDefault(DicomTag.Trim, ""),
+            ConfigurationInformation = request.Dataset.GetSingleValueOrDefault(DicomTag.ConfigurationInformation, "")
+        };
 
         // 获取关联的FilmSession
         var filmSessionUid = "";
@@ -227,7 +252,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
         if (!string.IsNullOrEmpty(filmSessionUid))
         {
-            // 更新打印任务，包括FilmBoxId
+            // 更新打印任务，包括FilmBoxId和打印参数
             var filmBoxId = request.SOPInstanceUID.UID;
             DicomLogger.Information("PrintSCP", "更新打印任务 - FilmSessionId: {SessionId}, FilmBoxId: {BoxId}", 
                 filmSessionUid, filmBoxId);
@@ -235,7 +260,19 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             await _repository.UpdatePrintJobAsync(
                 filmSessionId: filmSessionUid,
                 filmBoxId: filmBoxId,
-                printParams: filmBoxParams
+                printParams: new Dictionary<string, string>
+                {
+                    { "FilmSize", _currentFilmBox.FilmSizeID },
+                    { "FilmOrientation", _currentFilmBox.FilmOrientation },
+                    { "FilmLayout", _currentFilmBox.ImageDisplayFormat },
+                    { "MagnificationType", _currentFilmBox.MagnificationType },
+                    { "BorderDensity", _currentFilmBox.BorderDensity },
+                    { "EmptyImageDensity", _currentFilmBox.EmptyImageDensity },
+                    { "MinDensity", _currentFilmBox.MinDensity },
+                    { "MaxDensity", _currentFilmBox.MaxDensity },
+                    { "TrimValue", _currentFilmBox.Trim },
+                    { "ConfigurationInfo", _currentFilmBox.ConfigurationInformation }
+                }
             );
             return DicomStatus.Success;
         }
@@ -338,26 +375,38 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         string patientName,
         string accessionNumber)
     {
-        var newJob = new PrintJob
+        if (_repository == null)
+        {
+            throw new InvalidOperationException("PrintSCP repository not configured");
+        }
+
+        var job = new PrintJob
         {
             JobId = Guid.NewGuid().ToString("N"),
-            FilmSessionId = sopInstanceUid,
-            FilmBoxId = sopInstanceUid,
-            CallingAE = Association.CallingAE,
-            Status = "PRINTING",
+            FilmSessionId = _currentFilmSession?.SOPInstanceUID ?? "",
+            FilmBoxId = _currentFilmBox?.SOPInstanceUID ?? "",
+            CallingAE = _callingAE ?? "",
+            Status = "PENDING",
             ImagePath = relativeImagePath,
             PatientId = patientId,
             PatientName = patientName,
             AccessionNumber = accessionNumber,
+            FilmSize = _currentFilmBox?.FilmSizeID ?? "",
+            FilmOrientation = _currentFilmBox?.FilmOrientation ?? "",
+            FilmLayout = _currentFilmBox?.ImageDisplayFormat ?? "",
+            MagnificationType = _currentFilmBox?.MagnificationType ?? "",
+            BorderDensity = _currentFilmBox?.BorderDensity ?? "",
+            EmptyImageDensity = _currentFilmBox?.EmptyImageDensity ?? "",
+            MinDensity = _currentFilmBox?.MinDensity?.ToString() ?? "",
+            MaxDensity = _currentFilmBox?.MaxDensity?.ToString() ?? "",
+            TrimValue = _currentFilmBox?.Trim?.ToString() ?? "",
+            ConfigurationInfo = _currentFilmBox?.ConfigurationInformation ?? "",
             CreateTime = DateTime.Now,
             UpdateTime = DateTime.Now
         };
 
-        await _repository!.AddPrintJobAsync(newJob);
-        DicomLogger.Information("PrintSCP", "创建新的打印任务 - JobId: {JobId}, FilmSessionId: {SessionId}, 图像路径: {Path}", 
-            newJob.JobId, newJob.FilmSessionId, absoluteImagePath);
-
-        return newJob;
+        await _repository.AddPrintJobAsync(job);
+        return job;
     }
 
     // 处理图像盒设置请求
@@ -393,7 +442,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             // 记录图像序列中的标签
             LogDatasetTags(sequenceItem, "图像序列项目标签");
 
-            // 保存图像数据
+            // 存图像数据
             var (success, absoluteImagePath, relativeImagePath) = await SaveImageDataAsync(sequenceItem, request.SOPInstanceUID.UID);
             if (!success || absoluteImagePath == null || relativeImagePath == null)
             {
@@ -554,4 +603,33 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         DicomLogger.Information("PrintSCP", "收到 C-ECHO 请求");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
+}
+
+// 添加辅助类
+public class DicomFilmSession
+{
+    public DicomFilmSession(DicomDataset dataset)
+    {
+        // 可以从 dataset 中提取其他需要的属性
+    }
+    public string SOPInstanceUID { get; set; } = "";
+}
+
+public class DicomFilmBox
+{
+    public DicomFilmBox(DicomDataset dataset)
+    {
+        // 可以从 dataset 中提取其他需要的属性
+    }
+    public string SOPInstanceUID { get; set; } = "";
+    public string FilmSizeID { get; set; } = "";
+    public string FilmOrientation { get; set; } = "";
+    public string ImageDisplayFormat { get; set; } = "";
+    public string MagnificationType { get; set; } = "";
+    public string BorderDensity { get; set; } = "";
+    public string EmptyImageDensity { get; set; } = "";
+    public string MinDensity { get; set; } = "";
+    public string MaxDensity { get; set; } = "";
+    public string Trim { get; set; } = "";
+    public string ConfigurationInformation { get; set; } = "";
 } 
