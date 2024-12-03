@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using DicomSCP.Models;
 using System.Net;
+using System.Collections.Generic;
 
 namespace DicomSCP.Services;
 
@@ -23,6 +24,7 @@ public sealed class DicomServer : IDisposable
     private IDicomServer? _qrScp;
     private IDicomServer? _printScp;
     private bool _disposed;
+    private readonly Dictionary<string, IDicomServer> _servers;
 
     public DicomServer(
         IConfiguration configuration,
@@ -34,6 +36,7 @@ public sealed class DicomServer : IDisposable
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _settings = settings?.Value ?? throw new ArgumentNullException(nameof(settings));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _servers = new Dictionary<string, IDicomServer>();
     }
 
     public bool IsRunning => _storeScp != null || _worklistScp != null || _qrScp != null || _printScp != null;
@@ -278,10 +281,10 @@ public sealed class DicomServer : IDisposable
             IsRunning = IsRunning,
             Services = new ServicesStatus
             {
-                StoreScp = _storeScp != null,
-                WorklistScp = _worklistScp != null,
-                QrScp = _qrScp != null,
-                PrintScp = _printScp != null
+                StoreScp = _servers.ContainsKey("store") && _servers["store"].IsRunning,
+                WorklistScp = _servers.ContainsKey("worklist") && _servers["worklist"].IsRunning,
+                QrScp = _servers.ContainsKey("qr") && _servers["qr"].IsRunning,
+                PrintScp = _servers.ContainsKey("print") && _servers["print"].IsRunning
             }
         };
     }

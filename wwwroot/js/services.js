@@ -66,43 +66,6 @@ class ServiceManager {
             }
         });
     }
-
-    async restartAllServices() {
-        if (!confirm('确定要重启所有服务吗？这可能会导致正在进行的操作中断。')) {
-            return;
-        }
-
-        try {
-            // 显示所有服务为重启中状态
-            ['storeScp', 'worklistScp', 'qrScp', 'printScp'].forEach(serviceId => {
-                const element = document.getElementById(`${serviceId}-status`);
-                if (element) {
-                    element.className = 'badge bg-warning';
-                    element.textContent = '重启中...';
-                }
-            });
-
-            const response = await fetch('/api/dicom/restart', {
-                method: 'POST'
-            });
-
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
-            if (!response.ok) {
-                throw new Error('重启服务失败');
-            }
-
-            // 等待几秒后更新状态
-            setTimeout(() => this.updateStatus(), 5000);
-        } catch (error) {
-            console.error('重启服务失败:', error);
-            alert('重启服务失败: ' + error.message);
-            this.updateStatus();
-        }
-    }
 }
 
 // 初始化服务管理器

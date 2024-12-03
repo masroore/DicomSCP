@@ -50,7 +50,7 @@ class ConfigManager {
             try {
                 config = JSON.parse(document.getElementById('configEditor').value);
             } catch (e) {
-                this.showToast('error', '配置格式不正确，请检查JSON格式');
+                this.showToast('danger', '配置格式不正确，请检查JSON格式');
                 return;
             }
 
@@ -72,11 +72,11 @@ class ConfigManager {
             }
 
             // 只提示保存成功和需要重启
-            this.showToast('success', '配置已保存，如需生效请点击右上角"重启服务"按钮');
+            this.showToast('success', '配置保存成功！需要重启服务生效');
 
         } catch (error) {
             console.error('保存配置失败:', error);
-            this.showToast('error', '保存配置失败: ' + error.message);
+            this.showToast('danger', '保存配置失败: ' + error.message);
         }
     }
 
@@ -85,7 +85,16 @@ class ConfigManager {
         const toastTitle = document.getElementById('storeToastTitle');
         const toastMessage = document.getElementById('storeToastMessage');
         
-        toastTitle.textContent = type === 'error' ? '错误' : '成功';
+        // 设置样式
+        toast.classList.remove('bg-success', 'bg-danger', 'text-white');
+        if (type === 'success') {
+            toast.classList.add('bg-success', 'text-white');
+            toastTitle.textContent = '操作成功';
+        } else {
+            toast.classList.add('bg-danger', 'text-white');
+            toastTitle.textContent = '操作失败';
+        }
+        
         toastMessage.textContent = message;
         
         const bsToast = new bootstrap.Toast(toast);
