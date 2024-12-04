@@ -1,6 +1,7 @@
 using FellowOakDicom;
 using FellowOakDicom.Network;
 using FellowOakDicom.Imaging.NativeCodec;
+using FellowOakDicom.Imaging.Codec;
 using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
@@ -78,8 +79,10 @@ if (swaggerSettings.Enabled)
 }
 
 // DICOM服务注册
-builder.Services.AddFellowOakDicom()
+builder.Services
+    .AddFellowOakDicom()
     .AddTranscoderManager<NativeTranscoderManager>();
+
 builder.Services.AddSingleton<DicomRepository>();
 builder.Services.AddSingleton<DicomServer>();
 builder.Services.AddSingleton<WorklistRepository>();
