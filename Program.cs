@@ -1,5 +1,6 @@
 using FellowOakDicom;
 using FellowOakDicom.Network;
+using FellowOakDicom.Imaging.NativeCodec;
 using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
@@ -77,7 +78,8 @@ if (swaggerSettings.Enabled)
 }
 
 // DICOM服务注册
-builder.Services.AddFellowOakDicom();
+builder.Services.AddFellowOakDicom()
+    .AddTranscoderManager<NativeTranscoderManager>();
 builder.Services.AddSingleton<DicomRepository>();
 builder.Services.AddSingleton<DicomServer>();
 builder.Services.AddSingleton<WorklistRepository>();
@@ -102,6 +104,8 @@ app.UseMiddleware<ApiLoggingMiddleware>();
 var dicomRepository = app.Services.GetRequiredService<DicomRepository>();
 
 // 配置 DICOM
+DicomSetupBuilder.UseServiceProvider(app.Services);
+
 CStoreSCP.Configure(
     settings.StoragePath,
     settings.TempPath,
