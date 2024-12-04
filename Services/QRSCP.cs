@@ -110,13 +110,15 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 if (pc.AbstractSyntax == DicomUID.Verification ||                                // C-ECHO
                     pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelFind || // C-FIND
                     pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelMove || // C-MOVE
-                    pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelGet)    // C-GET
+                    pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelGet ||  // C-GET
+                    pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)             // Storage
                 {
                     DicomLogger.Information("QRSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
                         association.CallingAE, pc.AbstractSyntax.Name);
 
-                    // 让 fo-dicom 处理传输语法协商
-                    pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
+                    pc.AcceptTransferSyntaxes(pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None 
+                        ? AcceptedImageTransferSyntaxes 
+                        : AcceptedTransferSyntaxes);
                 }
                 else
                 {
@@ -531,7 +533,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 var validSopInstanceUid = ValidateUID(instance.SopInstanceUid);
                 var validSopClassUid = ValidateUID(instance.SopClassUid);
 
-                // ��置必要的字段
+                // 置必要的字段
                 dataset.Add(DicomTag.StudyInstanceUID, validStudyUid);
                 dataset.Add(DicomTag.SeriesInstanceUID, validSeriesUid);
                 dataset.Add(DicomTag.SOPInstanceUID, validSopInstanceUid);
@@ -603,7 +605,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             return requestedCharacterSet;
         }
 
-        // 否则��认使用 UTF-8
+        // 否则认使用 UTF-8
         return "ISO_IR 192";
     }
 
