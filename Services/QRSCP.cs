@@ -1408,7 +1408,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         try
         {
-            // 1. 从 C-MOVE 服务的 Presentation Context 中获取客户端请求的传输语法
+            // 1. 从 C-MOVE/C-GET 服务的 Presentation Context 中获取传输语法
             var moveContext = Association.PresentationContexts
                 .FirstOrDefault(pc => pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelMove ||
                                     pc.AbstractSyntax == DicomUID.PatientRootQueryRetrieveInformationModelMove);
@@ -1416,9 +1416,29 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var moveTransferSyntax = moveContext?.AcceptedTransferSyntax;
             if (moveTransferSyntax != null)
             {
-                DicomLogger.Information("QRSCP", 
-                    "使用 C-MOVE 请求的传输语法: {TransferSyntax}", 
-                    GetTransferSyntaxName(moveTransferSyntax));
+                var (isTargetCompressed, targetType) = GetCompressionInfo(moveTransferSyntax);
+                var (isSourceCompressed, sourceType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
+
+                if (isSourceCompressed || isTargetCompressed)
+                {
+                    DicomLogger.Information("QRSCP", 
+                        "传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
+                        isSourceCompressed ? sourceType : "未压缩",
+                        file.Dataset.InternalTransferSyntax.UID.Name,
+                        isTargetCompressed ? targetType : "未压缩",
+                        moveTransferSyntax.UID.Name);
+
+                    // 如果本地是压缩格式，且请求的是不同的压缩格式或未压缩
+                    if (isSourceCompressed && (!isTargetCompressed || !AreCompressionTypesCompatible(sourceType, targetType)))
+                    {
+                        DicomLogger.Warning("QRSCP", 
+                            "传输语法不兼容，将使用原始格式 - 本地格式: {SourceType} ({SourceSyntax})", 
+                            sourceType,
+                            file.Dataset.InternalTransferSyntax.UID.Name);
+                        return file.Dataset.InternalTransferSyntax;
+                    }
+                }
+
                 return moveTransferSyntax;
             }
 
@@ -1430,18 +1450,58 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var storageTransferSyntax = storageContext?.AcceptedTransferSyntax;
             if (storageTransferSyntax != null)
             {
-                DicomLogger.Information("QRSCP", 
-                    "使用存储类传输语法: {TransferSyntax}", 
-                    GetTransferSyntaxName(storageTransferSyntax));
+                var (isTargetCompressed, targetType) = GetCompressionInfo(storageTransferSyntax);
+                var (isSourceCompressed, sourceType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
+
+                if (isSourceCompressed || isTargetCompressed)
+                {
+                    DicomLogger.Information("QRSCP", 
+                        "存储类传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
+                        isSourceCompressed ? sourceType : "未压缩",
+                        file.Dataset.InternalTransferSyntax.UID.Name,
+                        isTargetCompressed ? targetType : "未压缩",
+                        storageTransferSyntax.UID.Name);
+
+                    // 如果本地是压缩格式，且请求的是不同的压缩格式或未压缩
+                    if (isSourceCompressed && (!isTargetCompressed || !AreCompressionTypesCompatible(sourceType, targetType)))
+                    {
+                        DicomLogger.Warning("QRSCP", 
+                            "存储类传输语法不兼容，将使用原始格式 - 本地格式: {SourceType} ({SourceSyntax})", 
+                            sourceType,
+                            file.Dataset.InternalTransferSyntax.UID.Name);
+                        return file.Dataset.InternalTransferSyntax;
+                    }
+                }
+
                 return storageTransferSyntax;
             }
 
             // 3. 如果都没有指定传输语法，使用默认的传输语法
+            var (isFileCompressed, fileType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
+            if (isFileCompressed)
+            {
+                DicomLogger.Information("QRSCP", 
+                    "未指定传输语法，使用原始格式 - 类型: {CompressionType} ({Syntax})", 
+                    fileType,
+                    file.Dataset.InternalTransferSyntax.UID.Name);
+                return file.Dataset.InternalTransferSyntax;
+            }
+
             DicomLogger.Information("QRSCP", "未指定传输语法，使用默认传输语法: Explicit VR Little Endian");
             return DicomTransferSyntax.ExplicitVRLittleEndian;
         }
         catch (Exception ex)
         {
+            var (isFileCompressed, fileType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
+            if (isFileCompressed)
+            {
+                DicomLogger.Warning("QRSCP", ex,
+                    "获取请求的传输语法失败，使用原始格式 - 类型: {CompressionType} ({Syntax})", 
+                    fileType,
+                    file.Dataset.InternalTransferSyntax.UID.Name);
+                return file.Dataset.InternalTransferSyntax;
+            }
+
             DicomLogger.Error("QRSCP", ex, "获取请求的传输语法失败，使用默认传输语法: Explicit VR Little Endian");
             return DicomTransferSyntax.ExplicitVRLittleEndian;
         }
@@ -1469,6 +1529,56 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             "1.2.840.10008.1.2.5" => "RLE Lossless",
             _ => syntax.UID.Name
         };
+    }
+
+    /// <summary>
+    /// 检查传输语法是否为压缩格式，并返回压缩类型
+    /// </summary>
+    private (bool isCompressed, string compressionType) GetCompressionInfo(DicomTransferSyntax syntax)
+    {
+        if (syntax == DicomTransferSyntax.JPEGProcess1 ||
+            syntax == DicomTransferSyntax.JPEGProcess2_4)
+            return (true, "JPEG Baseline");
+        
+        if (syntax == DicomTransferSyntax.JPEGProcess14 ||
+            syntax == DicomTransferSyntax.JPEGProcess14SV1)
+            return (true, "JPEG Lossless");
+        
+        if (syntax == DicomTransferSyntax.JPEGLSLossless ||
+            syntax == DicomTransferSyntax.JPEGLSNearLossless)
+            return (true, "JPEG-LS");
+        
+        if (syntax == DicomTransferSyntax.JPEG2000Lossless)
+            return (true, "JPEG2000 Lossless");
+        
+        if (syntax == DicomTransferSyntax.JPEG2000Lossy)
+            return (true, "JPEG2000 Lossy");
+        
+        if (syntax == DicomTransferSyntax.RLELossless)
+            return (true, "RLE");
+        
+        if (syntax == DicomTransferSyntax.DeflatedExplicitVRLittleEndian)
+            return (true, "Deflated");
+
+        return (false, string.Empty);
+    }
+
+    /// <summary>
+    /// 检查两种压缩格式是否兼容（可以直接转换）
+    /// </summary>
+    private bool AreCompressionTypesCompatible(string sourceType, string targetType)
+    {
+        // 如果源格式和目标格式相同类型，但可能是不同参数（如有损/无损），认为是兼容的
+        if (sourceType == targetType)
+            return true;
+
+        // 特殊处理：某些格式之间可以直接转换
+        // 例如：JPEG-LS 和 JPEG2000 都支持无损压缩，可以考虑互相转换
+        if ((sourceType == "JPEG-LS" && targetType == "JPEG2000") ||
+            (sourceType == "JPEG2000" && targetType == "JPEG-LS"))
+            return true;
+
+        return false;
     }
 
 }
