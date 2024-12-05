@@ -27,25 +27,37 @@ public class ImagesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<StudyInfo>>> GetAll()
+    public async Task<ActionResult<PagedResult<StudyInfo>>> GetStudies(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? patientId = null,
+        [FromQuery] string? patientName = null,
+        [FromQuery] string? accessionNumber = null,
+        [FromQuery] string? modality = null,
+        [FromQuery] string? studyDate = null)
     {
         try
         {
-            // 从数据库中获取所有研究信息
-            var studies = await _repository.GetAllStudiesWithPatientInfoAsync();
-            var result = studies.Select(study => new StudyInfo
+            // 解析日期
+            DateTime? searchDate = null;
+            if (!string.IsNullOrEmpty(studyDate))
             {
-                StudyInstanceUid = study.StudyInstanceUid,
-                PatientId = study.PatientId,
-                PatientName = study.PatientName,
-                PatientSex = study.PatientSex,
-                PatientBirthDate = study.PatientBirthDate,
-                AccessionNumber = study.AccessionNumber,
-                Modality = study.Modality,
-                StudyDate = study.StudyDate,
-                StudyDescription = study.StudyDescription
-            });
+                if (DateTime.TryParse(studyDate, out DateTime date))
+                {
+                    searchDate = date;
+                }
+            }
 
+            var result = await _repository.GetStudiesAsync(
+                page, 
+                pageSize, 
+                patientId, 
+                patientName, 
+                accessionNumber, 
+                modality, 
+                searchDate,    // 开始时间
+                searchDate?.AddDays(1).AddSeconds(-1)  // 结束时间设为当天最后一秒
+            );
             return Ok(result);
         }
         catch (Exception ex)

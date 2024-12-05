@@ -313,20 +313,20 @@
                         <div class="col-md-2">
                             <label class="form-label">检查类型</label>
                             <select class="form-select" id="searchModality">
-                                    <option value="">全部</option>
-                                    <option value="CT">CT</option>
-                                    <option value="MR">MR</option>
-                                    <option value="DR">DR</option>
-                                    <option value="US">US</option>
-                                </select>
-                            </div>
+                                <option value="">全部</option>
+                                <option value="CT">CT</option>
+                                <option value="MR">MR</option>
+                                <option value="DR">DR</option>
+                                <option value="US">US</option>
+                            </select>
+                        </div>
                         <div class="col-md-2">
-                            <label class="form-label">设备名称</label>
-                            <input type="text" class="form-control" id="searchStationName">
-                            </div>
+                            <label class="form-label">检查时间</label>
+                            <input type="date" class="form-control" id="searchStudyDate">
+                        </div>
                         <div class="col-md-2 d-flex align-items-end">
-                            <button type="button" class="btn btn-primary" onclick="searchImages()">查询</button>
-                            <button type="button" class="btn btn-secondary ms-2" onclick="resetImagesSearch()">重置</button>
+                            <button type="submit" class="btn btn-primary">查询</button>
+                            <button type="reset" class="btn btn-secondary ms-2">重置</button>
                         </div>
                     </form>
                 </div>
@@ -337,12 +337,11 @@
                         <tr>
                             <th>患者ID</th>
                             <th>姓名</th>
-                            <th>性别</th>
-                            <th>年龄</th>
                             <th>检查号</th>
                             <th>检查类型</th>
                             <th>检查时间</th>
                             <th>检查描述</th>
+                            <th>图像数</th>
                             <th>操作</th>
                         </tr>
                     </thead>

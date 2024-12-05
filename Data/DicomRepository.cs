@@ -722,74 +722,115 @@ public class DicomRepository : BaseRepository, IDisposable
         }
     }
 
-    public List<Study> GetStudies(
-        string patientId, 
-        string patientName, 
-        string accessionNumber, 
-        (string StartDate, string EndDate) dateRange,
-        string[]? modalities)
+    public async Task<PagedResult<StudyInfo>> GetStudiesAsync(
+        int page,
+        int pageSize,
+        string? patientId = null,
+        string? patientName = null,
+        string? accessionNumber = null,
+        string? modality = null,
+        DateTime? startDate = null,
+        DateTime? endDate = null)
     {
-        try
+        var sql = new StringBuilder(@"
+            SELECT 
+                s.StudyInstanceUid,
+                s.PatientId,
+                p.PatientName,
+                p.PatientSex,
+                p.PatientBirthDate,
+                s.AccessionNumber,
+                s.Modality,
+                s.StudyDate,
+                s.StudyDescription,
+                COUNT(DISTINCT i.SopInstanceUid) as NumberOfInstances
+            FROM Studies s
+            LEFT JOIN Patients p ON s.PatientId = p.PatientId
+            LEFT JOIN Series ser ON s.StudyInstanceUid = ser.StudyInstanceUid
+            LEFT JOIN Instances i ON ser.SeriesInstanceUid = i.SeriesInstanceUid
+            WHERE 1=1");
+
+        var parameters = new DynamicParameters();
+        
+        if (!string.IsNullOrEmpty(patientId))
         {
-            using var connection = CreateConnection();
-            var sql = @"
-                SELECT 
-                    s.*,
-                    p.PatientName,
-                    p.PatientSex,
-                    p.PatientBirthDate,
-                    COUNT(DISTINCT ser.SeriesInstanceUid) as NumberOfStudyRelatedSeries,
-                    COUNT(DISTINCT i.SopInstanceUid) as NumberOfStudyRelatedInstances
+            sql.Append(" AND s.PatientId LIKE @PatientId");
+            parameters.Add("@PatientId", $"%{patientId}%");
+        }
+
+        if (!string.IsNullOrEmpty(patientName))
+        {
+            sql.Append(" AND p.PatientName LIKE @PatientName");
+            parameters.Add("@PatientName", $"%{patientName}%");
+        }
+
+        if (!string.IsNullOrEmpty(accessionNumber))
+        {
+            sql.Append(" AND s.AccessionNumber LIKE @AccessionNumber");
+            parameters.Add("@AccessionNumber", $"%{accessionNumber}%");
+        }
+
+        if (!string.IsNullOrEmpty(modality))
+        {
+            sql.Append(" AND s.Modality = @Modality");
+            parameters.Add("@Modality", modality);
+        }
+
+        if (startDate.HasValue)
+        {
+            sql.Append(" AND s.StudyDate >= @StartDate");
+            parameters.Add("@StartDate", startDate.Value.ToString("yyyyMMdd"));
+        }
+
+        if (endDate.HasValue)
+        {
+            sql.Append(" AND s.StudyDate <= @EndDate");
+            parameters.Add("@EndDate", endDate.Value.ToString("yyyyMMdd"));
+        }
+
+        // 添加 GROUP BY 子句，包含所有选择的字段
+        sql.Append(@" 
+            GROUP BY 
+                s.StudyInstanceUid,
+                s.PatientId,
+                p.PatientName,
+                p.PatientSex,
+                p.PatientBirthDate,
+                s.AccessionNumber,
+                s.Modality,
+                s.StudyDate,
+                s.StudyDescription");
+
+        // 获取总记录数（修改子查询以包含 GROUP BY）
+        var countSql = $@"
+            SELECT COUNT(*) FROM (
+                SELECT s.StudyInstanceUid
                 FROM Studies s
                 LEFT JOIN Patients p ON s.PatientId = p.PatientId
                 LEFT JOIN Series ser ON s.StudyInstanceUid = ser.StudyInstanceUid
                 LEFT JOIN Instances i ON ser.SeriesInstanceUid = i.SeriesInstanceUid
                 WHERE 1=1
-                AND (@PatientId = '' OR s.PatientId LIKE @PatientId)
-                AND (@PatientName = '' OR p.PatientName LIKE @PatientName)
-                AND (@AccessionNumber = '' OR s.AccessionNumber LIKE @AccessionNumber)
-                AND (@StartDate = '' OR s.StudyDate >= @StartDate)
-                AND (@EndDate = '' OR s.StudyDate <= @EndDate)
-                AND (@ModCount = 0 OR s.Modality IN @Modalities)
-                GROUP BY 
-                    s.StudyInstanceUid,
-                    s.PatientId,
-                    s.StudyDate,
-                    s.StudyTime,
-                    s.StudyDescription,
-                    s.AccessionNumber,
-                    s.Modality,
-                    s.CreateTime,
-                    p.PatientName,
-                    p.PatientSex,
-                    p.PatientBirthDate
-                ORDER BY s.CreateTime DESC";
+                {sql.ToString().Substring(sql.ToString().IndexOf("WHERE 1=1") + 9)}
+            ) as t";
 
-            var parameters = new
-            {
-                PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
-                PatientName = string.IsNullOrEmpty(patientName) ? "" : $"%{patientName}%",
-                AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
-                StartDate = dateRange.StartDate,
-                EndDate = dateRange.EndDate,
-                ModCount = modalities?.Length ?? 0,
-                Modalities = (modalities?.Length ?? 0) > 0 ? modalities : new[] { "" }
-            };
+        // 添加排序和分页
+        sql.Append(" ORDER BY s.StudyDate DESC, s.StudyTime DESC");
+        sql.Append(" LIMIT @PageSize OFFSET @Offset");
+        
+        parameters.Add("@PageSize", pageSize);
+        parameters.Add("@Offset", (page - 1) * pageSize);
 
-            LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
+        await using var connection = new SqliteConnection(_connectionString);
+        var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
+        var items = await connection.QueryAsync<StudyInfo>(sql.ToString(), parameters);
 
-            var studies = connection.Query<Study>(sql, parameters);
-            var result = studies?.ToList() ?? new List<Study>();
-            var modalitiesStr = modalities != null ? string.Join(",", modalities) : string.Empty;
-            LogInformation("检查查询完成 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}, 设备类型: {Modalities}", 
-                result.Count, dateRange.StartDate, dateRange.EndDate, modalitiesStr);
-            return result;
-        }
-        catch (Exception ex)
+        return new PagedResult<StudyInfo>
         {
-            LogError(ex, "检查查询失败");
-            return new List<Study>();
-        }
+            Items = items.ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 
     public List<Series> GetSeriesByStudyUid(string studyInstanceUid)
@@ -1321,6 +1362,77 @@ public class DicomRepository : BaseRepository, IDisposable
         {
             LogError(ex, "更新Study Modality失败 - StudyInstanceUID: {StudyInstanceUid}, Modality: {Modality}", 
                 studyInstanceUid, modality);
+        }
+    }
+
+    // 保留原有方法，供 QRSCP 使用
+    public List<Study> GetStudies(
+        string patientId, 
+        string patientName, 
+        string accessionNumber, 
+        (string StartDate, string EndDate) dateRange,
+        string[]? modalities)
+    {
+        try
+        {
+            using var connection = CreateConnection();
+            var sql = @"
+                SELECT 
+                    s.*,
+                    p.PatientName,
+                    p.PatientSex,
+                    p.PatientBirthDate,
+                    COUNT(DISTINCT ser.SeriesInstanceUid) as NumberOfStudyRelatedSeries,
+                    COUNT(DISTINCT i.SopInstanceUid) as NumberOfStudyRelatedInstances
+                FROM Studies s
+                LEFT JOIN Patients p ON s.PatientId = p.PatientId
+                LEFT JOIN Series ser ON s.StudyInstanceUid = ser.StudyInstanceUid
+                LEFT JOIN Instances i ON ser.SeriesInstanceUid = i.SeriesInstanceUid
+                WHERE 1=1
+                AND (@PatientId = '' OR s.PatientId LIKE @PatientId)
+                AND (@PatientName = '' OR p.PatientName LIKE @PatientName)
+                AND (@AccessionNumber = '' OR s.AccessionNumber LIKE @AccessionNumber)
+                AND (@StartDate = '' OR s.StudyDate >= @StartDate)
+                AND (@EndDate = '' OR s.StudyDate <= @EndDate)
+                AND (@ModCount = 0 OR s.Modality IN @Modalities)
+                GROUP BY 
+                    s.StudyInstanceUid,
+                    s.PatientId,
+                    s.StudyDate,
+                    s.StudyTime,
+                    s.StudyDescription,
+                    s.AccessionNumber,
+                    s.Modality,
+                    s.CreateTime,
+                    p.PatientName,
+                    p.PatientSex,
+                    p.PatientBirthDate
+                ORDER BY s.CreateTime DESC";
+
+            var parameters = new
+            {
+                PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
+                PatientName = string.IsNullOrEmpty(patientName) ? "" : $"%{patientName}%",
+                AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
+                StartDate = dateRange.StartDate,
+                EndDate = dateRange.EndDate,
+                ModCount = modalities?.Length ?? 0,
+                Modalities = (modalities?.Length ?? 0) > 0 ? modalities : new[] { "" }
+            };
+
+            LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
+
+            var studies = connection.Query<Study>(sql, parameters);
+            var result = studies?.ToList() ?? new List<Study>();
+            var modalitiesStr = modalities != null ? string.Join(",", modalities) : string.Empty;
+            LogInformation("检查查询完成 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}, 设备类型: {Modalities}", 
+                result.Count, dateRange.StartDate, dateRange.EndDate, modalitiesStr);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "检查查询失败");
+            return new List<Study>();
         }
     }
 }
