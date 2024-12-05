@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.Imaging.Codec;
 using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Services;
@@ -273,18 +274,111 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             }
 
             // 在后台线程执行压缩操作
-            return await Task.Run(() =>
+            return await Task.Run(async () =>
             {
                 try
                 {
-                    DicomLogger.Information("StoreSCP",
-                        "压缩图像 - 原格式: {OriginalSyntax} -> 新格式: {NewSyntax}", 
-                        file.Dataset.InternalTransferSyntax.UID.Name,
-                        targetSyntax.UID.Name);
+                    // 获取图像基本信息
+                    var pixelData = DicomPixelData.Create(file.Dataset);
+                    if (pixelData == null)
+                    {
+                        DicomLogger.Warning("StoreSCP", "无法获取像素数据，跳过压缩");
+                        return file;
+                    }
 
-                    var compressedFile = file.Clone();
-                    compressedFile.FileMetaInfo.TransferSyntax = targetSyntax;
-                    return compressedFile;
+                    var bitsAllocated = file.Dataset.GetSingleValue<int>(DicomTag.BitsAllocated);
+                    var samplesPerPixel = file.Dataset.GetSingleValue<int>(DicomTag.SamplesPerPixel);
+                    var photometricInterpretation = file.Dataset.GetSingleValue<string>(DicomTag.PhotometricInterpretation);
+
+                    // 根据不同的压缩格式进行验证
+                    if (targetSyntax == DicomTransferSyntax.JPEGLSLossless)
+                    {
+                        // JPEG-LS 支持 8/12/16 位
+                        if (bitsAllocated != 8 && bitsAllocated != 12 && bitsAllocated != 16)
+                        {
+                            DicomLogger.Warning("StoreSCP", 
+                                "JPEG-LS压缩要求8/12/16位图像，当前: {BitsAllocated}位，跳过压缩", 
+                                bitsAllocated);
+                            return file;
+                        }
+                    }
+                    else if (targetSyntax == DicomTransferSyntax.JPEG2000Lossless)
+                    {
+                        // JPEG2000 支持多种位深度，但要检查是否超过16位
+                        if (bitsAllocated > 16)
+                        {
+                            DicomLogger.Warning("StoreSCP", 
+                                "JPEG2000压缩不支持超过16位的图像，当前: {BitsAllocated}位，跳过压缩", 
+                                bitsAllocated);
+                            return file;
+                        }
+                    }
+                    else if (targetSyntax == DicomTransferSyntax.RLELossless)
+                    {
+                        // RLE 压缩要求特定的位深度和采样格式
+                        if (bitsAllocated != 8 && bitsAllocated != 16)
+                        {
+                            DicomLogger.Warning("StoreSCP", 
+                                "RLE压缩要求8位或16位图像，当前: {BitsAllocated}位，跳过压缩", 
+                                bitsAllocated);
+                            return file;
+                        }
+
+                        if (samplesPerPixel > 3)
+                        {
+                            DicomLogger.Warning("StoreSCP", 
+                                "RLE压缩不支持超过3个采样/像素，当前: {SamplesPerPixel}，跳过压缩", 
+                                samplesPerPixel);
+                            return file;
+                        }
+                    }
+
+                    DicomLogger.Information("StoreSCP",
+                        "压缩图像 - 原格式: {OriginalSyntax} -> 新格式: {NewSyntax}\n  位深度: {Bits}位\n  采样数: {Samples}\n  图像解释: {Interpretation}", 
+                        file.Dataset.InternalTransferSyntax.UID.Name,
+                        targetSyntax.UID.Name,
+                        bitsAllocated,
+                        samplesPerPixel,
+                        photometricInterpretation);
+
+                    try
+                    {
+                        var transcoder = new DicomTranscoder(
+                            file.Dataset.InternalTransferSyntax,
+                            targetSyntax);
+                        
+                        var compressedFile = transcoder.Transcode(file);
+                        
+                        // 验证压缩结果
+                        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+                        if (compressedPixelData == null)
+                        {
+                            DicomLogger.Error("StoreSCP", "压缩后无法获取像素数据，使用原始文件");
+                            return file;
+                        }
+
+                        // 检查压缩后的文件大小
+                        using var ms = new MemoryStream();
+                        await compressedFile.SaveAsync(ms);
+                        var compressedSize = ms.Length;
+                        
+                        using var originalMs = new MemoryStream();
+                        await file.SaveAsync(originalMs);
+                        var originalSize = originalMs.Length;
+
+                        DicomLogger.Information("StoreSCP", 
+                            "压缩完成 - 原始大小: {Original:N0} 字节, 压缩后: {Compressed:N0} 字节, 压缩率: {Ratio:P2}", 
+                            originalSize, 
+                            compressedSize,
+                            (originalSize - compressedSize) / (double)originalSize);
+
+                        return compressedFile;
+                    }
+                    catch (Exception ex)
+                    {
+                        DicomLogger.Error("StoreSCP", ex, "图像压缩失败");
+                        return file;
+                    }
                 }
                 catch (Exception ex)
                 {
