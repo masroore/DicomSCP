@@ -54,6 +54,18 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         { "JPEGProcess14", DicomTransferSyntax.JPEGProcess14SV1 }
     };
 
+    // 定义常用的文本标签
+    private static readonly DicomTag[] TextTags = new[]
+    {
+        DicomTag.PatientName,
+        DicomTag.PatientID,
+        DicomTag.StudyDescription,
+        DicomTag.SeriesDescription,
+        DicomTag.InstitutionName,
+        DicomTag.ReferringPhysicianName,
+        DicomTag.PerformingPhysicianName
+    };
+
     public static void Configure(string storagePath, string tempPath, DicomSettings settings, DicomRepository repository)
     {
         if (string.IsNullOrEmpty(settings.StoragePath) || string.IsNullOrEmpty(settings.TempPath))
@@ -504,12 +516,41 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         targetFilePath,
                         new FileInfo(targetFilePath).Length);
 
-                    // 在文件保存成功，保存到数据库
+                    // 在保存到数据库之前处理文本字段
                     if (_repository != null)
                     {
-                        try 
+                        try
                         {
-                            await _repository.SaveDicomDataAsync(request.Dataset, relativePath);
+                            // 创建新的数据集
+                            var processedDataset = new DicomDataset();
+
+                            // 复制所有非文本字段
+                            foreach (var item in request.Dataset)
+                            {
+                                if (!IsTextVR(item.ValueRepresentation))
+                                {
+                                    processedDataset.Add(item);
+                                }
+                            }
+
+                            // 处理文本字段
+                            foreach (var tag in TextTags)
+                            {
+                                if (request.Dataset.Contains(tag))
+                                {
+                                    var value = TryDecodeText(request.Dataset, tag);
+                                    if (!string.IsNullOrEmpty(value))
+                                    {
+                                        processedDataset.Add(tag, value);
+                                    }
+                                }
+                            }
+
+                            // 设置UTF-8字符集
+                            processedDataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+
+                            await _repository.SaveDicomDataAsync(processedDataset, relativePath);
+
                             // 更新 Study 的 Modality
                             var modality = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
                             await _repository.UpdateStudyModalityAsync(studyUid, modality);
@@ -650,5 +691,70 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     ~CStoreSCP()
     {
         Dispose(false);
+    }
+
+    /// <summary>
+    /// 检查是否是文本类型的VR
+    /// </summary>
+    private bool IsTextVR(DicomVR vr)
+    {
+        return vr == DicomVR.AE || vr == DicomVR.AS || vr == DicomVR.CS ||
+               vr == DicomVR.DS || vr == DicomVR.IS || vr == DicomVR.LO ||
+               vr == DicomVR.LT || vr == DicomVR.PN || vr == DicomVR.SH ||
+               vr == DicomVR.ST || vr == DicomVR.UT;
+    }
+
+    /// <summary>
+    /// 尝试使用不同编码解码文本
+    /// </summary>
+    private string TryDecodeText(DicomDataset dataset, DicomTag tag)
+    {
+        try
+        {
+            var element = dataset.GetDicomItem<DicomElement>(tag);
+            if (element == null || element.Buffer.Data == null || element.Buffer.Data.Length == 0)
+                return string.Empty;
+
+            var bytes = element.Buffer.Data;
+            
+            // 尝试不同的编码
+            var encodings = new[]
+            {
+                "GB18030",
+                "GB2312",
+                "UTF-8",
+                "ISO-8859-1"
+            };
+
+            foreach (var encodingName in encodings)
+            {
+                try
+                {
+                    var encoding = Encoding.GetEncoding(encodingName);
+                    var text = encoding.GetString(bytes);
+
+                    // 检查是否包含中文字符
+                    if (text.Any(c => c >= 0x4E00 && c <= 0x9FFF))
+                    {
+                        DicomLogger.Debug("StoreSCP", 
+                            "成功解码文本 - 标签: {Tag}, 编码: {Encoding}, 文本: {Text}", 
+                            tag, encodingName, text);
+                        return text;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+
+            // 如果没有检测到中文，返回原始文本
+            return dataset.GetString(tag);
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("StoreSCP", ex, "解码文本失败 - 标签: {Tag}", tag);
+            return string.Empty;
+        }
     }
 } 

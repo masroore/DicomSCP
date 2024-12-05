@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <PackageReference Include="fo-dicom" Version="5.1.5" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="7.0.0" />
     <PackageReference Include="fo-dicom.Codecs" Version="5.15.4" />
     <PackageReference Include="fo-dicom.ImageSharp" Version="4.0.8" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />

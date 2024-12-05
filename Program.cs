@@ -10,8 +10,12 @@ using DicomSCP.Services;
 using DicomSCP.Data;
 using DicomSCP.Models;
 using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 注册编码提供程序
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 // 配置 Kestrel
 builder.WebHost.ConfigureKestrel(serverOptions =>
