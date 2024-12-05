@@ -63,7 +63,21 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         DicomTag.SeriesDescription,
         DicomTag.InstitutionName,
         DicomTag.ReferringPhysicianName,
-        DicomTag.PerformingPhysicianName
+        DicomTag.PerformingPhysicianName,
+        DicomTag.AccessionNumber,
+        DicomTag.Modality,
+        DicomTag.StudyDate,
+        DicomTag.StudyTime,
+        DicomTag.SeriesNumber,
+        DicomTag.PatientBirthDate,
+        DicomTag.PatientSex,
+        DicomTag.StudyID,
+        DicomTag.ModalitiesInStudy,
+        DicomTag.InstanceNumber,
+        DicomTag.SOPClassUID,
+        DicomTag.SOPInstanceUID,
+        DicomTag.StudyInstanceUID,
+        DicomTag.SeriesInstanceUID
     };
 
     public static void Configure(string storagePath, string tempPath, DicomSettings settings, DicomRepository repository)
@@ -527,7 +541,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                             // 复制所有非文本字段
                             foreach (var item in request.Dataset)
                             {
-                                if (!IsTextVR(item.ValueRepresentation))
+                                if (!TextTags.Contains(item.Tag) && !IsTextVR(item.ValueRepresentation))
                                 {
                                     processedDataset.Add(item);
                                 }
@@ -541,7 +555,14 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                                     var value = TryDecodeText(request.Dataset, tag);
                                     if (!string.IsNullOrEmpty(value))
                                     {
-                                        processedDataset.Add(tag, value);
+                                        if (processedDataset.Contains(tag))
+                                        {
+                                            processedDataset.AddOrUpdate(tag, value);
+                                        }
+                                        else
+                                        {
+                                            processedDataset.Add(tag, value);
+                                        }
                                     }
                                 }
                             }

@@ -17,6 +17,9 @@ var builder = WebApplication.CreateBuilder(args);
 // 注册编码提供程序
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+// 注册 DICOM 编码
+DicomEncoding.RegisterEncoding("GB2312", "GB2312");
+
 // 配置 Kestrel
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
