@@ -5,6 +5,7 @@ using DicomSCP.Services;
 using DicomSCP.Data;
 using DicomSCP.Models;
 using Microsoft.Extensions.Logging;
+using System.IO;
 
 namespace DicomSCP.Controllers;
 
@@ -36,6 +37,59 @@ public class DicomController : ControllerBase
             _settings.StoragePath);
 
         var serverStatus = _server.GetServicesStatus();
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        
+        // 获取内存使用情况（MB）
+        var memoryUsage = process.WorkingSet64 / 1024.0 / 1024.0;
+        
+        // 获取CPU使用率 - 跨平台支持
+        double cpuUsage = 0;
+        try 
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var startTime = process.TotalProcessorTime;
+                Thread.Sleep(100); // 等待100ms
+                process.Refresh();
+                var endTime = process.TotalProcessorTime;
+                cpuUsage = (endTime - startTime).TotalMilliseconds / (Environment.ProcessorCount * 100.0);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                // Linux 下使用 /proc/stat 获取 CPU 使用率
+                var startCpu = System.IO.File.ReadAllText("/proc/stat")
+                    .Split('\n')[0]
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Skip(1)
+                    .Take(7)
+                    .Select(x => long.Parse(x))
+                    .ToArray();
+                
+                Thread.Sleep(100);
+                
+                var endCpu = System.IO.File.ReadAllText("/proc/stat")
+                    .Split('\n')[0]
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Skip(1)
+                    .Take(7)
+                    .Select(x => long.Parse(x))
+                    .ToArray();
+
+                var startIdle = startCpu[3];
+                var endIdle = endCpu[3];
+                var startTotal = startCpu.Sum();
+                var endTotal = endCpu.Sum();
+
+                if (endTotal - startTotal > 0)
+                {
+                    cpuUsage = (1.0 - (endIdle - startIdle) / (double)(endTotal - startTotal));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("Api", ex, "获取CPU使用率失败");
+        }
 
         return Ok(new
         {
@@ -62,8 +116,25 @@ public class DicomController : ControllerBase
                 aeTitle = _settings.PrintSCP.AeTitle,
                 port = _settings.PrintSCP.Port,
                 isRunning = serverStatus.Services.PrintScp
+            },
+            system = new
+            {
+                cpuUsage = Math.Round(cpuUsage * 100, 2),  // 转换为百分比
+                memoryUsage = Math.Round(memoryUsage, 2),   // MB
+                processorCount = Environment.ProcessorCount,
+                processStartTime = process.StartTime,
+                osVersion = Environment.OSVersion.ToString(),
+                platform = GetPlatformName()
             }
         });
+    }
+
+    private string GetPlatformName()
+    {
+        if (OperatingSystem.IsWindows()) return "Windows";
+        if (OperatingSystem.IsLinux()) return "Linux";
+        if (OperatingSystem.IsMacOS()) return "macOS";
+        return "Unknown";
     }
 
     [HttpPost("start")]
