@@ -34,6 +34,8 @@
     <PackageReference Include="Serilog.Enrichers.Environment" Version="2.3.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.2" />
     <PackageReference Include="Dapper" Version="2.1.28" />
+    <PackageReference Include="System.Management" Version="7.0.2" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
