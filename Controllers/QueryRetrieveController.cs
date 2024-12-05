@@ -14,13 +14,16 @@ public class QueryRetrieveController : ControllerBase
 {
     private readonly IQueryRetrieveSCU _queryRetrieveScu;
     private readonly QueryRetrieveConfig _config;
+    private readonly DicomSettings _settings;
 
     public QueryRetrieveController(
         IQueryRetrieveSCU queryRetrieveScu,
-        IOptions<QueryRetrieveConfig> config)
+        IOptions<QueryRetrieveConfig> config,
+        IOptions<DicomSettings> settings)
     {
         _queryRetrieveScu = queryRetrieveScu;
         _config = config.Value;
+        _settings = settings.Value;
     }
 
     [HttpGet("nodes")]
@@ -165,7 +168,7 @@ public class QueryRetrieveController : ControllerBase
     }
 
     [HttpPost("{nodeId}/move/{studyUid}")]
-    public async Task<ActionResult> MoveStudy(string nodeId, string studyUid, [FromBody] MoveRequest request)
+    public async Task<ActionResult> MoveStudy(string nodeId, string studyUid)
     {
         var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
         if (node == null)
@@ -175,23 +178,20 @@ public class QueryRetrieveController : ControllerBase
 
         try
         {
-            // 验证请求参数
-            if (string.IsNullOrEmpty(request.DestinationAe))
-            {
-                return BadRequest(new { message = "目标AE Title不能为空" });
-            }
+            // 使用配置的 AE Title
+            var destinationAe = _settings.AeTitle;
 
             // 记录开始获取的日志
             DicomLogger.Information("QueryRetrieveSCU", 
                 "开始获取影像 - 源节点: {SourceAet}@{Host}:{Port}, 目标节点: {DestAet}, StudyInstanceUid: {StudyUid}", 
-                node.AeTitle, node.HostName, node.Port, request.DestinationAe, studyUid);
+                node.AeTitle, node.HostName, node.Port, destinationAe, studyUid);
 
             // 尝试发起C-MOVE请求
             var moveTask = Task.Run(async () =>
             {
                 try
                 {
-                    var success = await _queryRetrieveScu.MoveStudyAsync(node, studyUid, request.DestinationAe);
+                    var success = await _queryRetrieveScu.MoveStudyAsync(node, studyUid, destinationAe);
                     return success;
                 }
                 catch
@@ -216,7 +216,7 @@ public class QueryRetrieveController : ControllerBase
                 message = "影像获取请求已发送，请稍后在影像管理中查看",
                 studyUid = studyUid,
                 sourceAet = node.AeTitle,
-                destinationAe = request.DestinationAe
+                destinationAe = destinationAe
             });
         }
         catch (Exception ex)
@@ -226,11 +226,6 @@ public class QueryRetrieveController : ControllerBase
             return StatusCode(500, new { message = "发送获取请求失败" });
         }
     }
-}
-
-public class MoveRequest
-{
-    public string DestinationAe { get; set; } = string.Empty;
 }
 
 // 添加用于转换查询结果的类

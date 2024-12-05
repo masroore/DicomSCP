@@ -993,7 +993,6 @@ async function toggleQRSeriesInfo(row) {
                                     <th style="width: 100px">检查类型</th>
                                     <th style="width: 500px">序列描述</th>
                                     <th style="width: 80px">图像数量</th>
-                                    <th style="width: 50px">操作</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -1011,11 +1010,6 @@ async function toggleQRSeriesInfo(row) {
                     <td>${series.modality || ''}</td>
                     <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
                     <td>${series.instanceCount || 0}</td>
-                    <td>
-                        <button class="btn btn-success btn-sm py-0" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
-                            CMOVE
-                        </button>
-                    </td>
                 </tr>
             `);
         });
@@ -1048,14 +1042,7 @@ async function moveQRStudy(studyUid, event) {
     const nodeId = document.getElementById('qrNode').value;
     try {
         const response = await fetch(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                destinationAe: 'STORESCP',
-                level: 'STUDY'
-            })
+            method: 'POST'
         });
 
         if (!response.ok) {
@@ -1094,67 +1081,7 @@ async function moveQRStudy(studyUid, event) {
     }
 }
 
-async function moveQRSeries(studyUid, seriesUid, event) {
-    // 阻止事件冒泡
-    if (event) {
-        event.stopPropagation();
-    }
-
-   // 添加确认对话框
-   if (!await showConfirmMoveDialog()) {
-       return;  // 用户取消
-   }
-
-
-    const nodeId = document.getElementById('qrNode').value;
-    try {
-        const response = await fetch(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                destinationAe: 'STORESCP',
-                level: 'SERIES',
-                seriesInstanceUid: seriesUid
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('传输失败');
-        }
-
-        const result = await response.json();
-        if (response.ok && result.success !== false) {
-            const toastEl = document.getElementById('storeToast');
-            const titleEl = document.getElementById('storeToastTitle');
-            const messageEl = document.getElementById('storeToastMessage');
-            
-            toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-            toastEl.classList.add('bg-success', 'text-white');
-            titleEl.textContent = '操作成功';
-            messageEl.textContent = '序列传输已开始，请稍后去影像管理查看！';
-            
-            const storeToast = new bootstrap.Toast(toastEl);
-            storeToast.show();
-        } else {
-            throw new Error(result.message || '传输失败');
-        }
-    } catch (error) {
-        console.error('传输失败:', error);
-        const toastEl = document.getElementById('storeToast');
-        const titleEl = document.getElementById('storeToastTitle');
-        const messageEl = document.getElementById('storeToastMessage');
-        
-        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-        toastEl.classList.add('bg-danger', 'text-white');
-        titleEl.textContent = '操作失败';
-        messageEl.textContent = error.message || '传输失败，请检查网络连接';
-        
-        const storeToast = new bootstrap.Toast(toastEl);
-        storeToast.show();
-    }
-}// 格式化日期
+// 格式化日期
 function formatDate(dateStr) {
     if (!dateStr) return '';
     return dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
