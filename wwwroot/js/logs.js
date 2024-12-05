@@ -71,10 +71,16 @@ class LogManager {
         const pageFiles = this.allFiles.slice(start, end);
         
         const container = document.getElementById('logFiles');
-        const today = new Date().toISOString().split('T')[0];
+        
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
         
         container.innerHTML = pageFiles.map(file => {
-            const isToday = new Date(file.lastModified).toISOString().split('T')[0] === today;
+            const fileDate = new Date(file.lastModified);
+            fileDate.setHours(0, 0, 0, 0);
+            
+            const isToday = fileDate.getTime() === now.getTime();
+            
             return `
                 <tr>
                     <td>
