@@ -43,6 +43,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     private readonly DicomSettings _settings;
     private readonly DicomRepository _repository;
     private bool _associationReleaseLogged = false;
+    private bool _transferSyntaxLogged = false;
 
     public QRSCP(
         INetworkStream stream, 
@@ -203,7 +204,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         {
             DicomLogger.Error("QRSCP", exception, "连接异常关闭");
         }
-        _associationReleaseLogged = false;  // 重置标志
+        _associationReleaseLogged = false;
+        _transferSyntaxLogged = false;
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
@@ -1451,12 +1453,16 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 var (isSourceCompressed, sourceType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
                 var (isTargetCompressed, targetType) = GetCompressionInfo(moveTransferSyntax);
 
-                DicomLogger.Information("QRSCP", 
-                    "传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
-                    isSourceCompressed ? sourceType : "未压缩",
-                    file.Dataset.InternalTransferSyntax.UID.Name,
-                    isTargetCompressed ? targetType : "未压缩",
-                    moveTransferSyntax.UID.Name);
+                if (!_transferSyntaxLogged)
+                {
+                    DicomLogger.Information("QRSCP", 
+                        "传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
+                        isSourceCompressed ? sourceType : "未压缩",
+                        file.Dataset.InternalTransferSyntax.UID.Name,
+                        isTargetCompressed ? targetType : "未压缩",
+                        moveTransferSyntax.UID.Name);
+                    _transferSyntaxLogged = true;
+                }
 
                 return moveTransferSyntax;
             }
@@ -1472,12 +1478,16 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 var (isSourceCompressed, sourceType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
                 var (isTargetCompressed, targetType) = GetCompressionInfo(storageTransferSyntax);
 
-                DicomLogger.Information("QRSCP", 
-                    "存储类传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
-                    isSourceCompressed ? sourceType : "未压缩",
-                    file.Dataset.InternalTransferSyntax.UID.Name,
-                    isTargetCompressed ? targetType : "未压缩",
-                    storageTransferSyntax.UID.Name);
+                if (!_transferSyntaxLogged)
+                {
+                    DicomLogger.Information("QRSCP", 
+                        "存储类传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
+                        isSourceCompressed ? sourceType : "未压缩",
+                        file.Dataset.InternalTransferSyntax.UID.Name,
+                        isTargetCompressed ? targetType : "未压缩",
+                        storageTransferSyntax.UID.Name);
+                    _transferSyntaxLogged = true;
+                }
 
                 return storageTransferSyntax;
             }
