@@ -99,7 +99,7 @@ public class WorklistRepository : BaseRepository
             }
 
             // 设置创建和更新时间
-            item.CreateTime = DateTime.UtcNow;
+            item.CreateTime = DateTime.Now;
             item.UpdateTime = item.CreateTime;
 
             LogInformation("正在创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
@@ -141,7 +141,7 @@ public class WorklistRepository : BaseRepository
             using var connection = new SqliteConnection(_connectionString);
             
             // 更新时间
-            item.UpdateTime = DateTime.UtcNow;
+            item.UpdateTime = DateTime.Now;
 
             LogInformation("正在更新Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
 

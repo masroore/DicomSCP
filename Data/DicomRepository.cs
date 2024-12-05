@@ -25,7 +25,7 @@ public class DicomRepository : BaseRepository, IDisposable
     private readonly TimeSpan _maxWaitTime = TimeSpan.FromSeconds(30);
     private readonly TimeSpan _minWaitTime = TimeSpan.FromSeconds(5);
     private readonly Stopwatch _performanceTimer = new();
-    private DateTime _lastProcessTime = DateTime.UtcNow;
+    private DateTime _lastProcessTime = DateTime.Now;
     private bool _initialized;
 
     private static class SqlQueries
@@ -196,7 +196,7 @@ public class DicomRepository : BaseRepository, IDisposable
         if (_dataQueue.IsEmpty) return;
 
         var queueSize = _dataQueue.Count;
-        var waitTime = DateTime.UtcNow - _lastProcessTime;
+        var waitTime = DateTime.Now - _lastProcessTime;
 
         // 优化处理时机判断
         if (queueSize >= _batchSize || // 队列达到批处理大小
@@ -235,7 +235,7 @@ public class DicomRepository : BaseRepository, IDisposable
 
             try
             {
-                var now = DateTime.UtcNow;
+                var now = DateTime.Now;
                 var patients = new List<Patient>();
                 var studies = new List<Study>();
                 var series = new List<Series>();
@@ -261,7 +261,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 await transaction.CommitAsync();
 
                 _performanceTimer.Stop();
-                _lastProcessTime = DateTime.UtcNow;
+                _lastProcessTime = DateTime.Now;
 
                 LogInformation(
                     "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 队剩余: {Remaining}, 平均耗时: {AvgTime:F2}ms/条", 
