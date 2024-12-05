@@ -14,6 +14,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 添加线程池配置
+ThreadPool.SetMinThreads(100, 100); // 设置最小工作线程和 I/O 线程数
+
 // 注册编码提供程序
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -21,12 +24,13 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 DicomEncoding.RegisterEncoding("GB2312", "GB2312");
 
 // 配置 Kestrel
-builder.WebHost.ConfigureKestrel(serverOptions =>
+builder.WebHost.ConfigureKestrel(options =>
 {
-    serverOptions.ConfigureEndpointDefaults(listenOptions =>
-    {
-        listenOptions.UseConnectionLogging();
-    });
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(2);
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(1);
+    options.Limits.MaxConcurrentConnections = 100;
+    options.Limits.MaxConcurrentUpgradedConnections = 100;
+    options.Limits.MaxRequestBodySize = 52428800; // 50MB
 });
 
 // 获取配置
