@@ -22,11 +22,12 @@ public class DicomRepository : BaseRepository, IDisposable
     private readonly SemaphoreSlim _processSemaphore = new(1, 1);
     private readonly Timer _processTimer;
     private readonly int _batchSize;
-    private readonly TimeSpan _maxWaitTime = TimeSpan.FromSeconds(30);
-    private readonly TimeSpan _minWaitTime = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _maxWaitTime = TimeSpan.FromSeconds(10);
+    private readonly TimeSpan _minWaitTime = TimeSpan.FromSeconds(2);
     private readonly Stopwatch _performanceTimer = new();
     private DateTime _lastProcessTime = DateTime.Now;
     private bool _initialized;
+    private bool _disposed;
 
     private static class SqlQueries
     {
@@ -198,10 +199,10 @@ public class DicomRepository : BaseRepository, IDisposable
         var queueSize = _dataQueue.Count;
         var waitTime = DateTime.Now - _lastProcessTime;
 
-        // 优化处理时机判断
+        // 修改处理时机判断
         if (queueSize >= _batchSize || // 队列达到批处理大小
-            (queueSize > 0 && waitTime >= _maxWaitTime) || // 等待时间达到上限
-            (queueSize >= 10 && waitTime >= _minWaitTime)) // 积累一定数量且达到最小等待时间
+            (queueSize > 0 && waitTime >= _maxWaitTime) || // 等待超过10秒就处理
+            (queueSize >= 5 && waitTime >= _minWaitTime))  // 只要有5条且等待超过2秒就处理
         {
             await ProcessBatchWithRetryAsync();
         }
@@ -475,13 +476,48 @@ public class DicomRepository : BaseRepository, IDisposable
 
     public void Dispose()
     {
-        _processTimer?.Dispose();
-        _processSemaphore?.Dispose();
-        
-        // 处理剩余队列中的数据
-        if (!_dataQueue.IsEmpty)
+        if (!_disposed)
         {
-            ProcessBatchWithRetryAsync().Wait();
+            _disposed = true;
+
+            try
+            {
+                // 1. 先停止定时器，防止新的处理被触发
+                _processTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+                _processTimer?.Dispose();
+
+                // 2. 等待当前处理完成并处理剩余数据
+                while (!_dataQueue.IsEmpty)
+                {
+                    try
+                    {
+                        // 同步处理剩余数据
+                        if (_processSemaphore.Wait(TimeSpan.FromSeconds(30)))  // 给足够的等待时间
+                        {
+                            try
+                            {
+                                ProcessBatchWithRetryAsync().GetAwaiter().GetResult();
+                            }
+                            finally
+                            {
+                                _processSemaphore.Release();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError(ex, "处理剩余数据失败");
+                        break;  // 如果处理失败，退出循环
+                    }
+                }
+
+                // 3. 最后释放信号量
+                _processSemaphore?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                LogError(ex, "Dispose过程发生错误");
+            }
         }
     }
 
