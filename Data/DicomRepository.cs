@@ -37,8 +37,8 @@ public class DicomRepository : BaseRepository, IDisposable
 
         public const string InsertStudy = @"
             INSERT OR IGNORE INTO Studies 
-            (StudyInstanceUid, PatientId, StudyDate, StudyTime, StudyDescription, AccessionNumber, CreateTime)
-            VALUES (@StudyInstanceUid, @PatientId, @StudyDate, @StudyTime, @StudyDescription, @AccessionNumber, @CreateTime)";
+            (StudyInstanceUid, PatientId, StudyDate, StudyTime, StudyDescription, AccessionNumber, Modality, CreateTime)
+            VALUES (@StudyInstanceUid, @PatientId, @StudyDate, @StudyTime, @StudyDescription, @AccessionNumber, @Modality, @CreateTime)";
 
         public const string InsertSeries = @"
             INSERT OR IGNORE INTO Series 
@@ -264,7 +264,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 _lastProcessTime = DateTime.UtcNow;
 
                 LogInformation(
-                    "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 队列剩余: {Remaining}, 平均耗时: {AvgTime:F2}ms/条", 
+                    "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 队剩余: {Remaining}, 平均耗时: {AvgTime:F2}ms/条", 
                     batchItems.Count,
                     _performanceTimer.ElapsedMilliseconds,
                     _dataQueue.Count,
@@ -399,7 +399,7 @@ public class DicomRepository : BaseRepository, IDisposable
             StudyTime = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyTime, string.Empty),
             StudyDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDescription, string.Empty),
             AccessionNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
-            Modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty),
+            Modality = GetStudyModality(dataset),
             CreateTime = now
         });
 
@@ -422,6 +422,35 @@ public class DicomRepository : BaseRepository, IDisposable
             FilePath = filePath,
             CreateTime = now
         });
+    }
+
+    private string GetStudyModality(DicomDataset dataset)
+    {
+        // 首先尝试从ModalitiesInStudy获取
+        try
+        {
+            if (dataset.Contains(DicomTag.ModalitiesInStudy))
+            {
+                var modalities = dataset.GetValues<string>(DicomTag.ModalitiesInStudy);
+                if (modalities != null && modalities.Length > 0)
+                {
+                    return string.Join("\\", modalities.Where(m => !string.IsNullOrEmpty(m)));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogWarning("获取ModalitiesInStudy失败: {Error}", ex.Message);
+        }
+
+        // 如果没有ModalitiesInStudy，则使用Series级别的Modality
+        var modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
+        if (!string.IsNullOrEmpty(modality))
+        {
+            return modality;
+        }
+
+        return string.Empty;
     }
 
     private void HandleFailedBatch(List<(DicomDataset Dataset, string FilePath)> failedItems)
@@ -662,15 +691,23 @@ public class DicomRepository : BaseRepository, IDisposable
         string patientName, 
         string accessionNumber, 
         (string StartDate, string EndDate) dateRange,
-        string[] modalities)
+        string[]? modalities)
     {
         try
         {
             using var connection = CreateConnection();
             var sql = @"
-                SELECT s.*, p.PatientName, p.PatientSex, p.PatientBirthDate
+                SELECT 
+                    s.*,
+                    p.PatientName,
+                    p.PatientSex,
+                    p.PatientBirthDate,
+                    COUNT(DISTINCT ser.SeriesInstanceUid) as NumberOfStudyRelatedSeries,
+                    COUNT(DISTINCT i.SopInstanceUid) as NumberOfStudyRelatedInstances
                 FROM Studies s
                 LEFT JOIN Patients p ON s.PatientId = p.PatientId
+                LEFT JOIN Series ser ON s.StudyInstanceUid = ser.StudyInstanceUid
+                LEFT JOIN Instances i ON ser.SeriesInstanceUid = i.SeriesInstanceUid
                 WHERE 1=1
                 AND (@PatientId = '' OR s.PatientId LIKE @PatientId)
                 AND (@PatientName = '' OR p.PatientName LIKE @PatientName)
@@ -678,6 +715,18 @@ public class DicomRepository : BaseRepository, IDisposable
                 AND (@StartDate = '' OR s.StudyDate >= @StartDate)
                 AND (@EndDate = '' OR s.StudyDate <= @EndDate)
                 AND (@ModCount = 0 OR s.Modality IN @Modalities)
+                GROUP BY 
+                    s.StudyInstanceUid,
+                    s.PatientId,
+                    s.StudyDate,
+                    s.StudyTime,
+                    s.StudyDescription,
+                    s.AccessionNumber,
+                    s.Modality,
+                    s.CreateTime,
+                    p.PatientName,
+                    p.PatientSex,
+                    p.PatientBirthDate
                 ORDER BY s.CreateTime DESC";
 
             var parameters = new
@@ -1163,13 +1212,19 @@ public class DicomRepository : BaseRepository, IDisposable
         {
             using var connection = CreateConnection();
             var sql = @"
-                SELECT DISTINCT 
+                SELECT 
                     p.PatientId, 
                     p.PatientName, 
                     p.PatientBirthDate, 
-                    p.PatientSex 
+                    p.PatientSex,
+                    p.CreateTime,
+                    COUNT(DISTINCT s.StudyInstanceUid) as NumberOfStudies,
+                    COUNT(DISTINCT ser.SeriesInstanceUid) as NumberOfSeries,
+                    COUNT(DISTINCT i.SopInstanceUid) as NumberOfInstances
                 FROM Patients p
-                INNER JOIN Studies s ON p.PatientId = s.PatientId 
+                LEFT JOIN Studies s ON p.PatientId = s.PatientId
+                LEFT JOIN Series ser ON s.StudyInstanceUid = ser.StudyInstanceUid
+                LEFT JOIN Instances i ON ser.SeriesInstanceUid = i.SeriesInstanceUid
                 WHERE 1=1";
 
             var parameters = new DynamicParameters();
@@ -1186,7 +1241,9 @@ public class DicomRepository : BaseRepository, IDisposable
                 parameters.Add("@PatientName", $"%{patientName}%");
             }
 
-            sql += " ORDER BY p.PatientName";
+            sql += @" 
+                GROUP BY p.PatientId, p.PatientName, p.PatientBirthDate, p.PatientSex, p.CreateTime
+                ORDER BY p.PatientName";
 
             LogDebug("执行Patient查询 - SQL: {Sql}, PatientId: {PatientId}, PatientName: {PatientName}", 
                 sql, patientId, patientName);

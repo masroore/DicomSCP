@@ -442,9 +442,12 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
               .Add(DicomTag.StudyTime, study.StudyTime ?? string.Empty)
               .Add(DicomTag.PatientName, study.PatientName ?? string.Empty)
               .Add(DicomTag.PatientID, study.PatientId ?? string.Empty)
+              .Add(DicomTag.PatientBirthDate, study.PatientBirthDate ?? string.Empty)
               .Add(DicomTag.StudyDescription, study.StudyDescription ?? string.Empty)
               .Add(DicomTag.ModalitiesInStudy, study.Modality ?? string.Empty)
-              .Add(DicomTag.AccessionNumber, study.AccessionNumber ?? string.Empty);
+              .Add(DicomTag.AccessionNumber, study.AccessionNumber ?? string.Empty)
+              .Add(DicomTag.NumberOfStudyRelatedSeries, study.NumberOfStudyRelatedSeries.ToString())
+              .Add(DicomTag.NumberOfStudyRelatedInstances, study.NumberOfStudyRelatedInstances.ToString());
 
         response.Dataset = dataset;
         return response;
@@ -1401,7 +1404,10 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 dataset.Add(DicomTag.PatientID, patient.PatientId ?? string.Empty)
                       .Add(DicomTag.PatientName, patient.PatientName ?? string.Empty)
                       .Add(DicomTag.PatientBirthDate, patient.PatientBirthDate ?? string.Empty)
-                      .Add(DicomTag.PatientSex, patient.PatientSex ?? string.Empty);
+                      .Add(DicomTag.PatientSex, patient.PatientSex ?? string.Empty)
+                      .Add(DicomTag.NumberOfPatientRelatedStudies, patient.NumberOfStudies.ToString())
+                      .Add(DicomTag.NumberOfPatientRelatedSeries, patient.NumberOfSeries.ToString())
+                      .Add(DicomTag.NumberOfPatientRelatedInstances, patient.NumberOfInstances.ToString());
 
                 response.Dataset = dataset;
                 responses.Add(response);

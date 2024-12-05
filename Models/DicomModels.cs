@@ -7,6 +7,9 @@ public class Patient
     public string? PatientBirthDate { get; set; }
     public string? PatientSex { get; set; }
     public DateTime CreateTime { get; set; }
+    public int NumberOfStudies { get; set; }
+    public int NumberOfSeries { get; set; }
+    public int NumberOfInstances { get; set; }
 }
 
 public class Study
@@ -15,12 +18,15 @@ public class Study
     public string PatientId { get; set; } = null!;
     public string PatientName { get; set; } = string.Empty;
     public string PatientSex { get; set; } = string.Empty;
+    public string PatientBirthDate { get; set; } = string.Empty;
     public string? StudyDate { get; set; }
     public string? StudyTime { get; set; }
     public string? StudyDescription { get; set; }
     public string? AccessionNumber { get; set; }
     public string Modality { get; set; } = string.Empty;
     public DateTime CreateTime { get; set; }
+    public int NumberOfStudyRelatedSeries { get; set; }
+    public int NumberOfStudyRelatedInstances { get; set; }
 }
 
 public class Series
