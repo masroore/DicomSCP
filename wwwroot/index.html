@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DICOM 管理系统</title>
     <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="lib/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <style>
@@ -142,32 +143,46 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-0">
         <div class="container">
-            <a class="navbar-brand py-2" href="#">DICOM管理系统</a>
+            <a class="navbar-brand py-2" href="#">DICOM管系统</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item" style="margin-right: -0.4rem;">
-                        <a class="nav-link py-2" href="#worklist" data-page="worklist">RIS预约</a>
+                        <a class="nav-link py-2" href="#worklist" data-page="worklist">
+                            <i class="bi bi-calendar-check me-1"></i>RIS预约
+                        </a>
                     </li>
                     <li class="nav-item" style="margin-right: -0.4rem;">
-                        <a class="nav-link py-2" href="#images" data-page="images">影像管理</a>
+                        <a class="nav-link py-2" href="#images" data-page="images">
+                            <i class="bi bi-images me-1"></i>影像管理
+                        </a>
                     </li>
                     <li class="nav-item" style="margin-right: -0.4rem;">
-                        <a class="nav-link py-2" href="#qr" data-page="qr">查询检索</a>
+                        <a class="nav-link py-2" href="#qr" data-page="qr">
+                            <i class="bi bi-search me-1"></i>查询检索
+                        </a>
                     </li>
                     <li class="nav-item" style="margin-right: -0.4rem;">
-                        <a class="nav-link py-2" href="#store" data-page="store">发送图像</a>
+                        <a class="nav-link py-2" href="#store" data-page="store">
+                            <i class="bi bi-upload me-1"></i>发送图像
+                        </a>
                     </li>
                     <li class="nav-item" style="margin-right: -0.4rem;">
-                        <a class="nav-link py-2" href="#print" data-page="print">打印管理</a>
+                        <a class="nav-link py-2" href="#print" data-page="print">
+                            <i class="bi bi-printer me-1"></i>打印管理
+                        </a>
                     </li>
                     <li class="nav-item" style="margin-right: -0.4rem;">
-                        <a class="nav-link py-2" href="#logs" data-page="logs">日志管理</a>
+                        <a class="nav-link py-2" href="#logs" data-page="logs">
+                            <i class="bi bi-journal-text me-1"></i>日志管理
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link py-2" href="#settings" data-page="settings">系统设置</a>
+                        <a class="nav-link py-2" href="#settings" data-page="settings">
+                            <i class="bi bi-gear me-1"></i>系统设置
+                        </a>
                     </li>
                 </ul>
                 <!-- 右侧用户菜单 -->
@@ -198,12 +213,21 @@
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle me-1"></i>
                             <span id="currentUsername">加载中...</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#" onclick="showChangePasswordModal()">修改密码</a></li>
+                            <li>
+                                <a class="dropdown-item" href="#" onclick="showChangePasswordModal()">
+                                    <i class="bi bi-key me-2"></i>修改密码
+                                </a>
+                            </li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#" onclick="logout()">退出系统</a></li>
+                            <li>
+                                <a class="dropdown-item" href="#" onclick="logout()">
+                                    <i class="bi bi-box-arrow-right me-2"></i>退出系统
+                                </a>
+                            </li>
                         </ul>
                     </li>
                 </ul>
