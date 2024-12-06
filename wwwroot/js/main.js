@@ -284,6 +284,25 @@ document.getElementById('imagesSearchForm').onsubmit = (e) => {
     imagesCurrentPage = 1;  // 搜索时重置到第一页
     loadImages(1);
 };
+
+document.getElementById('imagesSearchForm').querySelector('button[type="reset"]').onclick = (e) => {
+    e.preventDefault();
+    
+    // 重置表单
+    document.getElementById('imagesSearchForm').reset();
+    
+    // 清空所有搜索条件
+    document.getElementById('searchPatientId').value = '';
+    document.getElementById('searchPatientName').value = '';
+    document.getElementById('searchAccessionNumber').value = '';
+    document.getElementById('searchDate').value = '';
+    
+    // 重置页码
+    imagesCurrentPage = 1;
+    
+    // 执行查询
+    loadImages(1);
+};
 // 切换序列信息显示
 function toggleSeriesInfo(row) {
     const studyUid = $(row).data('study-uid');

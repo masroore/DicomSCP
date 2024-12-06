@@ -1,8 +1,10 @@
 class PrintManager {
     constructor() {
-        this.allPrintJobs = [];  // 存储所有打印任务
         this.currentPage = 1;
         this.pageSize = 10;
+        this.totalPages = 0;
+        this.totalItems = 0;
+        this.currentJobs = [];
         this.initializeEvents();
         this.loadPrintJobs();
     }
@@ -28,7 +30,23 @@ class PrintManager {
 
     async loadPrintJobs() {
         try {
-            const response = await fetch('/api/print');
+            const callingAE = document.getElementById('searchCallingAE')?.value || '';
+            const studyUID = document.getElementById('searchStudyUID')?.value || '';
+            const status = document.getElementById('searchPrintStatus')?.value || '';
+            const date = document.getElementById('searchDate')?.value || '';
+
+            const queryParams = new URLSearchParams({
+                page: this.currentPage,
+                pageSize: this.pageSize
+            });
+
+            if (callingAE) queryParams.append('callingAE', callingAE);
+            if (studyUID) queryParams.append('studyUID', studyUID);
+            if (status) queryParams.append('status', status);
+            if (date) queryParams.append('date', date);
+
+            const response = await fetch(`/api/print?${queryParams}`);
+
             if (response.status === 401) {
                 window.location.href = '/login.html';
                 return;
@@ -38,148 +56,117 @@ class PrintManager {
                 throw new Error('获取打印任务失败');
             }
             
-            const jobs = await response.json();
-            this.allPrintJobs = jobs.sort((a, b) => 
-                new Date(b.createTime) - new Date(a.createTime)
-            );
-            this.searchPrintJobs();  // 使用搜索函数来显示数据
+            const data = await response.json();
+            this.currentJobs = data.items;
+            this.updatePrintJobsTable(data.items);
+            this.totalItems = data.total;
+            this.totalPages = data.totalPages;
+            this.updatePagination();
         } catch (error) {
             console.error('加载打印任务失败:', error);
             this.showToast('错误', '加载打印任务失败: ' + error.message, 'danger');
         }
     }
 
-    searchPrintJobs() {
-        const patientId = document.getElementById('searchPrintPatientId')?.value?.toLowerCase() || '';
-        const patientName = document.getElementById('searchPrintPatientName')?.value?.toLowerCase() || '';
-        const accessionNumber = document.getElementById('searchPrintAccessionNumber')?.value?.toLowerCase() || '';
-        const status = document.getElementById('searchPrintStatus')?.value || '';
-        const searchDate = document.getElementById('searchPrintDate')?.value || '';
+    updatePagination() {
+        const start = (this.currentPage - 1) * this.pageSize + 1;
+        const end = Math.min(this.currentPage * this.pageSize, this.totalItems);
 
-        // 过滤数据
-        const filteredJobs = this.allPrintJobs.filter(job => {
-            const jobDate = job.createTime ? new Date(job.createTime).toISOString().split('T')[0] : '';
-            return (!patientId || job.patientId?.toLowerCase().includes(patientId)) &&
-                   (!patientName || job.patientName?.toLowerCase().includes(patientName)) &&
-                   (!accessionNumber || job.accessionNumber?.toLowerCase().includes(accessionNumber)) &&
-                   (!status || job.status === status) &&
-                   (!searchDate || jobDate === searchDate);
-        });
+        document.getElementById('print-currentRange').textContent = 
+            this.totalItems > 0 ? `${start}-${end}` : '0-0';
+        document.getElementById('print-totalCount').textContent = this.totalItems;
+        document.getElementById('print-currentPage').textContent = this.currentPage;
 
-        // 更新分页信息并显示当前页数据
+        document.getElementById('print-prevPage').disabled = this.currentPage === 1;
+        document.getElementById('print-nextPage').disabled = 
+            this.currentPage === this.totalPages || this.totalItems === 0;
+    }
+
+    async prevPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            await this.loadPrintJobs();
+        }
+    }
+
+    async nextPage() {
+        if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            await this.loadPrintJobs();
+        }
+    }
+
+    async searchPrintJobs() {
         this.currentPage = 1;
-        this.updatePrintJobsTable(filteredJobs);
+        await this.loadPrintJobs();
     }
 
     resetSearch() {
         document.getElementById('printSearchForm').reset();
         this.currentPage = 1;
-        this.updatePrintJobsTable(this.allPrintJobs);
+        this.loadPrintJobs();
     }
 
     updatePrintJobsTable(jobs) {
-        // 计算当前页的数据
-        const start = (this.currentPage - 1) * this.pageSize;
-        const end = start + this.pageSize;
-        const pageJobs = jobs.slice(start, end);
-
         const tbody = document.getElementById('print-jobs-table-body');
         if (!tbody) return;
 
-        tbody.innerHTML = pageJobs.map(job => `
+        this.currentJobs = jobs;
+        tbody.innerHTML = jobs.map(job => `
             <tr>
-                <td>${job.jobId}</td>
-                <td>${job.patientName || ''}</td>
-                <td>${job.patientId || ''}</td>
-                <td>${job.accessionNumber || ''}</td>
+                <td>${job.jobId || ''}</td>
+                <td>${job.callingAE || ''}</td>
+                <td>${job.studyInstanceUID || ''}</td>
                 <td>${this.formatDateTime(job.createTime)}</td>
-                <td>
-                    <span class="badge ${this.getStatusBadgeClass(job.status)}">
-                        ${this.formatStatus(job.status)}
-                    </span>
-                </td>
+                <td>${this.formatStatus(job.status)}</td>
                 <td>
                     ${this.getActionButtons(job)}
                 </td>
             </tr>
         `).join('');
-
-        // 更新分页信息
-        this.updatePagination(jobs.length);
-        // 更新作业统计
-        this.updateJobStats(jobs);
     }
 
-    updatePagination(total) {
-        const totalPages = Math.ceil(total / this.pageSize);
-        const start = (this.currentPage - 1) * this.pageSize + 1;
-        const end = Math.min(this.currentPage * this.pageSize, total);
-
-        document.getElementById('print-currentRange').textContent = total > 0 ? `${start}-${end}` : '0-0';
-        document.getElementById('print-totalCount').textContent = total;
-        document.getElementById('print-currentPage').textContent = this.currentPage;
-
-        document.getElementById('print-prevPage').disabled = this.currentPage === 1;
-        document.getElementById('print-nextPage').disabled = this.currentPage === totalPages || total === 0;
-    }
-
-    prevPage() {
-        if (this.currentPage > 1) {
-            this.currentPage--;
-            const filteredJobs = this.getFilteredJobs();
-            this.updatePrintJobsTable(filteredJobs);
-        }
-    }
-
-    nextPage() {
-        const total = this.getFilteredJobs().length;
-        const totalPages = Math.ceil(total / this.pageSize);
-        if (this.currentPage < totalPages) {
-            this.currentPage++;
-            const filteredJobs = this.getFilteredJobs();
-            this.updatePrintJobsTable(filteredJobs);
-        }
-    }
-
-    getFilteredJobs() {
-        const patientId = document.getElementById('searchPrintPatientId')?.value?.toLowerCase() || '';
-        const patientName = document.getElementById('searchPrintPatientName')?.value?.toLowerCase() || '';
-        const accessionNumber = document.getElementById('searchPrintAccessionNumber')?.value?.toLowerCase() || '';
-        const status = document.getElementById('searchPrintStatus')?.value || '';
-        const searchDate = document.getElementById('searchPrintDate')?.value || '';
-
-        const filteredJobs = this.allPrintJobs.filter(job => {
-            const jobDate = job.createTime ? new Date(job.createTime).toISOString().split('T')[0] : '';
-            return (!patientId || job.patientId?.toLowerCase().includes(patientId)) &&
-                   (!patientName || job.patientName?.toLowerCase().includes(patientName)) &&
-                   (!accessionNumber || job.accessionNumber?.toLowerCase().includes(accessionNumber)) &&
-                   (!status || job.status === status) &&
-                   (!searchDate || jobDate === searchDate);
-        });
-
-        return filteredJobs.sort((a, b) => 
-            new Date(b.createTime) - new Date(a.createTime)
-        );
-    }
+    // 添加枚举映射
+    static PrintJobStatus = {
+        0: 'Created',
+        1: 'ImageReceived',
+        2: 'Failed'
+    };
 
     getStatusBadgeClass(status) {
-        switch (status) {
-            case 'PENDING': return 'bg-warning text-dark';
-            case 'PRINTING': return 'bg-primary text-white';
-            case 'COMPLETED': return 'bg-success text-white';
-            case 'FAILED': return 'bg-danger text-white';
-            default: return 'bg-secondary text-white';
+        if (status === null || status === undefined) return 'bg-secondary text-white';
+        
+        // 将数字状态转换为字符串
+        const statusStr = PrintManager.PrintJobStatus[status] || status;
+        
+        switch (String(statusStr).toLowerCase()) {
+            case 'created':
+                return 'bg-secondary text-white';
+            case 'imagereceived':
+                return 'bg-info text-white';
+            case 'failed':
+                return 'bg-danger text-white';
+            default:
+                return 'bg-secondary text-white';
         }
     }
 
     formatStatus(status) {
-        const statusMap = {
-            'PENDING': '<span class="badge bg-warning text-dark fw-bold">待处理</span>',
-            'PRINTING': '<span class="badge bg-primary text-white fw-bold">打印中</span>',
-            'COMPLETED': '<span class="badge bg-success text-white fw-bold">已完成</span>',
-            'FAILED': '<span class="badge bg-danger text-white fw-bold">失败</span>'
+        if (status === null || status === undefined) return '<span class="badge bg-secondary">未知</span>';
+
+        // 将数字状态转换为字符串
+        const statusStr = PrintManager.PrintJobStatus[status] || status;
+        
+        const statusText = {
+            'Created': '已创建',
+            'ImageReceived': '已接收',
+            'Failed': '失败'
         };
-        return statusMap[status] || status;
+
+        const badgeClass = this.getStatusBadgeClass(statusStr);
+        const text = statusText[statusStr] || statusStr;
+        
+        return `<span class="badge ${badgeClass}">${text}</span>`;
     }
 
     getActionButtons(job) {
@@ -290,7 +277,7 @@ class PrintManager {
             const bsModal = new bootstrap.Modal(modal);
             bsModal.show();
 
-            // 获取图像元素和加载提示
+            // 获取图像元素和加载示
             const img = document.getElementById('previewImage');
             const loading = document.getElementById('imageLoading');
 
@@ -373,11 +360,13 @@ class PrintManager {
     // 显示任务详情
     async showDetails(jobId) {
         try {
-            const job = this.allPrintJobs.find(j => j.jobId === jobId);
-            if (!job) {
-                throw new Error('未找到任务');
+            const response = await fetch(`/api/print/${jobId}`);
+            if (!response.ok) {
+                throw new Error('获取任务详情失败');
             }
 
+            const job = await response.json();
+            
             // 创建模态框（如果不存在）
             let modal = document.getElementById('detailModal');
             if (!modal) {
@@ -397,7 +386,7 @@ class PrintManager {
         }
     }
 
-    // 创建详情模态框
+    // 建详情模态框
     createDetailModal() {
         const modal = document.createElement('div');
         modal.className = 'modal fade';
@@ -411,7 +400,7 @@ class PrintManager {
                     </div>
                     <div class="modal-body p-0">
                         <div class="table-responsive" style="max-height: 600px;">
-                            <table class="table table-bordered table-striped table-hover mb-0">
+                            <table class="table table-bordered mb-0">
                                 <tbody id="jobDetails"></tbody>
                             </table>
                         </div>
@@ -425,36 +414,63 @@ class PrintManager {
 
     // 生成详情行
     generateDetailRows(job) {
-        const fields = [
-            { key: 'jobId', name: '任务ID' },
-            { key: 'patientId', name: '患者ID' },
-            { key: 'patientName', name: '患者姓名' },
-            { key: 'accessionNumber', name: '检查号' },
-            { key: 'callingAE', name: '调用方AE' },
-            { key: 'status', name: '状态' },
-            { key: 'filmSize', name: '胶片尺寸' },
-            { key: 'filmOrientation', name: '胶片方向' },
-            { key: 'filmLayout', name: '胶片布局' },
-            { key: 'magnificationType', name: '放大类型' },
-            { key: 'borderDensity', name: '边框密度' },
-            { key: 'emptyImageDensity', name: '空图像密度' },
-            { key: 'minDensity', name: '最小密度' },
-            { key: 'maxDensity', name: '最大密度' },
-            { key: 'trimValue', name: '裁剪值' },
-            { key: 'configurationInfo', name: '配置信息' },
-            { key: 'createTime', name: '创建时间' },
-            { key: 'updateTime', name: '更新时间' }
+        const sections = [
+            {
+                title: '基本信息',
+                fields: [
+                    { key: 'jobId', name: '任务ID' },
+                    { key: 'callingAE', name: '请求方AE' },
+                    { key: 'status', name: '状态' },
+                    { key: 'errorMessage', name: '错误信息' }
+                ]
+            },
+            {
+                title: 'Film Session 参数',
+                fields: [
+                    { key: 'numberOfCopies', name: '份数' },
+                    { key: 'printPriority', name: '优先级' },
+                    { key: 'mediumType', name: '介质类型' },
+                    { key: 'filmDestination', name: '目标位置' }
+                ]
+            },
+            {
+                title: 'Film Box 参数',
+                fields: [
+                    { key: 'printInColor', name: '彩色印' },
+                    { key: 'filmOrientation', name: '方向' },
+                    { key: 'filmSizeID', name: '尺寸' },
+                    { key: 'imageDisplayFormat', name: '显示格式' },
+                    { key: 'magnificationType', name: '放大类型' },
+                    { key: 'smoothingType', name: '平滑类型' },
+                    { key: 'borderDensity', name: '边框密度' },
+                    { key: 'emptyImageDensity', name: '空白密度' },
+                    { key: 'trim', name: '裁剪' }
+                ]
+            },
+            {
+                title: '其他信息',
+                fields: [
+                    { key: 'studyInstanceUID', name: '检查UID' },
+                    { key: 'imagePath', name: '图像路径' },
+                    { key: 'createTime', name: '创建时间' },
+                    { key: 'updateTime', name: '更新时间' }
+                ]
+            }
         ];
 
-        return fields.map(field => {
-            const value = job[field.key];
-            return `
+        return sections.map(section => `
+            <tr>
+                <th colspan="2" class="fw-bold" style="background-color: #f8f9fa; color: #495057; padding: 0.75rem;">
+                    ${section.title}
+                </th>
+            </tr>
+            ${section.fields.map(field => `
                 <tr>
-                    <th class="table-light" style="width: 150px;">${field.name}</th>
-                    <td>${this.formatFieldValue(field.key, value)}</td>
+                    <th style="width: 150px; background-color: #fff;">${field.name}</th>
+                    <td style="background-color: #fff;">${this.formatFieldValue(field.key, job[field.key])}</td>
                 </tr>
-            `;
-        }).join('');
+            `).join('')}
+        `).join('');
     }
 
     // 删除打印任务
@@ -510,19 +526,19 @@ class PrintManager {
 
     // 格式化字段值
     formatFieldValue(key, value) {
-        if (value === null || value === undefined) {
-            return '-';
-        }
+        if (value === null || value === undefined) return '';
         
-        if (key === 'status') {
-            return this.formatStatus(value);
+        switch (key) {
+            case 'status':
+                return this.formatStatus(value);
+            case 'printInColor':
+                return value ? '是' : '否';
+            case 'createTime':
+            case 'updateTime':
+                return this.formatDateTime(value);
+            default:
+                return value.toString();
         }
-        
-        if (key.toLowerCase().includes('time')) {
-            return new Date(value).toLocaleString();
-        }
-        
-        return value;
     }
 }
 

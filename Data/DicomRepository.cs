@@ -1144,18 +1144,89 @@ public class DicomRepository : BaseRepository, IDisposable
     /// <summary>
     /// 获取所有打印任务列表
     /// </summary>
-    public async Task<List<PrintJob>> GetPrintJobsAsync(string? status = null)
+    public async Task<(List<PrintJob> Items, int Total, int Page, int PageSize, int TotalPages)> GetPrintJobsAsync(
+        string? callingAE = null,
+        string? studyUID = null,
+        string? status = null,
+        DateTime? date = null,
+        int page = 1,
+        int pageSize = 10)
     {
-        using var connection = CreateConnection();
-        var sql = "SELECT * FROM PrintJobs";
-        if (!string.IsNullOrEmpty(status))
+        try
         {
-            sql += " WHERE Status = @Status";
-            var jobs = await connection.QueryAsync<PrintJob>(sql, new { Status = status });
-            return jobs.ToList();
+            using var connection = CreateConnection();
+            
+            // 构建查询
+            var sql = new StringBuilder("SELECT COUNT(*) FROM PrintJobs WHERE 1=1");
+            var parameters = new DynamicParameters();
+
+            if (!string.IsNullOrEmpty(callingAE))
+            {
+                sql.Append(" AND CallingAE LIKE @CallingAE");
+                parameters.Add("@CallingAE", $"%{callingAE}%");
+            }
+
+            if (!string.IsNullOrEmpty(studyUID))
+            {
+                sql.Append(" AND StudyInstanceUID LIKE @StudyUID");
+                parameters.Add("@StudyUID", $"%{studyUID}%");
+            }
+
+            if (!string.IsNullOrEmpty(status))
+            {
+                sql.Append(" AND Status = @Status");
+                parameters.Add("@Status", status);
+            }
+
+            if (date.HasValue)
+            {
+                sql.Append(" AND DATE(CreateTime) = DATE(@Date)");
+                parameters.Add("@Date", date.Value.Date);
+            }
+
+            // 获取总记录数
+            var total = await connection.ExecuteScalarAsync<int>(sql.ToString(), parameters);
+            
+            // 计算总页数
+            var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+            
+            // 构建分页查询
+            sql = new StringBuilder(@"
+                SELECT * FROM PrintJobs WHERE 1=1");
+
+            if (!string.IsNullOrEmpty(callingAE))
+            {
+                sql.Append(" AND CallingAE LIKE @CallingAE");
+            }
+
+            if (!string.IsNullOrEmpty(studyUID))
+            {
+                sql.Append(" AND StudyInstanceUID LIKE @StudyUID");
+            }
+
+            if (!string.IsNullOrEmpty(status))
+            {
+                sql.Append(" AND Status = @Status");
+            }
+
+            if (date.HasValue)
+            {
+                sql.Append(" AND DATE(CreateTime) = DATE(@Date)");
+            }
+
+            sql.Append(" ORDER BY CreateTime DESC LIMIT @PageSize OFFSET @Offset");
+            parameters.Add("@PageSize", pageSize);
+            parameters.Add("@Offset", (page - 1) * pageSize);
+
+            var items = await connection.QueryAsync<PrintJob>(sql.ToString(), parameters);
+
+            return (items.ToList(), total, page, pageSize, totalPages);
         }
-        var allJobs = await connection.QueryAsync<PrintJob>(sql);
-        return allJobs.ToList();
+        catch (Exception ex)
+        {
+            LogError(ex, "获取打印任务列表失败");
+            throw;
+        }
     }
 
     /// <summary>

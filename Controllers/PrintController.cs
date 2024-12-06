@@ -34,12 +34,25 @@ public class PrintController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetPrintJobs()
+    public async Task<IActionResult> GetPrintJobs(
+        [FromQuery] string? callingAE = null,
+        [FromQuery] string? studyUID = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateTime? date = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
     {
         try
         {
-            var items = await _repository.GetPrintJobsAsync();
-            return Ok(items);
+            var result = await _repository.GetPrintJobsAsync(callingAE, studyUID, status, date, page, pageSize);
+            return Ok(new
+            {
+                items = result.Items,
+                total = result.Total,
+                page = result.Page,
+                pageSize = result.PageSize,
+                totalPages = result.TotalPages
+            });
         }
         catch (Exception ex)
         {
@@ -58,7 +71,44 @@ public class PrintController : Controller
             {
                 return NotFound(new { message = "打印任务不存在" });
             }
-            return Ok(job);
+
+            // 转换为视图模型
+            var jobView = new
+            {
+                job.JobId,
+                job.FilmSessionId,
+                job.FilmBoxId,
+                job.CallingAE,
+                job.Status,
+                job.ErrorMessage,
+                // Film Session 参数
+                job.NumberOfCopies,
+                job.PrintPriority,
+                job.MediumType,
+                job.FilmDestination,
+                // Film Box 参数
+                job.PrintInColor,
+                job.FilmOrientation,
+                job.FilmSizeID,
+                job.ImageDisplayFormat,
+                job.MagnificationType,
+                job.SmoothingType,
+                job.BorderDensity,
+                job.EmptyImageDensity,
+                job.Trim,
+                // 图像信息
+                job.ImagePath,
+                // 研究信息
+                job.StudyInstanceUID,
+                // 时间戳
+                job.CreateTime,
+                job.UpdateTime,
+                // 添加图像URL
+                ImageUrl = !string.IsNullOrEmpty(job.ImagePath) ? 
+                    $"/api/print/{job.JobId}/image" : null
+            };
+
+            return Ok(jobView);
         }
         catch (Exception ex)
         {
@@ -72,11 +122,25 @@ public class PrintController : Controller
     {
         try
         {
-            var result = await _repository.DeletePrintJobAsync(jobId);
-            if (!result)
+            // 先获取任务信息
+            var job = await _repository.GetPrintJobAsync(jobId);
+            if (job == null)
             {
                 return NotFound(new { message = "打印任务不存在" });
             }
+
+            // 如果有图像文件，删除图像
+            if (!string.IsNullOrEmpty(job.ImagePath))
+            {
+                var fullPath = GetImageFullPath(job);
+                if (System.IO.File.Exists(fullPath))
+                {
+                    System.IO.File.Delete(fullPath);
+                }
+            }
+
+            // 删除数据库记录
+            var result = await _repository.DeletePrintJobAsync(jobId);
             return Ok(new { message = "删除成功" });
         }
         catch (Exception ex)
