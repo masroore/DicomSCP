@@ -80,11 +80,44 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             _session.CallingAE = association.CallingAE;
 
+            // 定义支持的服务类型
+            var supportedSOPClasses = new DicomUID[]
+            {
+                DicomUID.BasicFilmSession,
+                DicomUID.BasicFilmBox,
+                DicomUID.BasicGrayscalePrintManagementMeta,
+                DicomUID.BasicColorPrintManagementMeta,
+                DicomUID.BasicGrayscaleImageBox,
+                DicomUID.BasicColorImageBox,
+                DicomUID.Verification  // C-ECHO
+            };
+
+            var hasValidPresentationContext = false;
+
             foreach (var pc in association.PresentationContexts)
             {
                 DicomLogger.Information("PrintSCP", "处理表示上下文 - Abstract Syntax: {AbstractSyntax}", 
                     pc.AbstractSyntax.Name);
+
+                if (!supportedSOPClasses.Contains(pc.AbstractSyntax))
+                {
+                    DicomLogger.Warning("PrintSCP", "不支持的服务类型: {AbstractSyntax}", 
+                        pc.AbstractSyntax.Name);
+                    pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
+                    continue;
+                }
+
                 pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
+                hasValidPresentationContext = true;
+            }
+
+            if (!hasValidPresentationContext)
+            {
+                DicomLogger.Warning("PrintSCP", "没有有效的表示上下文，拒绝关联请求");
+                return SendAssociationRejectAsync(
+                    DicomRejectResult.Permanent,
+                    DicomRejectSource.ServiceUser,
+                    DicomRejectReason.ApplicationContextNotSupported);
             }
 
             DicomLogger.Information("PrintSCP", "接受关联请求");
@@ -462,7 +495,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             // 添加一个异步操作，比如记录日志
             await Task.Run(() => 
             {
-                DicomLogger.Information("PrintSCP", "N-ACTION 请求处���完成");
+                DicomLogger.Information("PrintSCP", "N-ACTION 请求处完成");
             });
 
             return response;
