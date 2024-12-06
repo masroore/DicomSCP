@@ -17,12 +17,33 @@ public class WorklistController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<WorklistItem>>> GetAll()
+    public async Task<ActionResult<PagedResult<WorklistItem>>> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? patientId = null,
+        [FromQuery] string? patientName = null,
+        [FromQuery] string? accessionNumber = null,
+        [FromQuery] string? modality = null,
+        [FromQuery] string? scheduledDate = null)
     {
         try
         {
-            var items = await _repository.GetAllAsync();
-            foreach (var item in items)
+            // 验证分页参数
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 100) pageSize = 100;  // 限制最大页面大小
+
+            var result = await _repository.GetPagedAsync(
+                page,
+                pageSize,
+                patientId,
+                patientName,
+                accessionNumber,
+                modality,
+                scheduledDate);
+
+            // 计算年龄
+            foreach (var item in result.Items)
             {
                 if (!string.IsNullOrEmpty(item.PatientBirthDate))
                 {
@@ -31,7 +52,8 @@ public class WorklistController : ControllerBase
                     item.Age = today.Year - birthYear;
                 }
             }
-            return Ok(items);
+
+            return Ok(result);
         }
         catch (Exception ex)
         {

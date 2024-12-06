@@ -7,7 +7,7 @@ let viewerModal;
 // 分页参数
 let currentPage = 1;
 const pageSize = 10;
-let allWorklistItems = [];  // 存储所有数据
+
 
 // QR客户端相关变量
 let qrCurrentPage = 1;
@@ -21,12 +21,107 @@ const imagesPageSize = 10;
 
 // 页面加载完成后执行
 $(document).ready(function() {
+    // 初始化各种模态框和其他组件
+    initializeComponents();
+    
+    // 绑定Worklist相关事件
+    bindWorklistEvents();
+    
+    // 绑定影像管理相关事件
+    bindImagesEvents();
+    
+    // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
+    const currentTab = window.location.hash.slice(1) || 'worklist';
+    switchPage(currentTab);
+    
+    // 导航链接点击事件
+    $('.nav-link[data-page]').click(function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        window.location.hash = page; // 更新URL hash
+        switchPage(page);
+    });
+
+    // 加载初始数据
+    loadWorklistData();
+    loadImages();
+    
+    // 获取当前登录用户名
+    getCurrentUsername();
+});
+
+// 初始化组件
+function initializeComponents() {
     // 初始化模态框
     const modalElement = document.getElementById('worklistModal');
     if (modalElement) {
         worklistModal = new bootstrap.Modal(modalElement);
     }
+
+    // 初始化修改密码模态框
+    const changePasswordModalElement = document.getElementById('changePasswordModal');
+    if (changePasswordModalElement) {
+        changePasswordModal = new bootstrap.Modal(changePasswordModalElement);
+    }
     
+    // 初始化查看器模态框
+    const viewerModalElement = document.getElementById('viewerModal');
+    if (viewerModalElement) {
+        viewerModal = new bootstrap.Modal(viewerModalElement);
+        
+        // 监听模态框关闭事件，清理资源
+        viewerModalElement.addEventListener('hidden.bs.modal', function () {
+            const viewerFrame = document.getElementById('viewerFrame');
+            if (viewerFrame) {
+                viewerFrame.src = 'about:blank';
+            }
+        });
+    }
+}
+
+// 绑定Worklist相关事件
+function bindWorklistEvents() {
+    // 分页按钮
+    const prevPageEl = document.getElementById('worklist-prevPage');
+    const nextPageEl = document.getElementById('worklist-nextPage');
+
+    if (prevPageEl) {
+        prevPageEl.onclick = () => {
+            if (currentPage > 1) {
+                currentPage--;
+                loadWorklistData();
+            }
+        };
+    }
+
+    if (nextPageEl) {
+        nextPageEl.onclick = () => {
+            currentPage++;
+            loadWorklistData();
+        };
+    }
+
+    // 搜索表单事件
+    const searchForm = document.getElementById('worklistSearchForm');
+    if (searchForm) {
+        searchForm.onsubmit = (e) => {
+            e.preventDefault();
+            currentPage = 1;
+            loadWorklistData();
+        };
+
+        // 重置按钮事件
+        const resetButton = searchForm.querySelector('button[type="reset"]');
+        if (resetButton) {
+            resetButton.onclick = (e) => {
+                e.preventDefault();
+                searchForm.reset();
+                currentPage = 1;
+                loadWorklistData();
+            };
+        }
+    }
+}
     // 初始化修改密码模态框
     const changePasswordModalElement = document.getElementById('changePasswordModal');
     if (changePasswordModalElement) {
@@ -42,8 +137,8 @@ $(document).ready(function() {
     });
     
     // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
-    const currentPage = window.location.hash.slice(1) || 'worklist';
-    switchPage(currentPage);
+    const currentTab = window.location.hash.slice(1) || 'worklist';
+    switchPage(currentTab);
     
     // 导航链接点击事件
     $('.nav-link[data-page]').click(function(e) {
@@ -55,11 +150,84 @@ $(document).ready(function() {
 
     // 加载初始数据
     loadWorklistData();
-    loadImages(1);
+    loadImages();
     
     // 获取当前登录用户名
     getCurrentUsername();
-});
+
+// 绑定影像管理相关事件
+function bindImagesEvents() {
+    try {
+        // 分页事件
+        const prevPageEl = document.getElementById('images-prevPage');
+        const nextPageEl = document.getElementById('images-nextPage');
+
+        if (prevPageEl) {
+            prevPageEl.onclick = () => {
+                if (imagesCurrentPage > 1) {
+                    imagesCurrentPage--;
+                    loadImages(imagesCurrentPage);
+                }
+            };
+        }
+
+        if (nextPageEl) {
+            nextPageEl.onclick = () => {
+                imagesCurrentPage++;
+                loadImages(imagesCurrentPage);
+            };
+        }
+
+        // 搜索表单事件
+        const searchForm = document.getElementById('imagesSearchForm');
+        if (searchForm) {
+            // 搜索提交事件
+            searchForm.onsubmit = (e) => {
+                e.preventDefault();
+                imagesCurrentPage = 1;
+                loadImages(1);
+            };
+
+            // 重置按钮事件
+            const resetButton = searchForm.querySelector('button[type="reset"]');
+            if (resetButton) {
+                resetButton.onclick = (e) => {
+                    e.preventDefault();
+                    try {
+                        // 先重置表单
+                        searchForm.reset();
+                        
+                        // 再手动清空所有搜索条件（以确保select等特殊控件也被重置）
+                        const inputs = {
+                            'images-searchPatientId': '',
+                            'images-searchPatientName': '',
+                            'images-searchAccessionNumber': '',
+                            'images-searchStudyDate': '',
+                            'images-searchModality': ''
+                        };
+                        
+                        Object.entries(inputs).forEach(([id, value]) => {
+                            const element = document.getElementById(id);
+                            if (element) {
+                                element.value = value;
+                            }
+                        });
+                        
+                        // 重置页码并重新加载数据
+                        imagesCurrentPage = 1;
+                        loadImages(1);
+                    } catch (error) {
+                        console.error('重置表单失败:', error);
+                        showToast('error', '重置失败', error.message);
+                    }
+                };
+            }
+        }
+    } catch (error) {
+        console.error('绑定影像管理事件失败:', error);
+        showToast('error', '初始化失败', '绑定影像管理事件失败');
+    }
+}
 
 // 切换页面函数
 function switchPage(page) {
@@ -102,7 +270,27 @@ function switchPage(page) {
 // 加载 Worklist 数据
 async function loadWorklistData() {
     try {
-        const response = await fetch('/api/worklist');
+        // 获取搜索条件
+        const patientId = document.getElementById('worklist-searchPatientId')?.value || '';
+        const patientName = document.getElementById('worklist-searchPatientName')?.value || '';
+        const accessionNumber = document.getElementById('worklist-searchAccessionNumber')?.value || '';
+        const modality = document.getElementById('worklist-searchModality')?.value || '';
+        const scheduledDate = document.getElementById('worklist-searchScheduledDate')?.value || '';
+        
+
+        // 构建查询参数
+        const params = new URLSearchParams({
+            page: currentPage,
+            pageSize: pageSize
+        });
+        
+        if (patientId) params.append('patientId', patientId);
+        if (patientName) params.append('patientName', patientName);
+        if (accessionNumber) params.append('accessionNumber', accessionNumber);
+        if (modality) params.append('modality', modality);
+        if (scheduledDate) params.append('scheduledDate', scheduledDate);
+
+        const response = await fetch(`/api/worklist?${params}`);
         if (response.status === 401) {
             window.location.href = '/login.html';
             return;
@@ -111,33 +299,24 @@ async function loadWorklistData() {
             throw new Error('获取数据失败');
         }
         
-        const data = await response.json();
-        if (!data) return;  // 如果是401跳转，data会是undefined
+        const result = await response.json();
+        if (!result) return;
 
-        // 保存所有数据
-        allWorklistItems = data;
+        // 更新表格数据
+        displayWorklistData(result.items);
         
         // 更新分页信息
-        const total = allWorklistItems.length;
-        const totalPages = Math.ceil(total / pageSize);
-        updatePagination(total);
-        
-        // 显示当前页数据
-        displayWorklistPage(currentPage);
+        updatePagination(result.totalCount, result.page, result.totalPages);
     } catch (error) {
         console.error('获取Worklist数据失败:', error);
         alert('获取数据失败，请检查网络连接');
     }
 }
 
-// 显示指定页的数据
-function displayWorklistPage(page) {
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    const pageItems = allWorklistItems.slice(start, end);
-    
+// 显示数据
+function displayWorklistData(items) {
     const tbody = document.getElementById('worklist-table-body');
-    tbody.innerHTML = pageItems.map(item => `
+    tbody.innerHTML = items.map(item => `
         <tr>
             <td title="${item.patientId}">${item.patientId}</td>
             <td title="${item.patientName}">${item.patientName}</td>
@@ -148,54 +327,49 @@ function displayWorklistPage(page) {
             <td>${formatDateTime(item.scheduledDateTime)}</td>
             <td><span class="status-${item.status.toLowerCase()}">${formatStatus(item.status)}</span></td>
             <td>
-                <button class="btn btn-sm btn-primary" onclick="editWorklist('${item.worklistId}')">编辑</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteWorklist('${item.worklistId}')">删除</button>
+<button class="btn btn-sm btn-primary" onclick="editWorklist('${item.worklistId}')">
+    <i class="bi bi-pencil me-1"></i>编辑
+</button>
+<button class="btn btn-sm btn-danger" onclick="deleteWorklist('${item.worklistId}')">
+    <i class="bi bi-trash me-1"></i>删除
+</button>
             </td>
         </tr>
     `).join('');
 }
+
 // 更新分页信息
-function updatePagination(total) {
-    const totalPages = Math.ceil(total / pageSize);
-    const start = (currentPage - 1) * pageSize + 1;
-    const end = Math.min(currentPage * pageSize, total);
+function updatePagination(totalCount, currentPage, totalPages) {
+    const currentPageEl = document.getElementById('worklist-currentPage');
+    const currentRangeEl = document.getElementById('worklist-currentRange');
+    const totalCountEl = document.getElementById('worklist-totalCount');
+    const prevPageEl = document.getElementById('worklist-prevPage');
+    const nextPageEl = document.getElementById('worklist-nextPage');
+
+    if (currentPageEl) currentPageEl.textContent = currentPage;
     
-    document.getElementById('worklist-currentRange').textContent = `${start}-${end}`;
-    document.getElementById('worklist-totalCount').textContent = total;
-    document.getElementById('worklist-currentPage').textContent = currentPage;
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(currentPage * pageSize, totalCount);
+    if (currentRangeEl) {
+        currentRangeEl.textContent = totalCount > 0 ? `${start}-${end}` : '0-0';
+    }
+    if (totalCountEl) totalCountEl.textContent = totalCount;
     
     // 更新按钮状态
-    document.getElementById('worklist-prevPage').disabled = currentPage === 1;
-    document.getElementById('worklist-nextPage').disabled = currentPage === totalPages;
+    if (prevPageEl) prevPageEl.disabled = currentPage <= 1;
+    if (nextPageEl) nextPageEl.disabled = currentPage >= totalPages;
 }
 
-// 添加分页事件监听
-document.getElementById('worklist-prevPage').onclick = () => {
-    if (currentPage > 1) {
-        currentPage--;
-        displayWorklistPage(currentPage);
-        updatePagination(allWorklistItems.length);
-    }
-};
-
-document.getElementById('worklist-nextPage').onclick = () => {
-    const totalPages = Math.ceil(allWorklistItems.length / pageSize);
-    if (currentPage < totalPages) {
-        currentPage++;
-        displayWorklistPage(currentPage);
-        updatePagination(allWorklistItems.length);
-    }
-};
-
+// 分页按钮事件
 
 async function loadImages(page = 1) {
     try {
-        const patientId = document.getElementById('searchPatientId')?.value || '';
-        const patientName = document.getElementById('searchPatientName')?.value || '';
-        const accessionNumber = document.getElementById('searchAccessionNumber')?.value || '';
-        const modality = document.getElementById('searchModality')?.value || '';
-        const studyDate = document.getElementById('searchStudyDate')?.value || '';
-
+        const patientId = document.getElementById('images-searchPatientId')?.value || '';
+        const patientName = document.getElementById('images-searchPatientName')?.value || '';
+        const accessionNumber = document.getElementById('images-searchAccessionNumber')?.value || '';
+        const modality = document.getElementById('images-searchModality')?.value || '';
+        const studyDate = document.getElementById('images-searchStudyDate')?.value || '';
+        
         const params = new URLSearchParams({
             page,
             pageSize: imagesPageSize,
@@ -236,8 +410,8 @@ function displayImages(items) {
             <td>${item.studyDescription || ''}</td>
             <td>${item.numberOfInstances || 0}</td>
             <td>
-                <button class="btn btn-sm btn-danger" onclick="deleteStudy('${item.studyInstanceUid}', event)">
-                    删除
+               <button class="btn btn-sm btn-danger" onclick="deleteStudy('${item.studyInstanceUid}', event)" title="删除">
+              <i class="bi bi-trash me-1"></i>删除
                 </button>
             </td>
         </tr>
@@ -292,10 +466,11 @@ document.getElementById('imagesSearchForm').querySelector('button[type="reset"]'
     document.getElementById('imagesSearchForm').reset();
     
     // 清空所有搜索条件
-    document.getElementById('searchPatientId').value = '';
-    document.getElementById('searchPatientName').value = '';
-    document.getElementById('searchAccessionNumber').value = '';
-    document.getElementById('searchDate').value = '';
+    document.getElementById('images-searchPatientId').value = '';
+    document.getElementById('images-searchPatientName').value = '';
+    document.getElementById('images-searchAccessionNumber').value = '';
+    document.getElementById('images-searchStudyDate').value = '';
+    document.getElementById('images-searchModality').value = '';
     
     // 重置页码
     imagesCurrentPage = 1;
@@ -359,8 +534,8 @@ function toggleSeriesInfo(row) {
                         <td>${series.numberOfInstances}</td>
                         <td>
                             <button class="btn btn-primary btn-sm py-0" onclick="previewSeries('${studyUid}', '${series.seriesInstanceUid}')">
-                                预览
-                            </button>
+    <i class="bi bi-eye me-1"></i>预览
+</button>
                         </td>
                     </tr>
                 `);
@@ -856,7 +1031,9 @@ function displayQRPage(page) {
             <td>${item.numberOfSeries || 0}</td>
             <td>${item.numberOfInstances || 0}</td>
             <td>
-                <button class="btn btn-sm btn-success" onclick="moveQRStudy('${item.studyInstanceUid}', event)">CMOVE</button>
+                <button class="btn btn-sm btn-success" onclick="moveQRStudy('${item.studyInstanceUid}', event)">
+    <i class="bi bi-cloud-download me-1"></i>cmove
+</button>
             </td>
         </tr>
     `).join('');

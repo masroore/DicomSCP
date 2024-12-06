@@ -93,7 +93,7 @@ class LogManager {
                     <td>
                         ${!isToday ? `
                             <button class="btn btn-danger btn-sm" onclick="logManager.deleteLogFile('${file.name}')">
-                                删除
+                                <i class="bi bi-trash"></i> 删除
                             </button>
                         ` : ''}
                     </td>
