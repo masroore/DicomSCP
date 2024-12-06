@@ -145,29 +145,36 @@ public class DicomRepository : BaseRepository, IDisposable
                 JobId TEXT PRIMARY KEY,
                 FilmSessionId TEXT,
                 FilmBoxId TEXT,
-                ImageBoxId TEXT,
                 CallingAE TEXT,
                 Status TEXT,
-                ImagePath TEXT,
-                PrinterName TEXT,
                 ErrorMessage TEXT,
-                -- 患者信息
-                PatientId TEXT,
-                PatientName TEXT,
-                AccessionNumber TEXT,
-                -- 打印参数
-                FilmSize TEXT,
-                FilmOrientation TEXT,
-                FilmLayout TEXT,
-                MagnificationType TEXT,
-                BorderDensity TEXT,
-                EmptyImageDensity TEXT,
-                MinDensity TEXT,
-                MaxDensity TEXT,
-                TrimValue TEXT,
-                ConfigurationInfo TEXT,
-                CreateTime DATETIME,
-                UpdateTime DATETIME
+
+                -- Film Session 参数
+                NumberOfCopies INTEGER DEFAULT 1,
+                PrintPriority TEXT DEFAULT 'LOW',
+                MediumType TEXT DEFAULT 'BLUE FILM',
+                FilmDestination TEXT DEFAULT 'MAGAZINE',
+
+                -- Film Box 参数
+                PrintInColor INTEGER DEFAULT 0,
+                FilmOrientation TEXT DEFAULT 'PORTRAIT',
+                FilmSizeID TEXT DEFAULT '8INX10IN',
+                ImageDisplayFormat TEXT DEFAULT 'STANDARD\1,1',
+                MagnificationType TEXT DEFAULT 'REPLICATE',
+                SmoothingType TEXT DEFAULT 'MEDIUM',
+                BorderDensity TEXT DEFAULT 'BLACK',
+                EmptyImageDensity TEXT DEFAULT 'BLACK',
+                Trim TEXT DEFAULT 'NO',
+
+                -- 图像信息
+                ImagePath TEXT,
+
+                -- 研究信息
+                StudyInstanceUID TEXT,
+
+                -- 时间戳
+                CreateTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UpdateTime DATETIME DEFAULT CURRENT_TIMESTAMP
             )";
     }
 
@@ -325,35 +332,7 @@ public class DicomRepository : BaseRepository, IDisposable
             await connection.ExecuteAsync(SqlQueries.InitializeAdminUser, transaction: transaction);
             
             // 创建打印任务表
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS PrintJobs (
-                    JobId TEXT PRIMARY KEY,
-                    FilmSessionId TEXT,
-                    FilmBoxId TEXT,
-                    ImageBoxId TEXT,
-                    CallingAE TEXT,
-                    Status TEXT,
-                    ImagePath TEXT,
-                    PrinterName TEXT,
-                    ErrorMessage TEXT,
-                    -- 患者信息
-                    PatientId TEXT,
-                    PatientName TEXT,
-                    AccessionNumber TEXT,
-                    -- 打印参数
-                    FilmSize TEXT,
-                    FilmOrientation TEXT,
-                    FilmLayout TEXT,
-                    MagnificationType TEXT,
-                    BorderDensity TEXT,
-                    EmptyImageDensity TEXT,
-                    MinDensity TEXT,
-                    MaxDensity TEXT,
-                    TrimValue TEXT,
-                    ConfigurationInfo TEXT,
-                    CreateTime DATETIME,
-                    UpdateTime DATETIME
-                )", transaction: transaction);
+            await connection.ExecuteAsync(SqlQueries.CreatePrintJobsTable, transaction: transaction);
 
             await transaction.CommitAsync();
             _initialized = true;
@@ -365,7 +344,7 @@ public class DicomRepository : BaseRepository, IDisposable
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            LogError(ex, "初始化数据库表失败");
+            LogError(ex, "始化数据库表失败");
             throw;
         }
     }
@@ -467,7 +446,7 @@ public class DicomRepository : BaseRepository, IDisposable
     {
         _dataQueue.Enqueue((dataset, filePath));
         
-        // 当队列达到批处理小的80%时，主动触发处理
+        // 当队列达到批处理的80%时，主动触发处理
         if (_dataQueue.Count >= _batchSize * 0.8)
         {
             await ProcessQueueAsync();
@@ -952,35 +931,58 @@ public class DicomRepository : BaseRepository, IDisposable
     {
         try
         {
-            // 确保时间是地时间
-            if (job.CreateTime == default)
-            {
-                job.CreateTime = DateTime.Now;
-            }
-            if (job.UpdateTime == default)
-            {
-                job.UpdateTime = DateTime.Now;
-            }
-
             using var connection = CreateConnection();
+            var parameters = new DynamicParameters();
+            
+            // 基本信息
+            parameters.Add("@JobId", job.JobId);
+            parameters.Add("@FilmSessionId", job.FilmSessionId);
+            parameters.Add("@FilmBoxId", job.FilmBoxId);
+            parameters.Add("@CallingAE", job.CallingAE);
+            parameters.Add("@Status", job.Status.ToString());
+            parameters.Add("@ErrorMessage", job.ErrorMessage);
+
+            // Film Session 参数
+            parameters.Add("@NumberOfCopies", job.NumberOfCopies);
+            parameters.Add("@PrintPriority", job.PrintPriority);
+            parameters.Add("@MediumType", job.MediumType);
+            parameters.Add("@FilmDestination", job.FilmDestination);
+
+            // Film Box 参数
+            parameters.Add("@PrintInColor", job.PrintInColor ? 1 : 0);  // 布尔值转换为整数
+            parameters.Add("@FilmOrientation", job.FilmOrientation);
+            parameters.Add("@FilmSizeID", job.FilmSizeID);
+            parameters.Add("@ImageDisplayFormat", job.ImageDisplayFormat);
+            parameters.Add("@MagnificationType", job.MagnificationType);
+            parameters.Add("@SmoothingType", job.SmoothingType);
+            parameters.Add("@BorderDensity", job.BorderDensity);
+            parameters.Add("@EmptyImageDensity", job.EmptyImageDensity);
+            parameters.Add("@Trim", job.Trim);
+
+            // 其他参数
+            parameters.Add("@ImagePath", job.ImagePath);
+            parameters.Add("@StudyInstanceUID", job.StudyInstanceUID);
+            parameters.Add("@CreateTime", job.CreateTime);
+            parameters.Add("@UpdateTime", job.UpdateTime);
+
             var sql = @"
                 INSERT INTO PrintJobs (
-                    JobId, FilmSessionId, FilmBoxId, CallingAE,
-                    Status, ImagePath, PatientId, PatientName, 
-                    AccessionNumber, FilmSize, FilmOrientation, FilmLayout,
-                    MagnificationType, BorderDensity, EmptyImageDensity,
-                    MinDensity, MaxDensity, TrimValue, ConfigurationInfo,
+                    JobId, FilmSessionId, FilmBoxId, CallingAE, Status, ErrorMessage,
+                    NumberOfCopies, PrintPriority, MediumType, FilmDestination,
+                    PrintInColor, FilmOrientation, FilmSizeID, ImageDisplayFormat,
+                    MagnificationType, SmoothingType, BorderDensity, EmptyImageDensity,
+                    Trim, ImagePath, StudyInstanceUID,
                     CreateTime, UpdateTime
                 ) VALUES (
-                    @JobId, @FilmSessionId, @FilmBoxId, @CallingAE,
-                    @Status, @ImagePath, @PatientId, @PatientName,
-                    @AccessionNumber, @FilmSize, @FilmOrientation, @FilmLayout,
-                    @MagnificationType, @BorderDensity, @EmptyImageDensity,
-                    @MinDensity, @MaxDensity, @TrimValue, @ConfigurationInfo,
+                    @JobId, @FilmSessionId, @FilmBoxId, @CallingAE, @Status, @ErrorMessage,
+                    @NumberOfCopies, @PrintPriority, @MediumType, @FilmDestination,
+                    @PrintInColor, @FilmOrientation, @FilmSizeID, @ImageDisplayFormat,
+                    @MagnificationType, @SmoothingType, @BorderDensity, @EmptyImageDensity,
+                    @Trim, @ImagePath, @StudyInstanceUID,
                     @CreateTime, @UpdateTime
                 )";
 
-            var result = await connection.ExecuteAsync(sql, job);
+            var result = await connection.ExecuteAsync(sql, parameters);
             LogDebug("添加打印任务 - JobId: {JobId}, 结果: {Result}", job.JobId, result > 0);
             return result > 0;
         }
@@ -992,7 +994,7 @@ public class DicomRepository : BaseRepository, IDisposable
     }
 
     /// <summary>
-    /// 更新打印任务状态和图像路径
+    /// 更打印任务状态和图像路径
     /// </summary>
     public async Task<bool> UpdatePrintJobStatusAsync(string jobId, string status, string? imagePath = null)
     {
@@ -1003,7 +1005,7 @@ public class DicomRepository : BaseRepository, IDisposable
             var parameters = new DynamicParameters();
             parameters.Add("@JobId", jobId);
             parameters.Add("@Status", status);
-            parameters.Add("@UpdateTime", DateTime.Now.ToLocalTime());
+            parameters.Add("@UpdateTime", DateTime.Now);
 
             if (imagePath != null)
             {
@@ -1024,115 +1026,47 @@ public class DicomRepository : BaseRepository, IDisposable
     }
 
     /// <summary>
-    /// 更新打印任务信息
+    /// 更打印任务信息
     /// </summary>
-    public async Task<bool> UpdatePrintJobAsync(
-        string filmSessionId, 
-        string? filmBoxId = null, 
-        Dictionary<string, string>? printParams = null,
-        Dictionary<string, string>? patientInfo = null)
+    public async Task<bool> UpdatePrintJobAsync(string filmSessionId, string? filmBoxId = null, Dictionary<string, object>? parameters = null)
     {
+        using var connection = CreateConnection();
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+        
         try
         {
-            using var connection = CreateConnection();
             var updates = new List<string>();
-            var parameters = new DynamicParameters();
-            parameters.Add("@FilmSessionId", filmSessionId);
-            parameters.Add("@UpdateTime", DateTime.Now.ToLocalTime());
+            var dbParams = new DynamicParameters();
+            dbParams.Add("@FilmSessionId", filmSessionId);
+            dbParams.Add("@UpdateTime", DateTime.Now);
 
             if (filmBoxId != null)
             {
                 updates.Add("FilmBoxId = @FilmBoxId");
-                parameters.Add("@FilmBoxId", filmBoxId);
+                dbParams.Add("@FilmBoxId", filmBoxId);
             }
 
-            if (printParams != null)
+            if (parameters != null)
             {
-                if (printParams.TryGetValue("FilmSize", out var filmSize))
+                foreach (var param in parameters)
                 {
-                    updates.Add("FilmSize = @FilmSize");
-                    parameters.Add("@FilmSize", filmSize);
-                }
-                if (printParams.TryGetValue("FilmOrientation", out var filmOrientation))
-                {
-                    updates.Add("FilmOrientation = @FilmOrientation");
-                    parameters.Add("@FilmOrientation", filmOrientation);
-                }
-                if (printParams.TryGetValue("FilmLayout", out var filmLayout))
-                {
-                    updates.Add("FilmLayout = @FilmLayout");
-                    parameters.Add("@FilmLayout", filmLayout);
-                }
-                if (printParams.TryGetValue("MagnificationType", out var magnificationType))
-                {
-                    updates.Add("MagnificationType = @MagnificationType");
-                    parameters.Add("@MagnificationType", magnificationType);
-                }
-                if (printParams.TryGetValue("BorderDensity", out var borderDensity))
-                {
-                    updates.Add("BorderDensity = @BorderDensity");
-                    parameters.Add("@BorderDensity", borderDensity);
-                }
-                if (printParams.TryGetValue("EmptyImageDensity", out var emptyImageDensity))
-                {
-                    updates.Add("EmptyImageDensity = @EmptyImageDensity");
-                    parameters.Add("@EmptyImageDensity", emptyImageDensity);
-                }
-                if (printParams.TryGetValue("MinDensity", out var minDensity))
-                {
-                    updates.Add("MinDensity = @MinDensity");
-                    parameters.Add("@MinDensity", minDensity);
-                }
-                if (printParams.TryGetValue("MaxDensity", out var maxDensity))
-                {
-                    updates.Add("MaxDensity = @MaxDensity");
-                    parameters.Add("@MaxDensity", maxDensity);
-                }
-                if (printParams.TryGetValue("TrimValue", out var trimValue))
-                {
-                    updates.Add("TrimValue = @TrimValue");
-                    parameters.Add("@TrimValue", trimValue);
-                }
-                if (printParams.TryGetValue("ConfigurationInfo", out var configurationInfo))
-                {
-                    updates.Add("ConfigurationInfo = @ConfigurationInfo");
-                    parameters.Add("@ConfigurationInfo", configurationInfo);
-                }
-            }
-
-            if (patientInfo != null)
-            {
-                if (patientInfo.TryGetValue("PatientId", out var patientId))
-                {
-                    updates.Add("PatientId = @PatientId");
-                    parameters.Add("@PatientId", patientId);
-                }
-                if (patientInfo.TryGetValue("PatientName", out var patientName))
-                {
-                    updates.Add("PatientName = @PatientName");
-                    parameters.Add("@PatientName", patientName);
-                }
-                if (patientInfo.TryGetValue("AccessionNumber", out var accessionNumber))
-                {
-                    updates.Add("AccessionNumber = @AccessionNumber");
-                    parameters.Add("@AccessionNumber", accessionNumber);
+                    updates.Add($"{param.Key} = @{param.Key}");
+                    dbParams.Add($"@{param.Key}", param.Value);
+                    LogDebug("更新参数 - {ParamName}: {ParamValue}", param.Key, param.Value);
                 }
             }
 
             updates.Add("UpdateTime = @UpdateTime");
 
-            if (updates.Count == 0)
-            {
-                return true;
-            }
-
             var sql = $"UPDATE PrintJobs SET {string.Join(", ", updates)} WHERE FilmSessionId = @FilmSessionId";
-            var result = await connection.ExecuteAsync(sql, parameters);
-            LogDebug("更新打印任务 - FilmSessionId: {FilmSessionId}, 结果: {Result}", filmSessionId, result > 0);
+            var result = await connection.ExecuteAsync(sql, dbParams, transaction);
+            await transaction.CommitAsync();
             return result > 0;
         }
         catch (Exception ex)
         {
+            await transaction.RollbackAsync();
             LogError(ex, "更新打印任务失败 - FilmSessionId: {FilmSessionId}", filmSessionId);
             throw;
         }
@@ -1145,23 +1079,20 @@ public class DicomRepository : BaseRepository, IDisposable
     {
         try
         {
-            if (string.IsNullOrEmpty(filmBoxId))
-                return null;
-
             using var connection = CreateConnection();
             var sql = @"
-                SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                       Status, ImagePath, PrinterName, ErrorMessage,
-                       PatientId, PatientName, AccessionNumber,
-                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-                FROM PrintJobs
+                SELECT 
+                    JobId, FilmSessionId, FilmBoxId, CallingAE, Status, ErrorMessage,
+                    NumberOfCopies, PrintPriority, MediumType, FilmDestination,
+                    CASE WHEN PrintInColor = 1 THEN true ELSE false END as PrintInColor,
+                    FilmOrientation, FilmSizeID, ImageDisplayFormat,
+                    MagnificationType, SmoothingType, BorderDensity, EmptyImageDensity,
+                    Trim, ImagePath, StudyInstanceUID,
+                    CreateTime, UpdateTime
+                FROM PrintJobs 
                 WHERE FilmBoxId = @FilmBoxId";
 
-            var job = await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { FilmBoxId = filmBoxId });
-            LogDebug("获取打印任务 - FilmBoxId: {FilmBoxId}, 找到: {Found}", filmBoxId, job != null);
-            return job;
+            return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { FilmBoxId = filmBoxId });
         }
         catch (Exception ex)
         {
@@ -1178,20 +1109,8 @@ public class DicomRepository : BaseRepository, IDisposable
         try
         {
             using var connection = CreateConnection();
-            var sql = @"
-                SELECT JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                       Status, ImagePath, PrinterName, ErrorMessage,
-                       PatientId, PatientName, AccessionNumber,
-                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-                FROM PrintJobs
-                WHERE Status = @Status
-                ORDER BY CreateTime DESC";
-
-            var jobs = await connection.QueryAsync<PrintJob>(sql, new { Status = status });
-            LogDebug("获取打印任务列表 - Status: {Status}, 数量: {Count}", status, jobs.Count());
-            return jobs;
+            var sql = "SELECT * FROM PrintJobs WHERE Status = @Status ORDER BY CreateTime DESC";
+            return await connection.QueryAsync<PrintJob>(sql, new { Status = status });
         }
         catch (Exception ex)
         {
@@ -1208,20 +1127,8 @@ public class DicomRepository : BaseRepository, IDisposable
         try
         {
             using var connection = CreateConnection();
-            var sql = @"
-                SELECT TOP 1 JobId, FilmSessionId, FilmBoxId, ImageBoxId, CallingAE,
-                       Status, ImagePath, PrinterName, ErrorMessage,
-                       PatientId, PatientName, AccessionNumber,
-                       FilmSize, FilmOrientation, FilmLayout, MagnificationType,
-                       BorderDensity, EmptyImageDensity, MinDensity, MaxDensity,
-                       TrimValue, ConfigurationInfo, CreateTime, UpdateTime
-                FROM PrintJobs
-                WHERE FilmBoxId IS NOT NULL
-                ORDER BY CreateTime DESC";
-
-            var job = await connection.QueryFirstOrDefaultAsync<PrintJob>(sql);
-            LogDebug("获取最近打印任务 - 找到: {Found}", job != null);
-            return job;
+            var sql = "SELECT * FROM PrintJobs WHERE FilmBoxId IS NOT NULL ORDER BY CreateTime DESC LIMIT 1";
+            return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql);
         }
         catch (Exception ex)
         {
@@ -1271,7 +1178,7 @@ public class DicomRepository : BaseRepository, IDisposable
             using var connection = CreateConnection();
             var sql = "DELETE FROM PrintJobs WHERE JobId = @JobId";
             var rowsAffected = await connection.ExecuteAsync(sql, new { JobId = jobId });
-            LogDebug("删除打印任务 - JobId: {JobId}, 成功: {Success}", jobId, rowsAffected > 0);
+            LogDebug("删除印任务 - JobId: {JobId}, 成功: {Success}", jobId, rowsAffected > 0);
             return rowsAffected > 0;
         }
         catch (Exception ex)
@@ -1322,7 +1229,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 GROUP BY p.PatientId, p.PatientName, p.PatientBirthDate, p.PatientSex, p.CreateTime
                 ORDER BY p.PatientName";
 
-            LogDebug("执行Patient查询 - SQL: {Sql}, PatientId: {PatientId}, PatientName: {PatientName}", 
+            LogDebug("执Patient查询 - SQL: {Sql}, PatientId: {PatientId}, PatientName: {PatientName}", 
                 sql, patientId, patientName);
 
             var patients = connection.Query<Patient>(sql, parameters).ToList();
@@ -1365,7 +1272,7 @@ public class DicomRepository : BaseRepository, IDisposable
         }
     }
 
-    // 保留原有方法，供 QRSCP 使用
+    // 保原有法，供 QRSCP 使用
     public List<Study> GetStudies(
         string patientId, 
         string patientName, 
