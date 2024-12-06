@@ -283,31 +283,25 @@
         <div id="content-area">
             <!-- Worklist管理页面 -->
             <div id="worklist-page">
-                <div class="d-flex justify-content-start mb-3">
-                    <button class="btn btn-primary" onclick="openAddWorklistModal()">
-                        添加预约
-                    </button>
-                </div>
-
                 <!-- 添加搜索表单 -->
                 <div class="card mb-3">
-                    <div class="card-body">
-                        <form id="worklistSearchForm" class="row g-3">
-                            <div class="col-md-2">
-                                <label class="form-label">患者ID</label>
-                                <input type="text" class="form-control" id="worklist-searchPatientId" placeholder="输入患者ID">
+                    <div class="card-body p-2">
+                        <form id="worklistSearchForm" class="d-flex align-items-center flex-wrap">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">患者ID</span>
+                                <input type="text" class="form-control" style="width: 180px;" id="worklist-searchPatientId" placeholder="输入ID">
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">患者姓名</label>
-                                <input type="text" class="form-control" id="worklist-searchPatientName" placeholder="输入患者姓名">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">姓名</span>
+                                <input type="text" class="form-control" style="width: 180px;" id="worklist-searchPatientName" placeholder="输入姓名">
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">检查号</label>
-                                <input type="text" class="form-control" id="worklist-searchAccessionNumber" placeholder="输入检查号">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">检查号</span>
+                                <input type="text" class="form-control" style="width: 180px;" id="worklist-searchAccessionNumber" placeholder="输入检查号">
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">检查类型</label>
-                                <select class="form-select" id="worklist-searchModality">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">类型</span>
+                                <select class="form-select" style="width: 180px;" id="worklist-searchModality">
                                     <option value="">全部</option>
                                     <option value="CT">CT</option>
                                     <option value="MR">MR</option>
@@ -315,16 +309,22 @@
                                     <option value="US">US</option>
                                 </select>
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">预约时间</label>
-                                <input type="date" class="form-control" id="worklist-searchScheduledDate">
+                            <div class="d-flex align-items-center me-3">
+                                <span class="text-nowrap me-2">时间</span>
+                                <input type="date" class="form-control" style="width: 180px;" id="worklist-searchScheduledDate">
                             </div>
-                            <div class="col-md-2 d-flex align-items-end">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-search me-1"></i>查询
+                            <div class="d-flex align-items-center">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="bi bi-search"></i>
+                                    查询
                                 </button>
-                                <button type="reset" class="btn btn-secondary ms-2">
-                                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                                <button type="reset" class="btn btn-secondary me-2">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                    重置
+                                </button>
+                                <button type="button" class="btn btn-success" onclick="openAddWorklistModal()">
+                                    <i class="bi bi-calendar-plus"></i>
+                                    预约
                                 </button>
                             </div>
                         </form>
