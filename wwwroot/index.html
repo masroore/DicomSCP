@@ -382,23 +382,23 @@
             <div id="images-page" style="display: none;">
                 <!-- 添加查询表单 -->
                 <div class="card mb-3">
-                    <div class="card-body">
-                        <form id="imagesSearchForm" class="row g-3">
-                            <div class="col-md-2">
-                                <label class="form-label">患者ID</label>
-                                <input type="text" class="form-control" id="images-searchPatientId">
+                    <div class="card-body p-2">
+                        <form id="imagesSearchForm" class="d-flex align-items-center flex-wrap">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">患者ID</span>
+                                <input type="text" class="form-control" style="width: 190px;" id="images-searchPatientId" placeholder="输入ID">
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">姓名</label>
-                                <input type="text" class="form-control" id="images-searchPatientName">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">姓名</span>
+                                <input type="text" class="form-control" style="width: 190px;" id="images-searchPatientName" placeholder="输入姓名">
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">检查号</label>
-                                <input type="text" class="form-control" id="images-searchAccessionNumber">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">检查号</span>
+                                <input type="text" class="form-control" style="width: 190px;" id="images-searchAccessionNumber" placeholder="输入检查号">
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">检查类型</label>
-                                <select class="form-select" id="images-searchModality">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">类型</span>
+                                <select class="form-select" style="width: 190px;" id="images-searchModality">
                                     <option value="">全部</option>
                                     <option value="CT">CT</option>
                                     <option value="MR">MR</option>
@@ -406,16 +406,18 @@
                                     <option value="US">US</option>
                                 </select>
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label">检查时间</label>
-                                <input type="date" class="form-control" id="images-searchStudyDate">
+                            <div class="d-flex align-items-center me-3">
+                                <span class="text-nowrap me-2">时间</span>
+                                <input type="date" class="form-control" style="width: 190px;" id="images-searchStudyDate">
                             </div>
-                            <div class="col-md-2 d-flex align-items-end">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-search me-1"></i>查询
+                            <div class="d-flex align-items-center">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="bi bi-search"></i>
+                                    查询
                                 </button>
-                                <button type="reset" class="btn btn-secondary ms-2">
-                                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                                <button type="reset" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                    重置
                                 </button>
                             </div>
                         </form>
