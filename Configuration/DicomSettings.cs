@@ -3,6 +3,22 @@ using Serilog.Events;
 
 namespace DicomSCP.Configuration;
 
+public class PrinterConfig
+{
+    public string Name { get; set; } = "";
+    public string AeTitle { get; set; } = "";
+    public string HostName { get; set; } = "";
+    public int Port { get; set; } = 104;
+    public bool IsDefault { get; set; }
+    public string Description { get; set; } = "";
+}
+
+public class PrintScuConfig
+{
+    public string AeTitle { get; set; } = "";
+    public List<PrinterConfig> Printers { get; set; } = new();
+}
+
 public class DicomSettings
 {
     [Required]
@@ -25,6 +41,8 @@ public class DicomSettings
     public QRSCPSettings QRSCP { get; set; } = new();
 
     public PrintSCPSettings PrintSCP { get; set; } = new();
+
+    public PrintScuConfig? PrintSCU { get; set; }
 }
 
 public class WorklistSCPSettings

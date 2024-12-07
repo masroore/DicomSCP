@@ -30,17 +30,6 @@ public class StoreSCUController : ControllerBase
         return Ok(_config.RemoteNodes);
     }
 
-    [HttpGet("nodes/default")]
-    public ActionResult<RemoteNode> GetDefaultNode()
-    {
-        var node = _config.RemoteNodes?.FirstOrDefault(n => n.IsDefault);
-        if (node == null)
-        {
-            return NotFound("未配置默认节点");
-        }
-        return Ok(node);
-    }
-
     [HttpPost("verify/{remoteName}")]
     public async Task<IActionResult> VerifyConnection(string remoteName)
     {

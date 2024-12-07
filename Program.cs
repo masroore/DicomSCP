@@ -98,6 +98,7 @@ builder.Services.AddSingleton<DicomRepository>();
 builder.Services.AddSingleton<DicomServer>();
 builder.Services.AddSingleton<WorklistRepository>();
 builder.Services.AddSingleton<IStoreSCU, StoreSCU>();
+builder.Services.AddSingleton<IPrintSCU, PrintSCU>();
 
 // 确保配置服务正确注册
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));

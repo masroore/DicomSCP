@@ -32,17 +32,6 @@ public class QueryRetrieveController : ControllerBase
         return Ok(_config.RemoteNodes);
     }
 
-    [HttpGet("nodes/default")]
-    public ActionResult<RemoteNode> GetDefaultNode()
-    {
-        var node = _config.RemoteNodes?.FirstOrDefault(n => n.IsDefault);
-        if (node == null)
-        {
-            return NotFound("未配置默认节点");
-        }
-        return Ok(node);
-    }
-
     [HttpPost("{nodeId}/query/study")]
     public async Task<ActionResult<IEnumerable<DicomStudyResult>>> QueryStudy(string nodeId, [FromBody] Dictionary<string, string> queryParams)
     {
@@ -203,7 +192,7 @@ public class QueryRetrieveController : ControllerBase
             // 等待一小段时间，看看是否能快速确认请求是否被接受
             if (await Task.WhenAny(moveTask, Task.Delay(2000)) == moveTask)
             {
-                // 如果在2秒内得到结果
+                // 如果在2秒内得���结果
                 var success = await moveTask;
                 if (!success)
                 {

@@ -2,6 +2,30 @@ using System;
 
 namespace DicomSCP.Models;
 
+public class PrintRequest
+{
+    // 连接参数
+    public string CalledAE { get; set; } = "";
+    public string HostName { get; set; } = "";
+    public int Port { get; set; } = 104;
+    public string CallingAE { get; set; } = "";
+
+    // 打印参数
+    public string FilePath { get; set; } = "";
+    public int NumberOfCopies { get; set; } = 1;
+    public string PrintPriority { get; set; } = "LOW";
+    public string MediumType { get; set; } = "BLUE FILM";
+    public string FilmDestination { get; set; } = "MAGAZINE";
+    public string FilmOrientation { get; set; } = "PORTRAIT";
+    public string FilmSizeID { get; set; } = "8INX10IN";
+    public string ImageDisplayFormat { get; set; } = "STANDARD\\1,1";
+    public string MagnificationType { get; set; } = "REPLICATE";
+    public string SmoothingType { get; set; } = "MEDIUM";
+    public string BorderDensity { get; set; } = "BLACK";
+    public string EmptyImageDensity { get; set; } = "BLACK";
+    public string Trim { get; set; } = "NO";
+}
+
 public class PrintJob
 {
     // 基本信息
