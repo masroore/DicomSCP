@@ -69,7 +69,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             if (_settings.PrintSCP.AeTitle != association.CalledAE)
             {
-                DicomLogger.Warning("PrintSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
+                DicomLogger.Warning("PrintSCP", "拒绝错误的 Called AE: {CalledAE}，期望：{ExpectedAE}", 
                     association.CalledAE, 
                     _settings.PrintSCP.AeTitle);
                 return SendAssociationRejectAsync(
@@ -96,12 +96,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             foreach (var pc in association.PresentationContexts)
             {
-                DicomLogger.Information("PrintSCP", "处理表示上下文 - Abstract Syntax: {AbstractSyntax}", 
+                DicomLogger.Information("PrintSCP", "处理表示上下文 - Abstract Syntax：{AbstractSyntax}", 
                     pc.AbstractSyntax.Name);
 
                 if (!supportedSOPClasses.Contains(pc.AbstractSyntax))
                 {
-                    DicomLogger.Warning("PrintSCP", "不支持的服务类型: {AbstractSyntax}", 
+                    DicomLogger.Warning("PrintSCP", "不支持的服务类型：{AbstractSyntax}", 
                         pc.AbstractSyntax.Name);
                     pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
                     continue;

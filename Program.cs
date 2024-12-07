@@ -57,6 +57,19 @@ ApiLoggingMiddleware.ConfigureLogging(logSettings);
 // 配置框架日志
 var logConfig = new LoggerConfiguration()
     .MinimumLevel.Warning()  // 只记录警告以上的日志
+    .Filter.ByExcluding(e => 
+        e.Properties.ContainsKey("SourceContext") && 
+        e.Properties["SourceContext"].ToString().Contains("FellowOakDicom.Network") &&
+        (e.MessageTemplate.Text.Contains("No accepted presentation context found") ||
+         e.MessageTemplate.Text.Contains("Study Root Query/Retrieve Information Model - FIND") ||
+         e.MessageTemplate.Text.Contains("Patient Root Query/Retrieve Information Model - FIND") ||
+         e.MessageTemplate.Text.Contains("Storage Commitment Push Model SOP Class") ||
+         e.MessageTemplate.Text.Contains("Modality Performed Procedure Step") ||
+         e.MessageTemplate.Text.Contains("Basic Grayscale Print Management Meta") ||
+         e.MessageTemplate.Text.Contains("Basic Color Print Management Meta") ||
+         e.MessageTemplate.Text.Contains("Verification SOP Class") ||
+         e.MessageTemplate.Text.Contains("rejected association") ||
+         e.MessageTemplate.Text.Contains("Association received")))
     .WriteTo.Logger(lc => lc
         .WriteTo.Console(
             outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:l}{NewLine}",
@@ -207,6 +220,40 @@ app.Use(async (context, next) =>
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         return;
     }
+
+    try
+    {
+        // 解析 Cookie 值，格式为 "token|timestamp"
+        var parts = authCookie.Split('|');
+        if (parts.Length == 2 && 
+            DateTime.TryParse(parts[1], out var lastActivity))
+        {
+            // 检查最后活动时间是否超过30分钟
+            if (DateTime.Now - lastActivity > TimeSpan.FromMinutes(30))
+            {
+                DicomLogger.Warning("Api", "[Auth] Session expired");
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+        }
+    }
+    catch
+    {
+        // 如果解析失败，视为无效的 Cookie
+        DicomLogger.Warning("Api", "[Auth] Invalid auth cookie format");
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    // 更新最后活动时间
+    var newAuthValue = $"{authCookie.Split('|')[0]}|{DateTime.Now:O}";
+    context.Response.Cookies.Append("auth", newAuthValue, new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = context.Request.IsHttps,
+        SameSite = SameSiteMode.Lax,
+        Expires = DateTimeOffset.Now.AddDays(7)   // Cookie 本身设置较长的过期时间
+    });
 
     DicomLogger.Debug("Api", "[Auth] Auth cookie found: {0}", authCookie ?? "(null)");
     await next();

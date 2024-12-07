@@ -34,6 +34,7 @@ public class LogsController : ControllerBase
                 "StoreSCU",
                 "WorklistSCP",
                 "PrintSCP",
+                "PrintSCU",
                 "Database",
                 "Api"
             };
@@ -66,6 +67,7 @@ public class LogsController : ControllerBase
                 "storescu" => logSettings.Services.StoreSCU.LogPath,
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
+                "printscu" => logSettings.Services.PrintSCU.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null
@@ -121,6 +123,7 @@ public class LogsController : ControllerBase
                 "storescu" => logSettings.Services.StoreSCU.LogPath,
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
+                "printscu" => logSettings.Services.PrintSCU.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null
@@ -188,6 +191,7 @@ public class LogsController : ControllerBase
                 "storescu" => logSettings.Services.StoreSCU.LogPath,
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
+                "printscu" => logSettings.Services.PrintSCU.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null
@@ -253,6 +257,7 @@ public class LogsController : ControllerBase
                 "storescu" => logSettings.Services.StoreSCU.LogPath,
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
+                "printscu" => logSettings.Services.PrintSCU.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null

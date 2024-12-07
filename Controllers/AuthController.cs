@@ -28,21 +28,25 @@ public class AuthController : ControllerBase
                 DicomLogger.Warning("Api", "[API] 登录失败 - 用户名: {Username}, 原因: 用户名或密码错误", request.Username);
                 return Unauthorized("用户名或密码错误");
             }
-
-            Response.Cookies.Append("auth", "true", new CookieOptions
+            
+            // 生成包含时间戳的认证值
+            var token = Guid.NewGuid().ToString("N");
+            var authValue = $"{token}|{DateTime.Now:O}";
+            
+            Response.Cookies.Append("auth", authValue, new CookieOptions
             {
                 HttpOnly = true,
-                Expires = DateTime.Now.AddMinutes(30),
                 SameSite = SameSiteMode.Lax,
                 IsEssential = true,
                 Path = "/",
-                Secure = Request.IsHttps
+                Secure = Request.IsHttps,
+                Expires = DateTimeOffset.Now.AddDays(7)  // Cookie 本身设置较长的过期时间
             });
 
             Response.Cookies.Append("username", request.Username, new CookieOptions
             {
                 HttpOnly = false,
-                Expires = DateTime.Now.AddMinutes(30),
+                Expires = DateTimeOffset.Now.AddDays(7),
                 SameSite = SameSiteMode.Lax,
                 IsEssential = true,
                 Path = "/",
@@ -119,6 +123,15 @@ public class AuthController : ControllerBase
             DicomLogger.Error("Api", ex, "[API] 修改密码异常 - 用户名: {Username}", username);
             return StatusCode(500, "修改密码失败");
         }
+    }
+
+    [HttpGet("check-session")]
+    public IActionResult CheckSession()
+    {
+        // 中间件会自动处理会话验证
+        // 如果会话有效，返回 200 OK
+        // 如果会话无效，中间件会返回 401
+        return Ok();
     }
 }
 

@@ -1064,6 +1064,37 @@
                             </div>
                         </div>
 
+                        <!-- 查询检索客户端配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrscuHelp">
+                                    查询检索客户端配置 (QueryRetrieveConfig)
+                                </button>
+                            </h2>
+                            <div id="qrscuHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>LocalAeTitle</dt>
+                                        <dd>本地AE Title，STORESCU共用这个AE。例如：QRSCU</dd>
+                                        
+                                        <dt>LocalPort</dt>
+                                        <dd>本地端口号，用于C-GET操作接收图像。建议：11116</dd>
+                                        
+                                        <dt>RemoteNodes</dt>
+                                        <dd>远程节点配置列表，每个节点包含：
+                                            <ul>
+                                                <li>Name - 节点名称</li>
+                                                <li>AeTitle - 节点AE Title</li>
+                                                <li>HostName - 主机名或IP地址</li>
+                                                <li>Port - 端口号</li>
+                                                <li>IsDefault - 是否为默认节点</li>
+                                            </ul>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- 打印服务配置 -->
                         <div class="accordion-item">
                             <h2 class="accordion-header">
@@ -1085,6 +1116,35 @@
                                         
                                         <dt>AllowedCallingAEs</dt>
                                         <dd>允许的调用方AE Title列表</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 打印客户端配置 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#printscuHelp">
+                                    打印客户端配置 (PrintSCU)
+                                </button>
+                            </h2>
+                            <div id="printscuHelp" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <dl>
+                                        <dt>AeTitle</dt>
+                                        <dd>打印客户端的AE Title。例如：PRINTSCU</dd>
+                                        
+                                        <dt>Printers</dt>
+                                        <dd>打印机列表配置，每个打印机包含：
+                                            <ul>
+                                                <li>Name - 打印机名称</li>
+                                                <li>AeTitle - 打印机AE Title</li>
+                                                <li>HostName - 打印机主机名或IP地址</li>
+                                                <li>Port - 打印机端口号</li>
+                                                <li>IsDefault - 是否为默认打印机</li>
+                                                <li>Description - 打印机描述</li>
+                                            </ul>
+                                        </dd>
                                     </dl>
                                 </div>
                             </div>
