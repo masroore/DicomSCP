@@ -27,7 +27,7 @@ class LogManager {
             }
         } catch (error) {
             console.error('加载日志类型失败:', error);
-            showToast('error', '加载失败', '加载日志类型失败');
+            window.showToast('加载日志类型失败', 'error');
         }
     }
 
@@ -51,7 +51,7 @@ class LogManager {
             this.updatePagination();
         } catch (error) {
             console.error('加载日志文件失败:', error);
-            showToast('error', '加载失败', '加载日志文件失败');
+            window.showToast('加载日志文件失败', 'error');
         } finally {
             this.isLoading = false;
         }
@@ -163,9 +163,9 @@ class LogManager {
             }
             
             await this.loadLogFiles(this.currentType);
-            showToast('success', '操作成功', '日志文件已删除');
+            window.showToast('日志文件已删除', 'success');
         } catch (error) {
-            showToast('error', '删除失败', error.message || '删除日志文件失败');
+            window.showToast('删除日志失败', 'error');
         }
     }
 
@@ -231,7 +231,7 @@ class LogManager {
 
         } catch (error) {
             console.error('获取日志内容失败:', error);
-            showToast('error', '获取失败', '获取日志内容失败');
+            window.showToast('获取日志内容失败', 'error');
         }
     }
 
@@ -251,7 +251,7 @@ class LogManager {
             `).join('');
         } catch (error) {
             console.error('更新日志文件列表失败:', error);
-            showToast('error', '更新失败', '更新日志文件列表失败');
+            window.showToast('更新日志文件列表失败', 'error');
         }
     }
 
@@ -286,7 +286,7 @@ class LogManager {
             }
         } catch (error) {
             console.error('加载日志内容失败:', error);
-            showToast('error', '加载失败', '加载日志内容失败');
+            window.showToast('加载日志内容失败', 'error');
         }
     }
 
@@ -304,9 +304,9 @@ class LogManager {
                 
                 await this.refreshLogContent();
                 await this.loadLogFiles(this.currentType);
-                showToast('success', '操作成功', '日志文件已清空');
+                window.showToast('日志文件已清空', 'success');
             } catch (error) {
-                showToast('error', '清空失败', error.message || '清空日志文件失败');
+                window.showToast('清空日志失败', 'error');
             }
         }
     }

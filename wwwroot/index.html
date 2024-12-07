@@ -8,232 +8,7 @@
     <link href="lib/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <style>
-        .drop-zone {
-            min-height: 150px;
-            border: 2px dashed #dee2e6;
-            transition: all 0.3s ease;
-            background-color: #f8f9fa;
-        }
-        
-        .drop-zone.border-primary {
-            border-color: #0d6efd;
-            background-color: #f8f9fa;
-        }
-        
-        .drop-zone i {
-            font-size: 2rem;
-            color: #6c757d;
-            margin-bottom: 0.5rem;
-        }
-        
-        .drop-zone p {
-            color: #6c757d;
-        }
-        
-        #selectedFiles {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        /* 服务状态样式 */
-        .service-status-group {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            grid-gap: 2px;
-            background: rgba(33, 37, 41, 0.1);
-            padding: 3px;
-            min-width: 200px;
-        }
-        
-        .service-status {
-            display: flex;
-            align-items: center;
-            gap: 3px;
-            padding: 1px 3px;
-            background: transparent;
-            height: 22px;
-        }
-        
-        .service-name {
-            color: rgba(173, 181, 189, 0.8);
-            font-size: 0.75rem;
-            min-width: 52px;
-            text-align: right;
-            line-height: 1;
-        }
-        
-        .service-status .badge {
-            font-size: 0.7rem;
-            padding: 0.15em 0.4em;
-            font-weight: normal;
-            min-width: 45px;
-            text-align: center;
-            background-color: rgba(33, 37, 41, 0.3);
-            line-height: 1.2;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            height: 18px;
-        }
-        
-        .service-status .badge.bg-success {
-            background-color: rgba(25, 135, 84, 0.7) !important;
-        }
-        
-        .service-status .badge.bg-danger {
-            background-color: rgba(220, 53, 69, 0.7) !important;
-        }
-        
-        .service-status .badge.bg-warning {
-            background-color: rgba(255, 193, 7, 0.7) !important;
-            color: #000;
-        }
-        
-        .service-status .badge.bg-secondary {
-            background-color: rgba(108, 117, 125, 0.7) !important;
-        }
-
-        /* 重启按钮样式 */
-        .service-restart-btn {
-            background: rgba(33, 37, 41, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            color: rgba(255, 255, 255, 0.9);
-            padding: 3px 10px;
-            font-size: 0.85rem;
-            margin-left: 8px;
-            transition: all 0.2s;
-            height: 30px;
-            line-height: 1;
-            display: inline-flex;
-            align-items: center;
-            margin-top: 0;
-            border-radius: 3px;
-            letter-spacing: 1px;
-        }
-        
-        .service-restart-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-            border-color: rgba(255, 255, 255, 0.3);
-            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
-        }
-
-        .service-restart-btn:active {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.4);
-        }
-
-        .service-restart-btn i {
-            font-size: 0.95rem;
-            margin-right: 4px;
-        }
-
-        /* 刷新按钮旋转动画 */
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        .refresh-spin {
-            animation: spin 1s linear;
-        }
-
-        .system-status-group {
-            font-size: 0.85rem;
-        }
-
-        .status-item {
-            padding: 0px 8px;
-            min-width: 90px;
-            text-align: right;
-            color: rgba(255, 255, 255, 0.9);
-            background: none;
-            border: none;
-            box-shadow: none;
-        }
-
-        .status-item.mb-1 {
-            margin-bottom: 0px !important;
-        }
-
-        .status-item i {
-            margin-right: 4px;
-            font-size: 0.9rem;
-            float: left;
-            color: rgba(255, 255, 255, 0.9);
-        }
-    .page {
-        opacity: 1;
-        transition: opacity 0.2s ease-in-out;
-    }
     
-    /* 预加载状态样式 */
-    .page.loading {
-        position: relative;
-    }
-    
-    .page.loading::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(255, 255, 255, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-     /* 配置编辑器样式 */
-     #configEditor {
-        background-color: #1e1e1e;
-        color: #d4d4d4;
-        font-family: Consolas, Monaco, "Courier New", monospace;
-        font-size: 14px;
-        line-height: 1.5;
-        padding: 12px;
-        border: 1px solid #2d2d2d;
-        border-radius: 4px;
-        width: 100%;
-        height: 500px;
-        resize: vertical;
-        outline: none;
-    }
-
-    #configEditor:focus {
-        border-color: #0078d4;
-        box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
-    }
-
-    /* 滚动条样式 */
-    #configEditor::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
-    }
-
-    #configEditor::-webkit-scrollbar-track {
-        background: #1e1e1e;
-    }
-
-    #configEditor::-webkit-scrollbar-thumb {
-        background-color: #424242;
-        border-radius: 6px;
-        border: 3px solid #1e1e1e;
-    }
-
-    #configEditor::-webkit-scrollbar-thumb:hover {
-        background-color: #4f4f4f;
-    }
-        /* 修改状态颜色样式 - 使用更亮的颜色以提高可读性 */
-        .status-item.cpu-normal { color: #98ff98; }
-        .status-item.cpu-warning { color: #ffeb99; }
-        .status-item.cpu-danger { color: #ffb3b3; }
-
-        .status-item.memory-normal { color: #98ff98; }
-        .status-item.memory-warning { color: #ffeb99; }
-        .status-item.memory-danger { color: #ffb3b3; }
-    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-0">
@@ -979,36 +754,27 @@
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="lib/axios/axios.min.js"></script>
 
+    <script src="js/main.js"></script>
     <script src="js/services.js"></script>
-    <script src="js/config.js"></script>
 
+    <script src="js/config.js"></script>
     <script src="js/logs.js"></script>
     <script src="js/store.js"></script>
     <script src="js/print.js"></script>
-    <script src="/js/worklist.js"></script>
-    <script src="/js/images.js"></script>
-    <script src="/js/qr.js"></script>
+    <script src="js/worklist.js"></script>
+    <script src="js/images.js"></script>
+    <script src="js/qr.js"></script>
 
-    <script src="/js/main.js"></script>
-
-    <div class="toast-container position-fixed bottom-0 end-0 p-3">
-        <div id="storeToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header">
-                <strong class="me-auto" id="storeToastTitle">发送结果</strong>
-                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-            <div class="toast-body" id="storeToastMessage">
-            </div>
+    <!-- Toast 容器 -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="storeToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto">提示</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
-        <div id="printToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header">
-                <strong class="me-auto" id="printToastTitle">通知</strong>
-                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-            <div class="toast-body" id="printToastMessage">
-            </div>
-        </div>
+        <div class="toast-body"></div>
     </div>
+</div>
     <div class="modal fade" id="systemInfoModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">

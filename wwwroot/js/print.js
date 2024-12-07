@@ -33,7 +33,7 @@ class PrintManager {
             ]);
         } catch (error) {
             console.error('初始化打印管理器失败:', error);
-            showToast('error', '初始化失败', '初始化打印管理器失败');
+            this.showToast(error.message);
         }
     }
 
@@ -361,16 +361,11 @@ class PrintManager {
         }
     }
 
-    showToast(type, message) {
-        if (type === 'success' || type === '成功') {
-            showSuccessMessage(message);
+    showToast(message) {
+        if (message instanceof Error) {
+            window.showToast(message.message, 'error');
         } else {
-            // 如果是错误消息，使用原始消息
-            if (message instanceof Error) {
-                handleError(message, '操作失败');
-            } else {
-                showToast('error', '操作失败', message);
-            }
+            window.showToast(message, 'success');
         }
     }
 
@@ -407,12 +402,12 @@ class PrintManager {
             // 图像加载失败处理
             img.onerror = () => {
                 loading.style.display = 'none';
-                this.showToast('错误', '图像加载失败', 'error');
+                this.showToast('图像加载失败');
                 bsModal.hide();
             };
         } catch (error) {
             console.error('预览图像失败:', error);
-            this.showToast('错误', '预览图像失败', 'error');
+            this.showToast('预览图像失败');
         }
     }
 
@@ -492,7 +487,7 @@ class PrintManager {
             bsModal.show();
         } catch (error) {
             console.error('获取任务详情失败:', error);
-            this.showToast('错误', '获取任务详情失败', 'error');
+            this.showToast('获取任务详情失败');
         }
     }
 
@@ -598,10 +593,10 @@ class PrintManager {
                 throw new Error('删除失败');
             }
 
-            showSuccessMessage('打印任务已删除');
+            this.showToast('打印任务已删除');
             await this.loadPrintJobs();
         } catch (error) {
-            handleError(error, '删除失败');
+            this.showToast('删除失败');
         }
     }
 
@@ -658,7 +653,7 @@ class PrintManager {
             this.updatePrinterSelect();
         } catch (error) {
             console.error('加载打印机失败:', error);
-            this.showToast('错误', '加载打印机列表失败: ' + error.message, 'error');
+            this.showToast('加载打印机列表失败: ' + error.message);
         }
     }
 
@@ -693,7 +688,7 @@ class PrintManager {
         const printerName = printerSelect.value;
 
         if (!printerName) {
-            this.showToast('error', '请选择打印机');
+            this.showToast('请选择打印机');
             return;
         }
 
@@ -714,12 +709,12 @@ class PrintManager {
             }
 
             await response.json();
-            this.showToast('success', '打印任务已发送');
+            this.showToast('打印任务已发送');
             this.printerSelectModal.hide();
             this.loadPrintJobs(); // 刷新任务列表
         } catch (error) {
             console.error('打印失败:', error);
-            this.showToast('error', error.message || '打印失败');
+            this.showToast(error.message || '打印失败');
         }
     }
 }

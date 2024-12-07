@@ -23,10 +23,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initDropZone();
     initFileInputs();
     loadStoreNodes();
-    // 初始化 Toast
-    storeToast = new bootstrap.Toast(document.getElementById('storeToast'), {
-        delay: 3000
-    });
 });
 
 // 初始化拖放区域
@@ -97,13 +93,27 @@ async function handleDrop(e) {
 
 // 处理文件系统入口
 async function processEntry(entry) {
+    let addedCount = 0;
+    let skippedCount = 0;
+
     if (entry.isFile) {
         const file = await getFileFromEntry(entry);
         if (file.name.toLowerCase().endsWith('.dcm')) {
             addFileToSelection(file);
+            addedCount++;
+        } else {
+            skippedCount++;
         }
     } else if (entry.isDirectory) {
         await processDirectory(entry);
+    }
+
+    if (addedCount > 0 || skippedCount > 0) {
+        let message = `已添加 ${addedCount} 个DICOM文件`;
+        if (skippedCount > 0) {
+            message += `，跳过 ${skippedCount} 个非DICOM文件`;
+        }
+        window.showToast(message, 'success');
     }
 }
 
@@ -206,9 +216,13 @@ function handleFileSelect(e) {
         }
     });
     
-    // 显示处理结果
+    // 修改这里的 showToast 调用
     if (addedCount > 0 || skippedCount > 0) {
-        showToast(`已添加 ${addedCount} 个DICOM文件${skippedCount > 0 ? `，跳过 ${skippedCount} 个非DICOM文件` : ''}`, true);
+        let message = `已添加 ${addedCount} 个DICOM文件`;
+        if (skippedCount > 0) {
+            message += `，跳过 ${skippedCount} 个非DICOM文件`;
+        }
+        window.showToast(message, 'success');  // 改为使用 'success' 而不是 true
     }
     
     updateUI();
@@ -218,17 +232,14 @@ function handleFileSelect(e) {
 function addFileToSelection(file) {
     const fileId = generateFileId(file);
     if (!selectedFiles.has(fileId)) {
-        if (file.size > 100 * 1024 * 1024) { // 100MB
-            showToast(`文件 ${file.name} 太大，超过100MB`, false);
-            return;
-        }
         selectedFiles.set(fileId, {
             file: file,
             status: 'pending',
             message: ''
         });
-        console.log('添加文件:', file.name, formatFileSize(file.size));
+        window.showToast(`已添加文件: ${file.name}`, 'success');
     }
+    updateUI();
 }
 
 // 生成文件ID
@@ -397,7 +408,7 @@ async function loadStoreNodes() {
 
     } catch (error) {
         console.error('加载节点列表失败:', error);
-        showToast('error', '加载失败', '加载节点列表失败');
+        window.showToast('error', '加载失败', '加载节点列表失败');
     }
 }
 
@@ -405,7 +416,7 @@ async function loadStoreNodes() {
 async function sendFiles() {
     const nodeId = document.getElementById('storeNode').value;
     if (!nodeId) {
-        showToast('请选择目标节点', false);
+        window.showToast('请选择目标节点', 'error');
         return;
     }
 
@@ -419,7 +430,7 @@ async function sendFiles() {
             .filter(([_, fileInfo]) => fileInfo.status === 'pending' || fileInfo.status === 'error');
 
         if (pendingFiles.length === 0) {
-            showToast('没有需要发送的文件', false);
+            window.showToast('没有需要发送的文件', false);
             return;
         }
 
@@ -457,11 +468,14 @@ async function sendFiles() {
         }
 
         // 显示最终结果
-        showToast(`发送完成：${successCount} 个成功${failureCount > 0 ? `，${failureCount} 个失败` : ''}`, failureCount === 0);
+        window.showToast(
+            `发送完成：${successCount} 个成功${failureCount > 0 ? `，${failureCount} 个失败` : ''}`, 
+            failureCount === 0 ? 'success' : 'error'
+        );
 
     } catch (error) {
         console.error('发送失败:', error);
-        showToast('发送失败: ' + (error.response?.data || error.message), false);
+        window.showToast('发送失败: ' + (error.response?.data || error.message), false);
     } finally {
         sendButton.disabled = false;
         clearButton.disabled = false;
@@ -477,26 +491,6 @@ function retryFile(fileId) {
         fileInfo.message = '';
         updateUI();
     }
-}
-
-// 显示 Toast 消息
-function showToast(message, isSuccess = true) {
-    const toastEl = document.getElementById('storeToast');
-    const titleEl = document.getElementById('storeToastTitle');
-    const messageEl = document.getElementById('storeToastMessage');
-    
-    // 设置样式
-    toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-    if (isSuccess) {
-        toastEl.classList.add('bg-success', 'text-white');
-        titleEl.textContent = '操作成功';
-    } else {
-        toastEl.classList.add('bg-danger', 'text-white');
-        titleEl.textContent = '操作失败';
-    }
-    
-    messageEl.textContent = message;
-    storeToast.show();
 }
 
 class StoreManager {

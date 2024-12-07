@@ -79,13 +79,13 @@ class ConfigManager {
             const response = await axios.get('/api/config');
             editor.value = JSON.stringify(response.data, null, 2);
 
-           // 恢复编辑器样式
+            // 恢复编辑器样式
             editor.style.backgroundColor = '#1e1e1e';
             editor.style.color = '#d4d4d4';
 
         } catch (error) {
             console.error('加载配置失败:', error);
-            handleError(error, '获取配置失败');
+            window.showToast(error.response?.data || '获取配置失败', 'error');
         } finally {
             this.isLoading = false;
         }
@@ -96,30 +96,21 @@ class ConfigManager {
 
         try {
             this.isLoading = true;
-            // 先验证是否是有效的 JSON
             const configText = document.getElementById('configEditor').value;
             let config;
             try {
                 config = JSON.parse(configText);
             } catch (e) {
-                showToast('error', '验证失败', '配置格式不正确，请检查JSON格式');
+                window.showToast('配置格式不正确，请检查JSON格式', 'error');
                 return;
             }
 
             await axios.post('/api/config', config);
-            showSuccessMessage('配置保存成功！需要重启服务生效');
+            window.showToast('配置保存成功！需要重启服务生效', 'success');
         } catch (error) {
-            handleError(error, '保存配置失败');
+            window.showToast(error.response?.data || '保存配置失败', 'error');
         } finally {
             this.isLoading = false;
-        }
-    }
-
-    showToast(type, message) {
-        if (type === 'success') {
-            showSuccessMessage(message);
-        } else {
-            handleError(new Error(message), '操作失败');
         }
     }
 

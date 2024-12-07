@@ -7,12 +7,12 @@ let currentPage = 1;
 // 统一错误处理
 function handleError(error, message) {
     console.error(message, error);
-    showToast('error', '操作失败', error.response?.data || error.message);
+    window.showToast(error.response?.data || error.message, 'error');
 }
 
 // 成功提示
 function showSuccessMessage(message) {
-    showToast('success', '操作成功', message);
+    window.showToast(message, 'success');
 }
 
 // 表单验证
@@ -27,7 +27,7 @@ function validateWorklistForm() {
     const ageInput = document.getElementById('patientAge');
     const age = parseInt(ageInput.value);
     if (!ageInput.value || isNaN(age) || age < 0 || age > 150) {
-        showToast('error', '验证失败', '请输入有效的年龄（0-150岁）');
+        window.showToast('请输入有效的年龄（0-150岁）', 'error');
         ageInput.focus();
         return false;
     }
@@ -51,7 +51,7 @@ function initializeWorklist() {
         loadWorklistData();
     } catch (error) {
         console.error('初始化预约模块失败:', error);
-        showToast('error', '初始化失败', '初始化预约模块失败');
+        window.showToast('初始化失败', 'error');
     }
 }
 
@@ -342,7 +342,7 @@ async function saveWorklist() {
             throw new Error(errorText || '保存失败');
         }
 
-        showSuccessMessage(currentWorklistId ? '预约更新成功' : '预约添加成功');
+        window.showToast(currentWorklistId ? '预约已更新' : '预约已添加', 'success');
         worklistModal.hide();
         loadWorklistData();
     } catch (error) {
@@ -365,7 +365,7 @@ async function deleteWorklist(id) {
             throw new Error('删除失败');
         }
 
-        showSuccessMessage('预约删除成功');
+        window.showToast('预约已删除', 'success');
         loadWorklistData();
     } catch (error) {
         handleError(error, '删除预约失败');

@@ -12,7 +12,7 @@ function initializeImages() {
         loadImages();
     } catch (error) {
         console.error('初始化影像管理模块失败:', error);
-        showToast('error', '初始化失败', '初始化影像管理模块失败');
+        window.showToast('初始化影像管理模块失败', 'error');
     }
 }
 
@@ -186,14 +186,14 @@ function bindImagesEvents() {
                         loadImages(1);
                     } catch (error) {
                         console.error('重置表单失败:', error);
-                        showToast('error', '重置失败', error.message);
+                        window.showToast('重置失败', 'error');
                     }
                 };
             }
         }
     } catch (error) {
         console.error('绑定影像管理事件失败:', error);
-        showToast('error', '初始化失败', '绑定影像管理事件失败');
+        window.showToast('初始化失败', 'error');
     }
 }
 
@@ -216,11 +216,11 @@ async function deleteStudy(studyInstanceUid, event) {
             throw new Error('删除失败');
         }
 
-        showToast('success', '操作成功', '检查已删除');
+        window.showToast('操作成功', 'success');
         loadImages(imagesCurrentPage);
     } catch (error) {
         console.error('删除失败:', error);
-        showToast('error', '删除失败', error.message);
+        window.showToast(error.message || '删除失败', 'error');
     }
 }
 
@@ -311,7 +311,7 @@ async function toggleSeriesInfo(row) {
 
     } catch (error) {
         console.error('获取序列数据失败:', error);
-        showToast('error', '获取失败', error.message);
+        window.showToast('获取失败', 'error');
         // 移除加载动画
         $(row).siblings('.series-info').remove();
     }

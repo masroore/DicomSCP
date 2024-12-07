@@ -13,7 +13,7 @@ function initializeQR() {
         initQRSeriesModal();
     } catch (error) {
         console.error('初始化QR模块失败:', error);
-        showToast('error', '初始化失败', '初始化QR模块失败');
+        window.showToast('初始化失败', 'error');
     }
 }
 
@@ -53,7 +53,7 @@ function bindQRPaginationEvents() {
         }
     } catch (error) {
         console.error('绑定QR分页事件失败:', error);
-        showToast('error', '初始化失败', '绑定分页事件失败');
+        window.showToast('初始化失败', 'error');
     }
 }
 
@@ -93,7 +93,7 @@ async function loadQRNodes() {
 
     } catch (error) {
         console.error('加载PACS节点失败:', error);
-        showToast('error', '加载失败', '加载PACS节点失败');
+        window.showToast('加载失败', 'error');
     }
 }
 
@@ -271,7 +271,7 @@ async function toggleQRSeriesInfo(row) {
 
     } catch (error) {
         console.error('获取序列数据失败:', error);
-        showToast('error', '获取失败', error.message);
+        window.showToast(error.message || '获取失败', 'error');
         // 移除加载动画
         $(row).siblings('.series-info').remove();
     }
@@ -294,13 +294,13 @@ async function moveQRStudy(studyUid, event) {
         const result = response.data;
 
         if (result.success !== false) {
-            showToast('success', '操作成功', '检查传输已开始，请稍后去影像管理查看！');
+            window.showToast('检查传输已开始，请稍后去影像管理查看！', 'success');
         } else {
             throw new Error(result.message || '传输失败');
         }
     } catch (error) {
         console.error('传输失败:', error);
-        showToast('error', '操作失败', error.response?.data || error.message || '传输失败，请检查网络连接');
+        window.showToast(error.response?.data || error.message || '传输失败，请检查网络连接', 'error');
     }
 }
 
@@ -321,13 +321,13 @@ async function moveQRSeries(studyUid, seriesUid, event) {
         const result = response.data;
 
         if (result.success !== false) {
-            showToast('success', '操作成功', '序列传输已开始，请稍后去影像管理查看！');
+            window.showToast('序列传输已开始，请稍后去影像管理查看！', 'success');
         } else {
             throw new Error(result.message || '传输失败');
         }
     } catch (error) {
         console.error('传输失败:', error);
-        showToast('error', '操作失败', error.response?.data || error.message || '传输失败，请检查网络连接');
+        window.showToast(error.response?.data || error.message || '传输失败，请检查网络连接', 'error');
     }
 }
 
@@ -361,4 +361,4 @@ function formatQRDate(dateString) {
         month: '2-digit',
         day: '2-digit'
     }).replace(/\//g, '-');
-} 
+}

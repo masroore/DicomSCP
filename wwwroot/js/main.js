@@ -6,12 +6,12 @@ let viewerModal;
 // 统一错误处理
 function handleError(error, message) {
     console.error(message, error);
-    showToast('error', '操作失败', error.response?.data || error.message);
+    window.showToast(error.response?.data || error.message, 'error');
 }
 
 // 统一成功提示
 function showSuccessMessage(message) {
-    showToast('success', '操作成功', message);
+    window.showToast(message, 'success');
 }
 
 // 显示加载状态
@@ -26,24 +26,55 @@ function showLoading(element) {
     `;
 }
 
-// 添加通用的提示框显示函数
-function showToast(type, title, message) {
+// 统一的 Toast 显示函数
+window.showToast = function(message, type = 'success') {
     try {
         const toastEl = document.getElementById('storeToast');
-        const titleEl = document.getElementById('storeToastTitle');
-        const messageEl = document.getElementById('storeToastMessage');
-        
-        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-        toastEl.classList.add(type === 'success' ? 'bg-success' : 'bg-danger', 'text-white');
-        titleEl.textContent = title;
+        if (!toastEl) {
+            console.error('找不到 Toast 元素');
+            return;
+        }
+
+        const titleEl = toastEl.querySelector('.toast-header strong');
+        const messageEl = toastEl.querySelector('.toast-body');
+        if (!titleEl || !messageEl) {
+            console.error('找不到 Toast 内部元素');
+            return;
+        }
+
+        // 设置标题和消息
+        switch (type) {
+            case 'success':
+                titleEl.textContent = '操作成功';
+                toastEl.classList.remove('bg-danger', 'bg-secondary');
+                toastEl.classList.add('bg-success', 'text-white');
+                break;
+            case 'error':
+                titleEl.textContent = '操作失败';
+                toastEl.classList.remove('bg-success', 'bg-secondary');
+                toastEl.classList.add('bg-danger', 'text-white');
+                break;
+            default:
+                titleEl.textContent = '提示';
+                toastEl.classList.remove('bg-success', 'bg-danger');
+                toastEl.classList.add('bg-secondary', 'text-white');
+        }
+
         messageEl.textContent = message;
-        
-        const storeToast = new bootstrap.Toast(toastEl);
-        storeToast.show();
+
+        // 显示 Toast
+        const toast = new bootstrap.Toast(toastEl, {
+            animation: true,
+            autohide: true,
+            delay: 3000
+        });
+        toast.show();
+
     } catch (error) {
+        // 避免递归调用
         console.error('显示提示失败:', error);
     }
-}
+};
 
 // 修改所有模态框的清理代码
 function cleanupModal(modalId, callback) {
@@ -168,7 +199,32 @@ function switchPage(page) {
 
         // 关闭所有打开的模态框
         $('.modal.show').each(function() {
-            $(this).modal('hide');
+            // 先移除焦点
+            const focusedElement = this.querySelector(':focus');
+            if (focusedElement) {
+                focusedElement.blur();
+            }
+
+            // 移除 aria-hidden 属性
+            this.removeAttribute('aria-hidden');
+            
+            // 获取并关闭模态框
+            const modal = bootstrap.Modal.getInstance(this);
+            if (modal) {
+                // 监听关闭事件
+                this.addEventListener('hidden.bs.modal', function() {
+                    // 移除所有可能的 aria 属性
+                    this.removeAttribute('aria-hidden');
+                    this.removeAttribute('aria-modal');
+                    
+                    // 如果是动态创建的模态框，移除DOM
+                    if (this.hasAttribute('data-dynamic')) {
+                        this.remove();
+                    }
+                }, { once: true });
+
+                modal.hide();
+            }
         });
         
         // 根据页面类型加载数据
@@ -190,7 +246,7 @@ function switchPage(page) {
         }
     } catch (error) {
         console.error('切换页面失败:', error);
-        showToast('error', '切换失败', '页面切换失败');
+        window.showToast('页面切换失败', 'error');
     }
 }
 
@@ -230,13 +286,13 @@ async function changePassword() {
 
     // 验证新密码
     if (newPassword !== confirmPassword) {
-        showToast('error', '验证失败', '两次输入的新密码不一致');
+        window.showToast('两次输入的新密码不一致', 'error');
         return;
     }
 
     // 验证新密码长度
     if (newPassword.length < 6) {
-        showToast('error', '验证失败', '新密码长度不能少于6位');
+        window.showToast('新密码长度不能少于6位', 'error');
         return;
     }
 
@@ -246,13 +302,13 @@ async function changePassword() {
             newPassword: newPassword
         });
         
-        showToast('success', '操作成功', '密码修改成功，请重新登录');
+        window.showToast('密码修改成功，请重新登录', 'success');
         changePasswordModal.hide();
         setTimeout(() => {
             window.location.href = '/login.html';
         }, 1500);
     } catch (error) {
-        showToast('error', '修改失败', error.response?.data || '修改密码失败，请重试');
+        window.showToast(error.response?.data || '修改密码失败，请重试', 'error');
     }
 }
 
