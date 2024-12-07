@@ -220,6 +220,7 @@ app.Use(async (context, next) =>
         "/lib",
         "/css",
         "/js",
+        "/images",
         "/favicon.ico"
     };
 
