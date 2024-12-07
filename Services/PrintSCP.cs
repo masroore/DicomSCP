@@ -204,7 +204,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             // 创建打印作业
             var printJob = new PrintJob
             {
-                JobId = Guid.NewGuid().ToString("N"),
+                JobId = $"{DateTime.Now:yyyyMMddHHmmss}{new Random().Next(1000, 9999)}",
                 FilmSessionId = request.SOPInstanceUID.UID,
                 CallingAE = _session.CallingAE ?? "",
                 Status = PrintJobStatus.Created,
@@ -389,7 +389,11 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     newDataset.Add(DicomTag.ConversionType, "WSD");
                     newDataset.Add(DicomTag.StudyDate, DateTime.Now.ToString("yyyyMMdd"));
                     newDataset.Add(DicomTag.StudyTime, DateTime.Now.ToString("HHmmss"));
-                    newDataset.Add(DicomTag.StudyInstanceUID, DicomUID.Generate());
+                    
+                    // 从原始数据集中获取 StudyInstanceUID，如果没有则生成新的
+                    var studyUid = firstImage.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, DicomUID.Generate().UID);
+                    newDataset.Add(DicomTag.StudyInstanceUID, studyUid);
+                    
                     newDataset.Add(DicomTag.SeriesInstanceUID, DicomUID.Generate());
                     newDataset.Add(DicomTag.StudyID, "1");
                     newDataset.Add(DicomTag.SeriesNumber, "1");
@@ -418,7 +422,6 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     parameters["ImagePath"] = relativePath;
                     parameters["Status"] = PrintJobStatus.ImageReceived.ToString();
 
-                    var studyUid = newDataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "");
                     if (!string.IsNullOrEmpty(studyUid))
                     {
                         parameters["StudyInstanceUID"] = studyUid;
