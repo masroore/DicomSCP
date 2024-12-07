@@ -151,7 +151,7 @@ function initializeComponents() {
 }
 
 // ================ 页面切换 ================
-// 切换页函数
+// 切换页面函数
 function switchPage(page) {
     try {
         // 隐藏所有页面
@@ -165,6 +165,11 @@ function switchPage(page) {
         
         // 添加active类到当前导航链接
         $(`.nav-link[data-page="${page}"]`).addClass('active');
+
+        // 关闭所有打开的模态框
+        $('.modal.show').each(function() {
+            $(this).modal('hide');
+        });
         
         // 根据页面类型加载数据
         if (page === 'worklist') {
