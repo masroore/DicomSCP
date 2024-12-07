@@ -174,6 +174,7 @@
 
     <script src="lib/jquery/jquery.min.js"></script>
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="lib/axios/axios.min.js"></script>
     <script>
         async function login() {
             const username = document.getElementById('username').value;
@@ -181,27 +182,16 @@
             const errorMessage = document.getElementById('error-message');
             
             try {
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
-                });
-                
-                if (!response.ok) {
-                    const error = await response.text();
-                    throw new Error(error || '登录失败');
-                }
+                await axios.post('/api/auth/login', { username, password });
                 
                 // 登录成功，跳转到首页
                 window.location.href = '/';
             } catch (error) {
                 errorMessage.style.display = 'block';
-                errorMessage.textContent = error.message;
+                errorMessage.textContent = error.response?.data || error.message || '登录失败';
                 setTimeout(() => {
                     errorMessage.style.display = 'none';
-                }, 3000);  // 3秒后自动隐藏错误信息
+                }, 3000);
             }
         }
 

@@ -1,5 +1,6 @@
 class PrintManager {
     constructor() {
+        this.initAxiosInterceptors();
         this.currentPage = 1;
         this.pageSize = 10;
         this.totalPages = 0;
@@ -11,6 +12,19 @@ class PrintManager {
         this.initializeEvents();
         this.loadPrintJobs();
         this.loadPrinters();
+    }
+
+    initAxiosInterceptors() {
+        axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response && error.response.status === 401) {
+                    window.location.href = '/login.html';
+                    return new Promise(() => {});
+                }
+                return Promise.reject(error);
+            }
+        );
     }
 
     initializeEvents() {
@@ -79,18 +93,9 @@ class PrintManager {
             if (status) queryParams.append('status', status);
             if (date) queryParams.append('date', date);
 
-            const response = await fetch(`/api/print?${queryParams}`);
+            const response = await axios.get(`/api/print?${queryParams}`);
+            const data = response.data;
 
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
-            if (!response.ok) {
-                throw new Error('获取打印任务失败');
-            }
-            
-            const data = await response.json();
             this.currentJobs = data.items;
             this.updatePrintJobsTable(data.items);
             this.totalItems = data.total;
@@ -526,19 +531,12 @@ class PrintManager {
         }
 
         try {
-            const response = await fetch(`/api/print/${jobId}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                this.showToast('成功', '删除成功');
-                await this.loadPrintJobs(); // 重新加载任务列表
-            } else {
-                throw new Error('删除失败');
-            }
+            await axios.delete(`/api/print/${jobId}`);
+            this.showToast('成功', '删除成功');
+            await this.loadPrintJobs(); // 重新加载任务列表
         } catch (error) {
             console.error('删除打印任务失败:', error);
-            this.showToast('错误', '删除打印任务失败', 'error');
+            this.showToast('错误', error.response?.data || '删除打印任务失败', 'error');
         }
     }
 
@@ -590,11 +588,8 @@ class PrintManager {
     // 加载打印机列表
     async loadPrinters() {
         try {
-            const response = await fetch('/api/PrintScu/printers');
-            if (!response.ok) {
-                throw new Error('获取打印机列表失败');
-            }
-            this.printers = await response.json();
+            const response = await axios.get('/api/PrintScu/printers');
+            this.printers = response.data;
             this.updatePrinterSelect();
         } catch (error) {
             console.error('加载打印机失败:', error);

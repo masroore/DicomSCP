@@ -1,24 +1,28 @@
 class ServiceManager {
     constructor() {
+        this.initAxiosInterceptors();
         this.updateStatus();
         // 每30秒更新一次状态
         setInterval(() => this.updateStatus(), 30000);
     }
 
+    initAxiosInterceptors() {
+        axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response && error.response.status === 401) {
+                    window.location.href = '/login.html';
+                    return new Promise(() => {});
+                }
+                return Promise.reject(error);
+            }
+        );
+    }
+
     async updateStatus() {
         try {
-            const response = await fetch('/api/dicom/status');
-            if (response.status === 401) {
-                // 未授权，重定向到登录页
-                window.location.href = '/login.html';
-                return;
-            }
-            
-            if (!response.ok) {
-                throw new Error('获取服务状态失败');
-            }
-            
-            const status = await response.json();
+            const response = await axios.get('/api/dicom/status');
+            const status = response.data;
             
             // 更新每个服务的状态
             this.updateServiceStatus('storeScp', status.store);

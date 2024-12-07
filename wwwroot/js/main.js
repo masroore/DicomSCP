@@ -4,6 +4,34 @@ let currentWorklistId = null;
 let changePasswordModal;
 let viewerModal;
 
+// 初始化 axios 拦截器
+function initAxiosInterceptors() {
+    axios.interceptors.response.use(
+        response => response,  // 正常响应直接返回
+        error => {
+            if (error.response && error.response.status === 401) {
+                // 未登录或会话过期，重定向到登录页
+                console.log("[Auth] 检测到未授权访问，重定向到登录页");
+                window.location.href = '/login.html';
+                // 阻止显示其他错误提示
+                return new Promise(() => {});
+            }
+            return Promise.reject(error);
+        }
+    );
+
+    // 添加请求拦截器
+    axios.interceptors.request.use(
+        config => {
+            // 统一处理请求配置
+            return config;
+        },
+        error => {
+            return Promise.reject(error);
+        }
+    );
+}
+
 // 分页参数
 let currentPage = 1;
 const pageSize = 10;
@@ -21,6 +49,9 @@ const imagesPageSize = 10;
 
 // 页面加载完成后执行
 $(document).ready(function() {
+    // 初始化 axios 拦截器
+    initAxiosInterceptors();
+    
     // 初始化各种模态框和其他组件
     initializeComponents();
     
@@ -591,12 +622,9 @@ function editWorklist(worklistId) {
     currentWorklistId = worklistId;
     document.getElementById('modalTitle').textContent = '编辑预约';
     
-    fetch(`/api/worklist/${worklistId}`)
+    axios.get(`/api/worklist/${worklistId}`)
         .then(response => {
-            if (!response.ok) throw new Error('获取数据失败');
-            return response.json();
-        })
-        .then(data => {
+            const data = response.data;
             // 填充表单数据
             document.getElementById('patientId').value = data.patientId || '';
             document.getElementById('patientName').value = data.patientName || '';
@@ -859,70 +887,45 @@ function changePassword() {
         return;
     }
 
-    fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            oldPassword: oldPassword,
-            newPassword: newPassword
-        })
+    axios.post('/api/auth/change-password', {
+        oldPassword: oldPassword,
+        newPassword: newPassword
     })
-    .then(async response => {
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text);
-        }
-        // 不尝试解析 JSON，直接处理
-        alert('密码修成功，请重登录');
+    .then(() => {
+        alert('密码修改成功，请重登录');
         changePasswordModal.hide();
         window.location.href = '/login.html';
     })
     .catch(error => {
-        alert(error.message || '修改密码失败，请重试');
+        alert(error.response?.data || '修改密码失败，请重试');
     });
 }
 
 // 获取当前用户名
-function getCurrentUsername() {
-    // 从 cookie 中获取用户名
-    const cookies = document.cookie.split(';');
-    for(let cookie of cookies) {
-        const [name, value] = cookie.trim().split('=');
-        if(name === 'username') {
-            document.getElementById('currentUsername').textContent = decodeURIComponent(value);
-            return;
-        }
+async function getCurrentUsername() {
+    try {
+        const response = await axios.get('/api/auth/check-session');
+        document.getElementById('currentUsername').textContent = response.data.username;
+    } catch (error) {
+        // 401 会被全局拦截器处理，这里不需要特别处理
+        console.error('获取用户信息失败:', error);
     }
-    // 如果没有找到用户名，可能未登录
-    window.location.href = '/login.html';
 }
 
 // 删除影像数据
 function deleteStudy(studyInstanceUid, event) {
-        // 阻止事件冒泡，防止触发行的点击事件
-        event.stopPropagation();
-        
-    if (confirm('确定要删除这个检查吗？\n此操作将删除所有相关的序列和图像，且不可恢复。')) {
-        fetch(`/api/images/${studyInstanceUid}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(data => {
-                    throw new Error(data.error || '删除失败');
-                });
-            }
+    // 阻止事件冒泡，防止触发行的点击事件
+    event.stopPropagation();
+    
+    if (confirm('确定要删除这个检查吗？\n此操作将删除所有相关的序列和图像且不可恢复。')) {
+        axios.delete(`/api/images/${studyInstanceUid}`)
+        .then(() => {
             // 删除成功后刷新列表
             loadImages();
         })
         .catch(error => {
             console.error('删除失败:', error);
-            alert(error.message || '删除失败，请重试');
+            alert(error.response?.data || error.message || '删除失败，请重试');
         });
     }
 }
@@ -946,12 +949,9 @@ function previewSeries(studyUid, seriesUid, event) {
 // 加载QR节点列表
 async function loadQRNodes() {
     try {
-        const response = await fetch('/api/QueryRetrieve/nodes');
-        if (!response.ok) {
-            throw new Error('获取节点列表失败');
-        }
-        
-        const nodes = await response.json();
+        const response = await axios.get('/api/QueryRetrieve/nodes');
+        const nodes = response.data;
+
         const select = document.getElementById('qrNode');
         select.innerHTML = nodes.map(node => `
             <option value="${node.name}">${node.name} (${node.aeTitle}@${node.hostName})</option>
@@ -963,8 +963,10 @@ async function loadQRNodes() {
             select.value = defaultNode.name;
         }
     } catch (error) {
-        console.error('加载PACS节点失败:', error);
-        alert('加载PACS节点失败，请检查网络连接');
+        if (!error.config?.skipErrorHandler) {
+            console.error('加载PACS节点失败:', error);
+            alert('加载PACS节点失败，请检查网络连接');
+        }
     }
 }
 
@@ -985,19 +987,8 @@ async function searchQR() {
     };
 
     try {
-        const response = await fetch(`/api/QueryRetrieve/${nodeId}/query/study`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(queryParams)
-        });
-
-        if (!response.ok) {
-            throw new Error('查询失败');
-        }
-
-        const result = await response.json();
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/study`, queryParams);
+        const result = response.data;
         console.log('查询结果:', result);  // 添加调试日志
 
         // 更新数据和显示
@@ -1007,7 +998,7 @@ async function searchQR() {
         updateQRPagination(qrAllData.length);
     } catch (error) {
         console.error('查询失败:', error);
-        alert('查询失败，请查网络连接');
+        alert(error.response?.data || '查询失败，请检查网络连接');
     }
 }
 
@@ -1065,16 +1056,8 @@ async function toggleQRSeriesInfo(row) {
     }
 
     try {
-        const response = await fetch(`/api/QueryRetrieve/${nodeId}/query/series/${studyUid}`, {
-            method: 'POST'
-        });
-
-        if (!response.ok) {
-            throw new Error('获取序列失败');
-        }
-
-        const result = await response.json();
-        console.log('序列数据:', result);
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/series/${studyUid}`);
+        const result = response.data;
 
         // 创建序列信息行
         const seriesInfoRow = $(`
@@ -1116,63 +1099,34 @@ async function toggleQRSeriesInfo(row) {
         seriesInfoRow.show();
     } catch (error) {
         console.error('获取序列失败:', error);
-        alert('获取序列失败，请检查网络连接');
+        alert(error.response?.data || '获取序列失败，请检查网络连接');
     }
 }
 
 // 获取检查
-// 获取检查
 async function moveQRStudy(studyUid, event) {
-    // 阻止事件冒泡，防止触发行的点击事件
     if (event) {
         event.stopPropagation();
     }
 
-    // 添加这两行代码
+    // 保留确认对话框
     if (!await showConfirmMoveDialog()) {
         return;  // 用户取消
     }
 
-
     const nodeId = document.getElementById('qrNode').value;
     try {
-        const response = await fetch(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`, {
-            method: 'POST'
-        });
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`);
+        const result = response.data;
 
-        if (!response.ok) {
-            throw new Error('传输失败');
-        }
-
-        const result = await response.json();
-        if (response.ok && result.success !== false) {
-            const toastEl = document.getElementById('storeToast');
-            const titleEl = document.getElementById('storeToastTitle');
-            const messageEl = document.getElementById('storeToastMessage');
-            
-            toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-            toastEl.classList.add('bg-success', 'text-white');
-            titleEl.textContent = '操作成功';
-            messageEl.textContent = '检查传输已开始，请稍后去影像管理查看！';
-            
-            const storeToast = new bootstrap.Toast(toastEl);
-            storeToast.show();
+        if (result.success !== false) {
+            showToast('success', '操作成功', '检查传输已开始，请稍后去影像管理查看！');
         } else {
             throw new Error(result.message || '传输失败');
         }
     } catch (error) {
         console.error('传输失败:', error);
-        const toastEl = document.getElementById('storeToast');
-        const titleEl = document.getElementById('storeToastTitle');
-        const messageEl = document.getElementById('storeToastMessage');
-        
-        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-        toastEl.classList.add('bg-danger', 'text-white');
-        titleEl.textContent = '操作失败';
-        messageEl.textContent = error.message || '传输失败，请检查网络连接';
-        
-        const storeToast = new bootstrap.Toast(toastEl);
-        storeToast.show();
+        showToast('error', '操作失败', error.response?.data || error.message || '传输失败，请检查网络连接');
     }
 }
 
@@ -1258,11 +1212,8 @@ async function sendStudy(studyInstanceUid, event) {
 
     try {
         // 加载远程节点列表
-        const response = await fetch('/api/StoreSCU/nodes');
-        if (!response.ok) {
-            throw new Error('获取节点列表失败');
-        }
-        const nodes = await response.json();
+        const response = await axios.get('/api/StoreSCU/nodes');
+        const nodes = response.data;
 
         if (!nodes || nodes.length === 0) {
             alert('未配置远程节点');
@@ -1270,24 +1221,18 @@ async function sendStudy(studyInstanceUid, event) {
         }
 
         // 显示节点选择对话框
-        const nodeOptions = nodes.map(node => 
-            `${node.name} (${node.aeTitle}@${node.hostName}:${node.port})`
-        );
+        const nodeOptions = nodes.map(node => {
+            return `${node.name} (${node.aeTitle}@${node.hostName}:${node.port})`;
+        });
+
         const selectedIndex = await showNodeSelectionDialog(nodeOptions);
         if (selectedIndex === -1) return;  // 用户取消
         
         const selectedNode = nodes[selectedIndex];
 
         // 调用发送接口
-        const sendResponse = await fetch(`/api/StoreSCU/sendStudy/${selectedNode.name}/${studyInstanceUid}`, {
-            method: 'POST'
-        });
-
-        if (!sendResponse.ok) {
-            throw new Error('发送失败');
-        }
-
-        const result = await sendResponse.json();
+        const sendResponse = await axios.post(`/api/StoreSCU/sendStudy/${selectedNode.name}/${studyInstanceUid}`);
+        const result = sendResponse.data;
         
         // 显示结果提示
         showToast('success', '操作成功', `图像发送成功，共发送 ${result.totalFiles} 个文件`);
@@ -1296,8 +1241,9 @@ async function sendStudy(studyInstanceUid, event) {
         showToast('error', '操作失败', error.message || '发送失败，请检查网络连接');
     }
 }
+
 // 显示节点选择对话框
-function showNodeSelectionDialog(nodes) {
+function showNodeSelectionDialog(nodeOptions) {
     return new Promise((resolve) => {
         const html = `
             <div class="modal fade" id="nodeSelectModal" tabindex="-1">
@@ -1311,7 +1257,7 @@ function showNodeSelectionDialog(nodes) {
                             <div class="mb-3">
                                 <label class="form-label">请选择要发送到的PACS节点：</label>
                                 <select class="form-select" id="nodeSelect">
-                                    ${nodes.map((node, index) => 
+                                    ${nodeOptions.map((node, index) => 
                                         `<option value="${index}">${node}</option>`
                                     ).join('')}
                                 </select>
@@ -1326,52 +1272,31 @@ function showNodeSelectionDialog(nodes) {
             </div>
         `;
 
-        // 添加模态框到页面
         document.body.insertAdjacentHTML('beforeend', html);
-        
         const modal = new bootstrap.Modal(document.getElementById('nodeSelectModal'));
-        
-        // 处理确认选择
+
         window.confirmNodeSelection = () => {
             const select = document.getElementById('nodeSelect');
             const selectedIndex = parseInt(select.value);
             modal.hide();
             resolve(selectedIndex);
             
-            // 清理模态框
             setTimeout(() => {
                 document.getElementById('nodeSelectModal').remove();
                 delete window.confirmNodeSelection;
             }, 300);
         };
-        
-        // 处理取消选择
+
         document.getElementById('nodeSelectModal').addEventListener('hidden.bs.modal', () => {
             resolve(-1);
-            // 清理模态框
             setTimeout(() => {
                 document.getElementById('nodeSelectModal').remove();
                 delete window.confirmNodeSelection;
             }, 300);
         });
-        
+
         modal.show();
     });
-}
-
-// 添加通用的提示框显示函数
-function showToast(type, title, message) {
-    const toastEl = document.getElementById('storeToast');
-    const titleEl = document.getElementById('storeToastTitle');
-    const messageEl = document.getElementById('storeToastMessage');
-    
-    toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-    toastEl.classList.add(type === 'success' ? 'bg-success' : 'bg-danger', 'text-white');
-    titleEl.textContent = title;
-    messageEl.textContent = message;
-    
-    const storeToast = new bootstrap.Toast(toastEl);
-    storeToast.show();
 }
 
 // 添加确认对话框函数
@@ -1426,5 +1351,16 @@ function showConfirmMoveDialog() {
         
         modal.show();
     });
+}
+
+function logout() {
+    axios.post('/api/auth/logout')
+        .then(() => {
+            window.location.href = '/login.html';
+        })
+        .catch(error => {
+            console.error('登出失败:', error);
+            window.location.href = '/login.html';  // 登出失败也跳转到登录页
+        });
 }
 

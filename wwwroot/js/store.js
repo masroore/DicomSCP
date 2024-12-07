@@ -1,13 +1,25 @@
 // 存储选中的文件
 let selectedFiles = new Map();
 
+// 添加 axios 拦截器初始化
+function initAxiosInterceptors() {
+    axios.interceptors.response.use(
+        response => response,
+        error => {
+            if (error.response && error.response.status === 401) {
+                window.location.href = '/login.html';
+                return new Promise(() => {});
+            }
+            return Promise.reject(error);
+        }
+    );
+}
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 初始化拖放区域
+    initAxiosInterceptors();
     initDropZone();
-    // 初始化文件选择
     initFileInputs();
-    // 加载节点列表
     loadStoreNodes();
     // 初始化 Toast
     storeToast = new bootstrap.Toast(document.getElementById('storeToast'), {
@@ -331,17 +343,9 @@ function clearSelection() {
 // 加载节点列表
 async function loadStoreNodes() {
     try {
-        const response = await fetch('/api/StoreSCU/nodes');
-        if (response.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
+        const response = await axios.get('/api/StoreSCU/nodes');
+        const nodes = response.data;
         
-        if (!response.ok) {
-            throw new Error('获取节点列表失败');
-        }
-        
-        const nodes = await response.json();
         const select = document.getElementById('storeNode');
         
         if (nodes.length === 0) {
@@ -399,19 +403,7 @@ async function sendFiles() {
             updateUI();
 
             try {
-                const response = await fetch(`/api/StoreSCU/send/${nodeId}`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error(await response.text() || '发送失败');
-                }
+                await axios.post(`/api/StoreSCU/send/${nodeId}`, formData);
 
                 batch.forEach(([_, fileInfo]) => {
                     fileInfo.status = 'success';
@@ -432,7 +424,7 @@ async function sendFiles() {
 
     } catch (error) {
         console.error('发送失败:', error);
-        showToast('发送失败: ' + error.message, false);
+        showToast('发送失败: ' + (error.response?.data || error.message), false);
     } finally {
         sendButton.disabled = false;
         clearButton.disabled = false;

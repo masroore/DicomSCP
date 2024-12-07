@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Data;
 using DicomSCP.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace DicomSCP.Controllers;
 
@@ -16,6 +19,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         try
@@ -28,29 +32,35 @@ public class AuthController : ControllerBase
                 DicomLogger.Warning("Api", "[API] 登录失败 - 用户名: {Username}, 原因: 用户名或密码错误", request.Username);
                 return Unauthorized("用户名或密码错误");
             }
-            
-            // 生成包含时间戳的认证值
-            var token = Guid.NewGuid().ToString("N");
-            var authValue = $"{token}|{DateTime.Now:O}";
-            
-            Response.Cookies.Append("auth", authValue, new CookieOptions
-            {
-                HttpOnly = true,
-                SameSite = SameSiteMode.Lax,
-                IsEssential = true,
-                Path = "/",
-                Secure = Request.IsHttps,
-                Expires = DateTimeOffset.Now.AddDays(7)  // Cookie 本身设置较长的过期时间
-            });
 
+            // 创建身份认证票据
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, request.Username),
+                new Claim("LoginTime", DateTime.UtcNow.ToString())
+            };
+
+            var claimsIdentity = new ClaimsIdentity(claims, "CustomAuth");
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30),
+                AllowRefresh = true
+            };
+
+            await HttpContext.SignInAsync(
+                "CustomAuth",
+                new ClaimsPrincipal(claimsIdentity),
+                authProperties);
+
+            // 设置用户名 cookie 供前端使用
             Response.Cookies.Append("username", request.Username, new CookieOptions
             {
                 HttpOnly = false,
-                Expires = DateTimeOffset.Now.AddDays(7),
                 SameSite = SameSiteMode.Lax,
-                IsEssential = true,
                 Path = "/",
-                Secure = Request.IsHttps
+                Secure = Request.IsHttps,
+                Expires = DateTimeOffset.Now.AddMinutes(30)
             });
 
             DicomLogger.Information("Api", "[API] 登录成功 - 用户名: {Username}", request.Username);
@@ -63,14 +73,16 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Authorize]
     [HttpPost("logout")]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout()
     {
         try
         {
-            var username = Request.Cookies["username"] ?? "unknown";
-            Response.Cookies.Delete("auth", new CookieOptions { Path = "/" });
+            var username = User.Identity?.Name ?? "unknown";
+            await HttpContext.SignOutAsync("CustomAuth");
             Response.Cookies.Delete("username", new CookieOptions { Path = "/" });
+            
             DicomLogger.Information("Api", "[API] 用户登出 - 用户名: {Username}", username);
             return Ok();
         }
@@ -81,19 +93,13 @@ public class AuthController : ControllerBase
         }
     }
 
-    // 添加修改密码的请求模型
-    public class ChangePasswordRequest
-    {
-        public string OldPassword { get; set; } = string.Empty;
-        public string NewPassword { get; set; } = string.Empty;
-    }
-
+    [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
         try
         {
-            var username = Request.Cookies["username"];
+            var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username))
             {
                 DicomLogger.Warning("Api", "[API] 修改密码失败 - 原因: 未登录");
@@ -112,26 +118,25 @@ public class AuthController : ControllerBase
             await _repository.ChangePasswordAsync(username, request.NewPassword);
 
             // 清除登录状态
-            Response.Cookies.Delete("username");
+            await HttpContext.SignOutAsync("CustomAuth");
+            Response.Cookies.Delete("username", new CookieOptions { Path = "/" });
             
             DicomLogger.Information("Api", "[API] 修改密码成功 - 用户名: {Username}", username);
             return Ok();
         }
         catch (Exception ex)
         {
-            var username = Request.Cookies["username"] ?? "unknown";
+            var username = User.Identity?.Name ?? "unknown";
             DicomLogger.Error("Api", ex, "[API] 修改密码异常 - 用户名: {Username}", username);
             return StatusCode(500, "修改密码失败");
         }
     }
 
+    [Authorize]
     [HttpGet("check-session")]
     public IActionResult CheckSession()
     {
-        // 中间件会自动处理会话验证
-        // 如果会话有效，返回 200 OK
-        // 如果会话无效，中间件会返回 401
-        return Ok();
+        return Ok(new { username = User.Identity?.Name });
     }
 }
 
@@ -139,4 +144,10 @@ public class LoginRequest
 {
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+}
+
+public class ChangePasswordRequest
+{
+    public string OldPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
 } 

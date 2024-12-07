@@ -11,6 +11,8 @@ using DicomSCP.Data;
 using DicomSCP.Models;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -120,6 +122,41 @@ builder.Services.AddScoped<IQueryRetrieveSCU, QueryRetrieveSCU>();
 // 注册 Swagger 配置
 builder.Services.Configure<SwaggerSettings>(builder.Configuration.GetSection("Swagger"));
 
+builder.Services.AddAuthentication("CustomAuth")
+    .AddCookie("CustomAuth", options =>
+    {
+        options.Cookie.Name = "auth";
+        options.LoginPath = "/login.html";
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+        options.SlidingExpiration = true;  // 启用滑动过期
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnRedirectToLogin = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api"))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            },
+            OnValidatePrincipal = context =>
+            {
+                DicomLogger.Debug("Api", "[Auth] Validating principal for path: {0}", 
+                    context.Request.Path.Value ?? "(null)");
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+// 添加授权但不设置默认策略
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 // 初始化服务提供者
@@ -169,11 +206,13 @@ app.UseDefaultFiles(new DefaultFilesOptions
 });
 app.UseStaticFiles();
 
-// 认证中间件
+// 先处理路由
+app.UseRouting();
+
+// 白名单中间件移到认证之前
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value?.ToLower();
-    
     var allowedPaths = new[] 
     {
         "/login.html",
@@ -191,77 +230,19 @@ app.Use(async (context, next) =>
     if (allowedPaths.Any(p => path?.StartsWith(p) == true))
     {
         DicomLogger.Debug("Api", "[Auth] Allowed path: {0}", path ?? "(null)");
+        // 对于白名单路径，标记为已处理认证
+        context.Items["SkipAuthentication"] = true;
         await next();
         return;
     }
 
-    // 检查认证 Cookie
-    if (!context.Request.Cookies.ContainsKey("auth"))
-    {
-        DicomLogger.Warning("Api", "[Auth] No auth cookie found for path: {0}", path ?? "(null)");
-        if (path?.StartsWith("/api") == true)
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return;
-        }
-        
-        var scheme = context.Request.Scheme;
-        var host = context.Request.Host.Value;
-        var redirectUrl = $"{scheme}://{host}/login.html";
-        context.Response.Redirect(redirectUrl);
-        return;
-    }
-
-    // 验证 Cookie 值
-    var authCookie = context.Request.Cookies["auth"];
-    if (string.IsNullOrEmpty(authCookie))
-    {
-        DicomLogger.Warning("Api", "[Auth] Auth cookie is empty");
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return;
-    }
-
-    try
-    {
-        // 解析 Cookie 值，格式为 "token|timestamp"
-        var parts = authCookie.Split('|');
-        if (parts.Length == 2 && 
-            DateTime.TryParse(parts[1], out var lastActivity))
-        {
-            // 检查最后活动时间是否超过30分钟
-            if (DateTime.Now - lastActivity > TimeSpan.FromMinutes(30))
-            {
-                DicomLogger.Warning("Api", "[Auth] Session expired");
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return;
-            }
-        }
-    }
-    catch
-    {
-        // 如果解析失败，视为无效的 Cookie
-        DicomLogger.Warning("Api", "[Auth] Invalid auth cookie format");
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return;
-    }
-
-    // 更新最后活动时间
-    var newAuthValue = $"{authCookie.Split('|')[0]}|{DateTime.Now:O}";
-    context.Response.Cookies.Append("auth", newAuthValue, new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = context.Request.IsHttps,
-        SameSite = SameSiteMode.Lax,
-        Expires = DateTimeOffset.Now.AddDays(7)   // Cookie 本身设置较长的过期时间
-    });
-
-    DicomLogger.Debug("Api", "[Auth] Auth cookie found: {0}", authCookie ?? "(null)");
     await next();
 });
 
-// 其他中间件按顺序放在认证中间件后面
-app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
+
+// 确保控制器路由在认证后
 app.MapControllers();
 
 // 处理根路径

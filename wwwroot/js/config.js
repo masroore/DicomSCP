@@ -1,7 +1,21 @@
 class ConfigManager {
     constructor() {
+        this.initAxiosInterceptors();
         this.init();
         this.helpModal = new bootstrap.Modal(document.getElementById('configHelpModal'));
+    }
+
+    initAxiosInterceptors() {
+        axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response && error.response.status === 401) {
+                    window.location.href = '/login.html';
+                    return new Promise(() => {});
+                }
+                return Promise.reject(error);
+            }
+        );
     }
 
     init() {
@@ -22,20 +36,10 @@ class ConfigManager {
 
     async loadConfig() {
         try {
-            const response = await fetch('/api/config');
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
-            if (!response.ok) {
-                throw new Error('获取配置失败');
-            }
-
-            const config = await response.text();
+            const response = await axios.get('/api/config');
             const editor = document.getElementById('configEditor');
             if (editor) {
-                editor.value = config;
+                editor.value = JSON.stringify(response.data, null, 2);
             }
         } catch (error) {
             console.error('获取配置失败:', error);
@@ -45,35 +49,19 @@ class ConfigManager {
 
     async saveConfig() {
         try {
-            // 验证JSON格式
+            // 先验证是否是有效的 JSON
+            const configText = document.getElementById('configEditor').value;
             let config;
             try {
-                config = JSON.parse(document.getElementById('configEditor').value);
+                config = JSON.parse(configText);
             } catch (e) {
                 this.showToast('danger', '配置格式不正确，请检查JSON格式');
                 return;
             }
 
-            const response = await fetch('/api/config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(config)
-            });
+            await axios.post('/api/config', config);
 
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error(await response.text());
-            }
-
-            // 只提示保存成功和需要重启
             this.showToast('success', '配置保存成功！需要重启服务生效');
-
         } catch (error) {
             console.error('保存配置失败:', error);
             this.showToast('danger', '保存配置失败: ' + error.message);
@@ -108,3 +96,4 @@ class ConfigManager {
 
 // 初始化
 window.configManager = new ConfigManager(); 
+

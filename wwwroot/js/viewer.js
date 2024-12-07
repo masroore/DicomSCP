@@ -6,6 +6,20 @@ const studyUid = urlParams.get('studyUid');
 const seriesUid = urlParams.get('seriesUid');
 const baseUrl = window.location.origin;
 
+// 添加 axios 拦截器初始化
+function initAxiosInterceptors() {
+    axios.interceptors.response.use(
+        response => response,
+        error => {
+            if (error.response && error.response.status === 401) {
+                window.location.href = '/login.html';
+                return new Promise(() => {});
+            }
+            return Promise.reject(error);
+        }
+    );
+}
+
 // 初始化 Cornerstone
 function initializeViewer() {
     try {
@@ -122,20 +136,15 @@ function initializeViewer() {
     }
 }
 
+// 在页面加载时初始化
+initAxiosInterceptors();
+
 // 加载序列图像
 async function loadImages() {
     try {
-        const response = await fetch(`/api/images/${studyUid}/series/${seriesUid}/instances`);
-        if (response.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
-        
-        if (!response.ok) {
-            throw new Error('Failed to load images');
-        }
-        
-        const instances = await response.json();
+        const response = await axios.get(`/api/images/${studyUid}/series/${seriesUid}/instances`);
+        const instances = response.data;
+
         console.log('[Loading] Instances received:', instances);
         
         imageIds = instances.map(instance => {
