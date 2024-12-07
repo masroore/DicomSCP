@@ -13,6 +13,8 @@ using DicomSCP.Data;
 using System.IO;
 using System.Text.Json;
 using System.Data;
+using Microsoft.Extensions.Options;
+using DicomSCP.Configuration;
 
 namespace DicomSCP.Data;
 
@@ -28,6 +30,7 @@ public class DicomRepository : BaseRepository, IDisposable
     private DateTime _lastProcessTime = DateTime.Now;
     private bool _initialized;
     private bool _disposed;
+    private readonly DicomSettings _settings;
 
     private static class SqlQueries
     {
@@ -178,9 +181,10 @@ public class DicomRepository : BaseRepository, IDisposable
             )";
     }
 
-    public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger)
+    public DicomRepository(IConfiguration configuration, ILogger<DicomRepository> logger, IOptions<DicomSettings> settings)
         : base(configuration.GetConnectionString("DicomDb") ?? throw new ArgumentException("Missing DicomDb connection string"), logger)
     {
+        _settings = settings.Value;
         _batchSize = configuration.GetValue<int>("DicomSettings:BatchSize", 50);
 
         // 初始化数据库
@@ -996,7 +1000,7 @@ public class DicomRepository : BaseRepository, IDisposable
     /// <summary>
     /// 更打印任务状态和图像路径
     /// </summary>
-    public async Task<bool> UpdatePrintJobStatusAsync(string jobId, string status, string? imagePath = null)
+    public async Task<bool> UpdatePrintJobStatusAsync(string jobId, PrintJobStatus status, string? imagePath = null)
     {
         try
         {
@@ -1004,7 +1008,7 @@ public class DicomRepository : BaseRepository, IDisposable
             var updates = new List<string> { "Status = @Status", "UpdateTime = @UpdateTime" };
             var parameters = new DynamicParameters();
             parameters.Add("@JobId", jobId);
-            parameters.Add("@Status", status);
+            parameters.Add("@Status", status.ToString());
             parameters.Add("@UpdateTime", DateTime.Now);
 
             if (imagePath != null)
@@ -1412,5 +1416,23 @@ public class DicomRepository : BaseRepository, IDisposable
             LogError(ex, "检查查询失败");
             return new List<Study>();
         }
+    }
+
+    public async Task<PrintJob?> GetPrintJobByIdAsync(string jobId)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = "SELECT * FROM PrintJobs WHERE JobId = @JobId";
+        return await connection.QueryFirstOrDefaultAsync<PrintJob>(sql, new { JobId = jobId });
+    }
+
+    public Configuration.PrinterConfig? GetPrinterByName(string printerName)
+    {
+        var printers = _settings.PrintSCU?.Printers;
+        return printers?.FirstOrDefault(p => p.Name == printerName);
+    }
+
+    public List<Configuration.PrinterConfig> GetPrinters()
+    {
+        return _settings.PrintSCU?.Printers ?? new List<Configuration.PrinterConfig>();
     }
 }

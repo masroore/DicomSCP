@@ -468,4 +468,63 @@ function showToast(message, isSuccess = true) {
     
     messageEl.textContent = message;
     storeToast.show();
-} 
+}
+
+class StoreManager {
+    constructor() {
+        this.nodes = [];
+        this.defaultNode = null;
+        this.loadNodes();
+    }
+
+    async loadNodes() {
+        try {
+            const response = await fetch('/api/StoreSCU/nodes');
+            if (!response.ok) {
+                throw new Error('获取节点列表失败');
+            }
+            this.nodes = await response.json();
+            
+            // 设置默认节点：优先使用配置中标记为默认的节点，如果没有则使用第一个节点
+            this.defaultNode = this.nodes.find(n => n.isDefault) || this.nodes[0];
+        } catch (error) {
+            console.error('加载节点失败:', error);
+        }
+    }
+
+    async sendFiles(files) {
+        try {
+            if (!files || files.length === 0) {
+                throw new Error('请选择要发送的文件');
+            }
+
+            // 使用默认节点
+            const remoteName = this.defaultNode?.name;
+            if (!remoteName) {
+                throw new Error('未找到可用的目标节点');
+            }
+
+            const formData = new FormData();
+            for (const file of files) {
+                formData.append('files', file);
+            }
+
+            const response = await fetch(`/api/StoreSCU/send/${remoteName}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('发送文件失败');
+            }
+
+            const result = await response.json();
+            console.log('发送成功:', result.message);
+        } catch (error) {
+            console.error('发送文件失败:', error);
+        }
+    }
+}
+
+// 创建全局实例
+const storeManager = new StoreManager(); 

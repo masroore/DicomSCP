@@ -1,9 +1,10 @@
 using FellowOakDicom;
 using FellowOakDicom.Network;
 using FellowOakDicom.Network.Client;
+using FellowOakDicom.Imaging;
 using DicomSCP.Configuration;
-using Microsoft.Extensions.Options;
 using DicomSCP.Models;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using static DicomSCP.Models.PrintJob;
 
@@ -115,11 +116,15 @@ public class PrintSCU : IPrintSCU
         if (string.IsNullOrEmpty(request.SmoothingType))
             request.SmoothingType = "MEDIUM";
         if (string.IsNullOrEmpty(request.BorderDensity))
-            request.BorderDensity = "WHITE";
+            request.BorderDensity = "BLACK";
         if (string.IsNullOrEmpty(request.EmptyImageDensity))
-            request.EmptyImageDensity = "WHITE";
+            request.EmptyImageDensity = "BLACK";
         if (string.IsNullOrEmpty(request.Trim))
             request.Trim = "NO";
+        if (request.EnableDpi && !request.Dpi.HasValue)
+        {
+            request.Dpi = 150;  // 设置默认DPI为150
+        }
     }
 
     private bool ValidatePrintParameters(PrintRequest request)
@@ -196,7 +201,7 @@ public class PrintSCU : IPrintSCU
 
         if (!PrintConstants.Densities.Contains(request.BorderDensity))
         {
-            DicomLogger.Error("PrintSCU", "无效的边框密度: {Density}", request.BorderDensity);
+            DicomLogger.Error("PrintSCU", "无效��边密度: {Density}", request.BorderDensity);
             return false;
         }
 
@@ -210,6 +215,21 @@ public class PrintSCU : IPrintSCU
         {
             DicomLogger.Error("PrintSCU", "无效的裁剪选项: {Trim}", request.Trim);
             return false;
+        }
+
+        // 验证DPI设置
+        if (request.EnableDpi)
+        {
+            if (!request.Dpi.HasValue)
+            {
+                DicomLogger.Error("PrintSCU", "启用DPI时必须指定DPI值");
+                return false;
+            }
+            if (request.Dpi.Value < 100 || request.Dpi.Value > 300)
+            {
+                DicomLogger.Error("PrintSCU", "无效的DPI值: {DPI}，有效范围: 100-300", request.Dpi.Value);
+                return false;
+            }
         }
 
         return true;
@@ -262,6 +282,8 @@ public class PrintSCU : IPrintSCU
     private DicomDataset CreateImageBoxDataset(DicomFile file)
     {
         var dataset = new DicomDataset();
+
+        // 设置基本图像参数
         dataset.Add(DicomTag.Columns, (ushort)file.Dataset.GetSingleValue<int>(DicomTag.Columns));
         dataset.Add(DicomTag.Rows, (ushort)file.Dataset.GetSingleValue<int>(DicomTag.Rows));
         dataset.Add(DicomTag.BitsAllocated, (ushort)8);
@@ -271,14 +293,79 @@ public class PrintSCU : IPrintSCU
         dataset.Add(DicomTag.SamplesPerPixel, (ushort)1);
         dataset.Add(DicomTag.PhotometricInterpretation, "MONOCHROME2");
 
-        var pixelData = file.Dataset.GetDicomItem<DicomItem>(DicomTag.PixelData);
-        if (pixelData != null)
+        // 复制检查号等标识信息
+        if (file.Dataset.Contains(DicomTag.AccessionNumber))
         {
-            dataset.Add(pixelData);
-            DicomLogger.Information("PrintSCU", "已复制像素数据");
+            dataset.Add(DicomTag.AccessionNumber, file.Dataset.GetString(DicomTag.AccessionNumber));
+            DicomLogger.Debug("PrintSCU", "复制检查号: {AccNo}", file.Dataset.GetString(DicomTag.AccessionNumber));
         }
 
+        // 复制 StudyInstanceUID
+        if (file.Dataset.Contains(DicomTag.StudyInstanceUID))
+        {
+            dataset.Add(DicomTag.StudyInstanceUID, file.Dataset.GetString(DicomTag.StudyInstanceUID));
+            DicomLogger.Debug("PrintSCU", "复制检查 UID: {StudyUID}", file.Dataset.GetString(DicomTag.StudyInstanceUID));
+        }
+        else
+        {
+            // 如果没有 StudyInstanceUID，生成一个新的
+            var studyUid = DicomUID.Generate();
+            dataset.Add(DicomTag.StudyInstanceUID, studyUid.UID);
+            DicomLogger.Debug("PrintSCU", "生成新的检查 UID: {StudyUID}", studyUid.UID);
+        }
+
+        // 复制其他相关标识信息
+        if (file.Dataset.Contains(DicomTag.PatientID))
+        {
+            dataset.Add(DicomTag.PatientID, file.Dataset.GetString(DicomTag.PatientID));
+        }
+        if (file.Dataset.Contains(DicomTag.PatientName))
+        {
+            dataset.Add(DicomTag.PatientName, file.Dataset.GetString(DicomTag.PatientName));
+        }
+
+        // 转换图像
+        var dicomImage = new DicomImage(file.Dataset);
+        using var renderedImage = dicomImage.RenderImage();
+        if (renderedImage is not IImage imageData)
+        {
+            throw new DicomDataException("图像转换失败");
+        }
+
+        var pixelData = new byte[imageData.Width * imageData.Height];
+        ConvertToGrayscale(renderedImage, pixelData, imageData.Width, imageData.Height);
+        dataset.Add(DicomTag.PixelData, pixelData);
+        
+        DicomLogger.Information("PrintSCU", "已转换为8位灰度图像");
+
         return dataset;
+    }
+
+    private static void ConvertToGrayscale(IImage renderedImage, byte[] pixelData, int width, int height)
+    {
+        try
+        {
+            var pixels = renderedImage.AsBytes();
+            if (pixels == null || pixels.Length < width * height * 4)
+            {
+                throw new DicomDataException("图像数据获取失败");
+            }
+
+            // 使用并行处理来提高性能
+            Parallel.For(0, height * width, j =>
+            {
+                var i = j * 4;
+                // R * 38 + G * 75 + B * 15 >> 7 等价于 R * 0.3 + G * 0.59 + B * 0.11
+                pixelData[j] = (byte)((pixels[i] * 38 + pixels[i + 1] * 75 + pixels[i + 2] * 15) >> 7);
+            });
+
+            DicomLogger.Information("PrintSCU", "已转换 {Count} 个像素为灰度值", width * height);
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("PrintSCU", ex, "图像转换失败");
+            throw new DicomDataException("图像转换失败: " + ex.Message);
+        }
     }
 
     public async Task<bool> VerifyAsync(string hostName, int port, string calledAE)
@@ -340,7 +427,7 @@ public class PrintSCU : IPrintSCU
             // 验证连接
             if (!await VerifyAsync(request.HostName, request.Port, request.CalledAE))
             {
-                DicomLogger.Error("PrintSCU", "打印机连接验证失败");
+                DicomLogger.Error("PrintSCU", "打印连接验证失败");
                 return false;
             }
 
@@ -349,6 +436,19 @@ public class PrintSCU : IPrintSCU
 
             // 读取源文件
             var file = await LoadDicomFileAsync(request.FilePath);
+
+            // 如果设置了DPI，处理图像
+            DicomDataset imageDataset;
+            if (request.EnableDpi && request.Dpi.HasValue)
+            {
+                DicomLogger.Information("PrintSCU", "使用DPI处理图像: {DPI}", request.Dpi.Value);
+                imageDataset = ImageProcessor.ResizeImage(file, request.Dpi.Value, request.FilmSizeID);
+            }
+            else
+            {
+                DicomLogger.Information("PrintSCU", "不使用DPI处理，保持原始图像尺寸");
+                imageDataset = file.Dataset;
+            }
 
             // 创建打印客户端
             var client = CreateClient(request.HostName, request.Port, _aeTitle, request.CalledAE);
@@ -382,7 +482,7 @@ public class PrintSCU : IPrintSCU
 
             // 添加图像序列
             var imageSequence = new DicomSequence(DicomTag.BasicGrayscaleImageSequence);
-            imageSequence.Items.Add(CreateImageBoxDataset(file));
+            imageSequence.Items.Add(CreateImageBoxDataset(new DicomFile(imageDataset)));
             imageBoxRequest.Dataset.Add(imageSequence);
 
             // 发送请求序列
@@ -424,3 +524,4 @@ public class PrintSCU : IPrintSCU
         }
     }
 } 
+

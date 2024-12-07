@@ -5,8 +5,12 @@ class PrintManager {
         this.totalPages = 0;
         this.totalItems = 0;
         this.currentJobs = [];
+        this.printers = [];
+        this.selectedJobId = null;
+        this.printerSelectModal = null;
         this.initializeEvents();
         this.loadPrintJobs();
+        this.loadPrinters();
     }
 
     initializeEvents() {
@@ -25,6 +29,36 @@ class PrintManager {
         }
         if (nextBtn) {
             nextBtn.addEventListener('click', () => this.nextPage());
+        }
+
+        // 初始化打印机选择模态框
+        this.printerSelectModal = new bootstrap.Modal(document.getElementById('printerSelectModal'), {
+            backdrop: 'static',  // 点击背景不关闭
+            keyboard: false      // 按ESC键不关闭
+        });
+        
+        // 绑定确认打印按钮事件
+        const confirmPrintBtn = document.getElementById('confirmPrint');
+        if (confirmPrintBtn) {
+            confirmPrintBtn.addEventListener('click', () => this.confirmPrint());
+        }
+
+        // 绑定取消按钮事件
+        const cancelPrintBtn = document.getElementById('printerSelectModal').querySelector('.btn-secondary');
+        if (cancelPrintBtn) {
+            cancelPrintBtn.addEventListener('click', () => {
+                this.selectedJobId = null;
+                this.printerSelectModal.hide();
+            });
+        }
+
+        // 绑定关闭按钮事件
+        const closeBtn = document.getElementById('printerSelectModal').querySelector('.btn-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                this.selectedJobId = null;
+                this.printerSelectModal.hide();
+            });
         }
     }
 
@@ -130,7 +164,8 @@ class PrintManager {
     static PrintJobStatus = {
         0: 'Created',
         1: 'ImageReceived',
-        2: 'Failed'
+        2: 'Completed',
+        3: 'Failed'
     };
 
     getStatusBadgeClass(status) {
@@ -144,6 +179,8 @@ class PrintManager {
                 return 'bg-secondary text-white';
             case 'imagereceived':
                 return 'bg-info text-white';
+            case 'completed':
+                return 'bg-success text-white';
             case 'failed':
                 return 'bg-danger text-white';
             default:
@@ -160,6 +197,7 @@ class PrintManager {
         const statusText = {
             'Created': '已创建',
             'ImageReceived': '已接收',
+            'Completed': '已完成',
             'Failed': '失败'
         };
 
@@ -172,6 +210,14 @@ class PrintManager {
     getActionButtons(job) {
         const buttons = [];
         
+        // 添加打印按钮
+        buttons.push(`
+            <button class="btn btn-sm btn-success me-1" 
+                onclick="printManager.showPrinterSelect('${job.jobId}')">
+                <i class="bi bi-printer"></i> 打印
+            </button>
+        `);
+
         // 添加预览按钮
         buttons.push(`
             <button class="btn btn-sm btn-primary me-1" 
@@ -538,6 +584,82 @@ class PrintManager {
                 return this.formatDateTime(value);
             default:
                 return value.toString();
+        }
+    }
+
+    // 加载打印机列表
+    async loadPrinters() {
+        try {
+            const response = await fetch('/api/PrintScu/printers');
+            if (!response.ok) {
+                throw new Error('获取打印机列表失败');
+            }
+            this.printers = await response.json();
+            this.updatePrinterSelect();
+        } catch (error) {
+            console.error('加载打印机失败:', error);
+            this.showToast('错误', '加载打印机列表失败: ' + error.message, 'error');
+        }
+    }
+
+    // 更新打印机下拉列表
+    updatePrinterSelect() {
+        const select = document.getElementById('printerSelect');
+        if (!select) return;
+
+        select.innerHTML = this.printers.map(printer => `
+            <option value="${printer.name}" ${printer.isDefault ? 'selected' : ''}>
+                ${printer.name} - ${printer.description || printer.aeTitle}
+            </option>
+        `).join('');
+
+        // 如果没有选中的打印机（没有默认打印机），选择第一个
+        if (!select.value && this.printers.length > 0) {
+            select.value = this.printers[0].name;
+        }
+    }
+
+    // 显示打印机选择对话框
+    showPrinterSelect(jobId) {
+        this.selectedJobId = jobId;
+        this.printerSelectModal.show();
+    }
+
+    // 确认打印
+    async confirmPrint() {
+        if (!this.selectedJobId) return;
+
+        const printerSelect = document.getElementById('printerSelect');
+        const printerName = printerSelect.value;
+
+        if (!printerName) {
+            this.showToast('错误', '请选择打印机', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/PrintScu/print-by-job', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    jobId: this.selectedJobId,
+                    printerName: printerName
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('打印失败');
+            }
+
+            const result = await response.json();
+            this.showToast('成功', '打印任务已发送', 'success');
+            this.printerSelectModal.hide();
+            this.loadPrintJobs(); // 刷新任务列表
+        } catch (error) {
+            console.error('打印失败:', error);
+            this.showToast('错误', '打印失败: ' + error.message, 'error');
         }
     }
 }

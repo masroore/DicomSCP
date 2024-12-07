@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace DicomSCP.Models;
 
@@ -42,21 +43,32 @@ public class PrintJob
 
 public enum PrintJobStatus
 {
-    Created,        // 作业创建(Film Session创建时)
-    ImageReceived,  // 图像接收完成(保存图像后)
-    Failed          // 接收失败
+    Created,
+    ImageReceived,
+    Completed,
+    Failed
 }
-
-// 以下是新添加的模型
 
 // 打印请求模型
 public class PrintRequest
 {
+    [Required(ErrorMessage = "文件路径不能为空")]
     public string FilePath { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "打印机AE Title不能为空")]
     public string CalledAE { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "主机名不能为空")]
     public string HostName { get; set; } = string.Empty;
+
+    [Range(1, 65535, ErrorMessage = "端口号必须在1-65535之间")]
     public int Port { get; set; }
+
+    [Range(1, 99, ErrorMessage = "打印份数必须在1-99之间")]
     public int NumberOfCopies { get; set; } = 1;
+
+    public bool EnableDpi { get; set; } = false;
+    public int? Dpi { get; set; }  // 只在EnableDpi=true时使用
     public string PrintPriority { get; set; } = string.Empty;
     public string MediumType { get; set; } = string.Empty;
     public string FilmDestination { get; set; } = string.Empty;
@@ -68,22 +80,4 @@ public class PrintRequest
     public string BorderDensity { get; set; } = string.Empty;
     public string EmptyImageDensity { get; set; } = string.Empty;
     public string Trim { get; set; } = string.Empty;
-}
-
-// 打印机配置模型
-public class PrinterConfig
-{
-    public string Name { get; set; } = string.Empty;
-    public string AeTitle { get; set; } = string.Empty;
-    public string HostName { get; set; } = string.Empty;
-    public int Port { get; set; }
-    public bool IsDefault { get; set; }
-    public string Description { get; set; } = string.Empty;
-}
-
-// PrintSCU 配置模型
-public class PrintScuConfig
-{
-    public string AeTitle { get; set; } = string.Empty;
-    public List<PrinterConfig> Printers { get; set; } = new();
 } 

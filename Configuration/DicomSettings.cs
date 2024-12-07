@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Serilog.Events;
+using DicomSCP.Models;
 
 namespace DicomSCP.Configuration;
 
@@ -43,6 +44,8 @@ public class DicomSettings
     public PrintSCPSettings PrintSCP { get; set; } = new();
 
     public PrintScuConfig? PrintSCU { get; set; }
+    
+    public List<PrinterConfig> Printers { get; set; } = new();
 }
 
 public class WorklistSCPSettings

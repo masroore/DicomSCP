@@ -1332,5 +1332,28 @@
             </div>
         </div>
     </div>
+    <!-- 打印机选择对话框 -->
+<div class="modal fade" id="printerSelectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">选择打印机</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">可用打印机</label>
+                    <select class="form-select" id="printerSelect">
+                        <!-- 打印机列表将通过 JavaScript 动态填充 -->
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmPrint">确认打印</button>
+            </div>
+        </div>
+    </div>
+</div>
 </body>
 </html>
