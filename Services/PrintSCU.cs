@@ -5,6 +5,7 @@ using DicomSCP.Configuration;
 using Microsoft.Extensions.Options;
 using DicomSCP.Models;
 using Microsoft.Extensions.Logging;
+using static DicomSCP.Models.PrintJob;
 
 namespace DicomSCP.Services;
 
@@ -20,6 +21,39 @@ public class PrintSCU : IPrintSCU
     private readonly string _aeTitle;
     private readonly ILoggerFactory _loggerFactory;
 
+    // DICOM 打印常量
+    private static class PrintConstants
+    {
+        public static readonly string[] PrintPriorities = { "HIGH", "MEDIUM", "LOW" };
+        public static readonly string[] MediumTypes = { "PAPER", "CLEAR FILM", "BLUE FILM" };
+        public static readonly string[] FilmDestinations = { "MAGAZINE", "PROCESSOR", "BIN_1", "BIN_2" };
+        public static readonly string[] FilmOrientations = { "PORTRAIT", "LANDSCAPE" };
+        public static readonly string[] FilmSizes = { 
+            "8INX10IN", "10INX12IN", "11INX14IN", "14INX14IN", 
+            "14INX17IN", "24CMX30CM", "A4" 
+        };
+        public static readonly string[] MagnificationTypes = { 
+            "REPLICATE", "BILINEAR", "CUBIC", "NONE" 
+        };
+        public static readonly string[] SmoothingTypes = { 
+            "NONE", "LOW", "MEDIUM", "HIGH" 
+        };
+        public static readonly string[] Densities = { "BLACK", "WHITE" };
+        public static readonly string[] TrimOptions = { "YES", "NO" };
+
+        // 默认值
+        public const string DefaultPriority = "MEDIUM";
+        public const string DefaultMediumType = "BLUE FILM";
+        public const string DefaultDestination = "PROCESSOR";
+        public const string DefaultOrientation = "PORTRAIT";
+        public const string DefaultSize = "14INX17IN";
+        public const string DefaultDisplayFormat = "STANDARD\\1,1";
+        public const string DefaultMagnification = "REPLICATE";
+        public const string DefaultSmoothing = "MEDIUM";
+        public const string DefaultDensity = "WHITE";
+        public const string DefaultTrim = "NO";
+    }
+
     public PrintSCU(IOptions<DicomSettings> settings, ILoggerFactory loggerFactory)
     {
         _settings = settings.Value;
@@ -34,10 +68,242 @@ public class PrintSCU : IPrintSCU
         return client;
     }
 
+    private bool ValidateAETitle(string aeTitle)
+    {
+        // AE Title 必须是 16 个字符以内的 ASCII 字符
+        if (string.IsNullOrEmpty(aeTitle) || aeTitle.Length > 16)
+            return false;
+
+        // 只允许大写字母、数字和特定符号
+        return aeTitle.All(c => (c >= 'A' && c <= 'Z') || 
+                               (c >= '0' && c <= '9') || 
+                               c == '-' || c == '_');
+    }
+
+    private bool ValidateHostName(string hostName)
+    {
+        // 检查是否为IP地址或有效的主机名
+        return !string.IsNullOrEmpty(hostName) && 
+               (System.Net.IPAddress.TryParse(hostName, out _) || 
+                Uri.CheckHostName(hostName) != UriHostNameType.Unknown);
+    }
+
+    private bool ValidatePort(int port)
+    {
+        // 端口号范围：1-65535
+        return port > 0 && port <= 65535;
+    }
+
+    private void SetDefaultValues(PrintRequest request)
+    {
+        if (request.NumberOfCopies < 1)
+            request.NumberOfCopies = 1;
+        if (string.IsNullOrEmpty(request.PrintPriority))
+            request.PrintPriority = "MEDIUM";
+        if (string.IsNullOrEmpty(request.MediumType))
+            request.MediumType = "BLUE FILM";
+        if (string.IsNullOrEmpty(request.FilmDestination))
+            request.FilmDestination = "PROCESSOR";
+        if (string.IsNullOrEmpty(request.FilmOrientation))
+            request.FilmOrientation = "PORTRAIT";
+        if (string.IsNullOrEmpty(request.FilmSizeID))
+            request.FilmSizeID = "14INX17IN";
+        if (string.IsNullOrEmpty(request.ImageDisplayFormat))
+            request.ImageDisplayFormat = "STANDARD\\1,1";
+        if (string.IsNullOrEmpty(request.MagnificationType))
+            request.MagnificationType = "REPLICATE";
+        if (string.IsNullOrEmpty(request.SmoothingType))
+            request.SmoothingType = "MEDIUM";
+        if (string.IsNullOrEmpty(request.BorderDensity))
+            request.BorderDensity = "WHITE";
+        if (string.IsNullOrEmpty(request.EmptyImageDensity))
+            request.EmptyImageDensity = "WHITE";
+        if (string.IsNullOrEmpty(request.Trim))
+            request.Trim = "NO";
+    }
+
+    private bool ValidatePrintParameters(PrintRequest request)
+    {
+        // 验证文件路径
+        if (string.IsNullOrEmpty(request.FilePath))
+        {
+            DicomLogger.Error("PrintSCU", "文件路径不能为空");
+            return false;
+        }
+
+        if (!System.IO.File.Exists(request.FilePath))
+        {
+            DicomLogger.Error("PrintSCU", "文件不存在: {FilePath}", request.FilePath);
+            return false;
+        }
+
+        // 验证打印机连接参数
+        if (!ValidateAETitle(request.CalledAE))
+        {
+            DicomLogger.Error("PrintSCU", "无效的 Called AE Title: {CalledAE}", request.CalledAE);
+            return false;
+        }
+
+        if (!ValidateHostName(request.HostName))
+        {
+            DicomLogger.Error("PrintSCU", "无效的主机名: {HostName}", request.HostName);
+            return false;
+        }
+
+        if (!ValidatePort(request.Port))
+        {
+            DicomLogger.Error("PrintSCU", "无效的端口号: {Port}", request.Port);
+            return false;
+        }
+
+        // 验证打印参数
+        if (!PrintConstants.PrintPriorities.Contains(request.PrintPriority))
+        {
+            DicomLogger.Error("PrintSCU", "无效的打印优先级: {Priority}", request.PrintPriority);
+            return false;
+        }
+
+        if (!PrintConstants.MediumTypes.Contains(request.MediumType))
+        {
+            DicomLogger.Error("PrintSCU", "无效的类型: {MediumType}", request.MediumType);
+            return false;
+        }
+
+        // 补充其他打印参数的验证
+        if (!PrintConstants.FilmOrientations.Contains(request.FilmOrientation))
+        {
+            DicomLogger.Error("PrintSCU", "无效的胶片方向: {Orientation}", request.FilmOrientation);
+            return false;
+        }
+
+        if (!PrintConstants.FilmSizes.Contains(request.FilmSizeID))
+        {
+            DicomLogger.Error("PrintSCU", "无效的胶片尺寸: {Size}", request.FilmSizeID);
+            return false;
+        }
+
+        if (!PrintConstants.MagnificationTypes.Contains(request.MagnificationType))
+        {
+            DicomLogger.Error("PrintSCU", "无效的放大类型: {Type}", request.MagnificationType);
+            return false;
+        }
+
+        if (!PrintConstants.SmoothingTypes.Contains(request.SmoothingType))
+        {
+            DicomLogger.Error("PrintSCU", "无效的平滑类型: {Type}", request.SmoothingType);
+            return false;
+        }
+
+        if (!PrintConstants.Densities.Contains(request.BorderDensity))
+        {
+            DicomLogger.Error("PrintSCU", "无效的边框密度: {Density}", request.BorderDensity);
+            return false;
+        }
+
+        if (!PrintConstants.Densities.Contains(request.EmptyImageDensity))
+        {
+            DicomLogger.Error("PrintSCU", "无效的空白密度: {Density}", request.EmptyImageDensity);
+            return false;
+        }
+
+        if (!PrintConstants.TrimOptions.Contains(request.Trim))
+        {
+            DicomLogger.Error("PrintSCU", "无效的裁剪选项: {Trim}", request.Trim);
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<DicomFile> LoadDicomFileAsync(string filePath)
+    {
+        DicomLogger.Information("PrintSCU", "读取DICOM文件 - 路径: {FilePath}, 大小: {Size} bytes", 
+            filePath, new FileInfo(filePath).Length);
+        return await DicomFile.OpenAsync(filePath);
+    }
+
+    private void AddPresentationContexts(IDicomClient client)
+    {
+        client.AdditionalPresentationContexts.Add(
+            DicomPresentationContext.GetScpRolePresentationContext(
+                DicomUID.BasicFilmSession));
+        client.AdditionalPresentationContexts.Add(
+            DicomPresentationContext.GetScpRolePresentationContext(
+                DicomUID.BasicFilmBox));
+        client.AdditionalPresentationContexts.Add(
+            DicomPresentationContext.GetScpRolePresentationContext(
+                DicomUID.BasicGrayscaleImageBox));
+    }
+
+    private DicomDataset CreateFilmSessionDataset(PrintRequest request, DicomUID filmSessionUid)
+    {
+        var dataset = new DicomDataset();
+        dataset.AddOrUpdate(DicomTag.NumberOfCopies, request.NumberOfCopies.ToString());
+        dataset.AddOrUpdate(DicomTag.PrintPriority, request.PrintPriority);
+        dataset.AddOrUpdate(DicomTag.MediumType, request.MediumType);
+        dataset.AddOrUpdate(DicomTag.FilmDestination, request.FilmDestination);
+        return dataset;
+    }
+
+    private DicomDataset CreateFilmBoxDataset(PrintRequest request)
+    {
+        var dataset = new DicomDataset();
+        dataset.AddOrUpdate(DicomTag.ImageDisplayFormat, request.ImageDisplayFormat);
+        dataset.AddOrUpdate(DicomTag.FilmOrientation, request.FilmOrientation);
+        dataset.AddOrUpdate(DicomTag.FilmSizeID, request.FilmSizeID);
+        dataset.AddOrUpdate(DicomTag.MagnificationType, request.MagnificationType);
+        dataset.AddOrUpdate(DicomTag.SmoothingType, request.SmoothingType);
+        dataset.AddOrUpdate(DicomTag.BorderDensity, request.BorderDensity);
+        dataset.AddOrUpdate(DicomTag.EmptyImageDensity, request.EmptyImageDensity);
+        dataset.AddOrUpdate(DicomTag.Trim, request.Trim);
+        return dataset;
+    }
+
+    private DicomDataset CreateImageBoxDataset(DicomFile file)
+    {
+        var dataset = new DicomDataset();
+        dataset.Add(DicomTag.Columns, (ushort)file.Dataset.GetSingleValue<int>(DicomTag.Columns));
+        dataset.Add(DicomTag.Rows, (ushort)file.Dataset.GetSingleValue<int>(DicomTag.Rows));
+        dataset.Add(DicomTag.BitsAllocated, (ushort)8);
+        dataset.Add(DicomTag.BitsStored, (ushort)8);
+        dataset.Add(DicomTag.HighBit, (ushort)7);
+        dataset.Add(DicomTag.PixelRepresentation, (ushort)0);
+        dataset.Add(DicomTag.SamplesPerPixel, (ushort)1);
+        dataset.Add(DicomTag.PhotometricInterpretation, "MONOCHROME2");
+
+        var pixelData = file.Dataset.GetDicomItem<DicomItem>(DicomTag.PixelData);
+        if (pixelData != null)
+        {
+            dataset.Add(pixelData);
+            DicomLogger.Information("PrintSCU", "已复制像素数据");
+        }
+
+        return dataset;
+    }
+
     public async Task<bool> VerifyAsync(string hostName, int port, string calledAE)
     {
         try
         {
+            // 验证参数
+            if (!ValidateAETitle(calledAE))
+            {
+                DicomLogger.Warning("PrintSCU", "无效的 Called AE Title: {CalledAE}", calledAE);
+                return false;
+            }
+
+            if (!ValidateHostName(hostName))
+            {
+                DicomLogger.Warning("PrintSCU", "无效的主机名: {HostName}", hostName);
+                return false;
+            }
+
+            if (!ValidatePort(port))
+            {
+                DicomLogger.Warning("PrintSCU", "无效的端口号: {Port}", port);
+                return false;
+            }
+
             var client = CreateClient(hostName, port, _aeTitle, calledAE);
             var echo = new DicomCEchoRequest();
             await client.AddRequestAsync(echo);
@@ -48,7 +314,7 @@ public class PrintSCU : IPrintSCU
         {
             // 处理连接被拒绝的情况
             DicomLogger.Warning("PrintSCU", 
-                "打印机拒绝连接 - {CalledAE}@{Host}:{Port}, 原因: {Reason}", 
+                "打印机拒连接 - {CalledAE}@{Host}:{Port}, 原因: {Reason}", 
                 calledAE, hostName, port, ex.RejectResult);
             return false;
         }
@@ -66,12 +332,12 @@ public class PrintSCU : IPrintSCU
     {
         try
         {
-            if (string.IsNullOrEmpty(request.CallingAE))
-            {
-                request.CallingAE = _aeTitle;
-            }
+            // 设置默认值和验证
+            SetDefaultValues(request);
+            if (!ValidatePrintParameters(request))
+                return false;
 
-            // 先验证连接
+            // 验证连接
             if (!await VerifyAsync(request.HostName, request.Port, request.CalledAE))
             {
                 DicomLogger.Error("PrintSCU", "打印机连接验证失败");
@@ -79,90 +345,74 @@ public class PrintSCU : IPrintSCU
             }
 
             DicomLogger.Information("PrintSCU", "开始打印任务 - 从 {CallingAE} 到 {CalledAE}@{Host}:{Port}", 
-                request.CallingAE,
-                request.CalledAE, 
-                request.HostName, 
-                request.Port);
+                _aeTitle, request.CalledAE, request.HostName, request.Port);
 
             // 读取源文件
-            var file = await DicomFile.OpenAsync(request.FilePath);
+            var file = await LoadDicomFileAsync(request.FilePath);
 
             // 创建打印客户端
-            var client = CreateClient(
-                request.HostName, 
-                request.Port, 
-                request.CallingAE,
-                request.CalledAE);
+            var client = CreateClient(request.HostName, request.Port, _aeTitle, request.CalledAE);
+            AddPresentationContexts(client);
 
-            // 添加打印相关的表示上下文
-            client.AdditionalPresentationContexts.Add(
-                DicomPresentationContext.GetScpRolePresentationContext(
-                    DicomUID.BasicFilmSession));
-            client.AdditionalPresentationContexts.Add(
-                DicomPresentationContext.GetScpRolePresentationContext(
-                    DicomUID.BasicFilmBox));
-            client.AdditionalPresentationContexts.Add(
-                DicomPresentationContext.GetScpRolePresentationContext(
-                    DicomUID.BasicGrayscaleImageBox));
-
-            // 创建打印会话
+            // 生成UID
             var filmSessionUid = DicomUID.Generate();
             var filmBoxUid = DicomUID.Generate();
+            var imageBoxUid = DicomUID.Generate();
 
-            // 创建Film Session
-            var filmSessionRequest = new DicomNCreateRequest(
-                DicomUID.BasicFilmSession,
-                filmSessionUid)
+            // 创建请求
+            var filmSessionRequest = new DicomNCreateRequest(DicomUID.BasicFilmSession, filmSessionUid)
+            {
+                Dataset = CreateFilmSessionDataset(request, filmSessionUid)
+            };
+
+            var filmBoxRequest = new DicomNCreateRequest(DicomUID.BasicFilmBox, filmBoxUid)
+            {
+                Dataset = CreateFilmBoxDataset(request)
+            };
+
+            var imageBoxRequest = new DicomNSetRequest(DicomUID.BasicGrayscaleImageBox, imageBoxUid)
             {
                 Dataset = new DicomDataset
                 {
-                    { DicomTag.NumberOfCopies, (ushort)request.NumberOfCopies },
-                    { DicomTag.PrintPriority, request.PrintPriority },
-                    { DicomTag.MediumType, request.MediumType },
-                    { DicomTag.FilmDestination, request.FilmDestination }
+                    { DicomTag.ImageBoxPosition, (ushort)1 },
+                    { DicomTag.Polarity, "NORMAL" },
+                    { DicomTag.ImageBoxNumber, (ushort)1 }
                 }
             };
 
-            // 创建Film Box
-            var filmBoxRequest = new DicomNCreateRequest(
-                DicomUID.BasicFilmBox,
-                filmBoxUid)
-            {
-                Dataset = new DicomDataset
-                {
-                    { DicomTag.ImageDisplayFormat, request.ImageDisplayFormat },
-                    { DicomTag.FilmOrientation, request.FilmOrientation },
-                    { DicomTag.FilmSizeID, request.FilmSizeID },
-                    { DicomTag.MagnificationType, request.MagnificationType },
-                    { DicomTag.SmoothingType, request.SmoothingType },
-                    { DicomTag.BorderDensity, request.BorderDensity },
-                    { DicomTag.EmptyImageDensity, request.EmptyImageDensity },
-                    { DicomTag.Trim, request.Trim }
-                }
-            };
-
-            // 创建Image Box
-            var imageBoxRequest = new DicomNSetRequest(
-                DicomUID.BasicGrayscaleImageBox,
-                DicomUID.Generate())
-            {
-                Dataset = file.Dataset
-            };
+            // 添加图像序列
+            var imageSequence = new DicomSequence(DicomTag.BasicGrayscaleImageSequence);
+            imageSequence.Items.Add(CreateImageBoxDataset(file));
+            imageBoxRequest.Dataset.Add(imageSequence);
 
             // 发送请求序列
+            DicomLogger.Information("PrintSCU", "开始发送打印请求序列");
             await client.AddRequestAsync(filmSessionRequest);
             await client.AddRequestAsync(filmBoxRequest);
             await client.AddRequestAsync(imageBoxRequest);
+            await client.AddRequestAsync(new DicomNActionRequest(DicomUID.BasicFilmSession, filmSessionUid, 1));
 
-            // 发送打印命令
-            var printRequest = new DicomNActionRequest(
-                DicomUID.BasicFilmSession,
-                filmSessionUid,
-                1);
-            await client.AddRequestAsync(printRequest);
-
-            // 执行打印
             await client.SendAsync();
+            DicomLogger.Information("PrintSCU", "打印请求已发送，开始清理资源");
+
+            // 清理资源
+            try 
+            {
+                // 删除 Film Box
+                var deleteFilmBoxRequest = new DicomNDeleteRequest(DicomUID.BasicFilmBox, filmBoxUid);
+                await client.AddRequestAsync(deleteFilmBoxRequest);
+
+                // 删除 Film Session
+                var deleteFilmSessionRequest = new DicomNDeleteRequest(DicomUID.BasicFilmSession, filmSessionUid);
+                await client.AddRequestAsync(deleteFilmSessionRequest);
+
+                await client.SendAsync();
+                DicomLogger.Information("PrintSCU", "资源清理完成");
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Warning("PrintSCU", ex, "清理资源时发生错误，但不影响打印");
+            }
 
             DicomLogger.Information("PrintSCU", "打印任务完成");
             return true;

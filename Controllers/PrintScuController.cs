@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Services;
 using DicomSCP.Models;
-using DicomSCP.Configuration;
 
 namespace DicomSCP.Controllers;
 
@@ -37,38 +36,45 @@ public class PrintScuController : ControllerBase
     /// <summary>
     /// 发送打印请求
     /// </summary>
+    /// <remarks>
+    /// 请求示例:
+    /// ```json
+    /// {
+    ///     "filePath": "D:/dicom/image.dcm",
+    ///     "numberOfCopies": 1,
+    ///     "printPriority": "MEDIUM",
+    ///     "mediumType": "PAPER",
+    ///     "filmDestination": "PROCESSOR",
+    ///     "filmOrientation": "PORTRAIT",
+    ///     "filmSizeID": "14INX17IN",
+    ///     "imageDisplayFormat": "STANDARD\\1,1",
+    ///     "magnificationType": "REPLICATE",
+    ///     "smoothingType": "MEDIUM",
+    ///     "borderDensity": "BLACK",
+    ///     "emptyImageDensity": "BLACK",
+    ///     "trim": "NO"
+    /// }
+    /// ```
+    /// 
+    /// 有效值说明：
+    /// - printPriority: "HIGH", "MEDIUM", "LOW"
+    /// - mediumType: "PAPER", "CLEAR FILM", "BLUE FILM"
+    /// - filmDestination: "MAGAZINE", "PROCESSOR", "BIN_1", "BIN_2"
+    /// - filmOrientation: "PORTRAIT", "LANDSCAPE"
+    /// - filmSizeID: "8INX10IN", "10INX12IN", "11INX14IN", "14INX14IN", "14INX17IN", "24CMX30CM", "A4"
+    /// - magnificationType: "REPLICATE", "BILINEAR", "CUBIC", "NONE"
+    /// - smoothingType: "NONE", "LOW", "MEDIUM", "HIGH"
+    /// - borderDensity: "BLACK", "WHITE"
+    /// - emptyImageDensity: "BLACK", "WHITE"
+    /// - trim: "YES", "NO"
+    /// </remarks>
     [HttpPost("print")]
     public async Task<ActionResult> Print([FromBody] PrintRequest request)
     {
         try
         {
-            // 验证请求
-            if (string.IsNullOrEmpty(request.FilePath))
-                return BadRequest("文件路径不能为空");
-
-            if (!System.IO.File.Exists(request.FilePath))
-                return BadRequest("文件不存在");
-
-            // 获取打印机配置
-            var printers = _configuration.GetSection("DicomSettings:PrintSCU:Printers")
-                .Get<List<PrinterConfig>>() ?? new List<PrinterConfig>();
-            
-            var printer = printers.FirstOrDefault(p => p.Name == request.CalledAE) ?? 
-                         printers.FirstOrDefault(p => p.IsDefault);
-
-            if (printer == null)
-                return BadRequest("未找到可用的打印机");
-
-            // 获取 PrintSCU 配置
-            var printScuConfig = _configuration.GetSection("DicomSettings:PrintSCU").Get<PrintScuConfig>();
-            if (printScuConfig == null)
-                return StatusCode(500, "PrintSCU 配置未找到");
-
-            // 设置打印请求参数
-            request.CalledAE = printer.AeTitle;
-            request.HostName = printer.HostName;
-            request.Port = printer.Port;
-            request.CallingAE = printScuConfig.AeTitle;
+            _logger.LogInformation("发送打印请求 - AET: {AET}, Host: {Host}, Port: {Port}", 
+                request.CalledAE, request.HostName, request.Port);
 
             // 发送打印请求
             var success = await _printSCU.PrintAsync(request);

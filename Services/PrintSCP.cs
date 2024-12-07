@@ -345,8 +345,22 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 request.SOPClassUID?.Name ?? "Unknown", 
                 _session.CallingAE ?? "Unknown");
 
+            // 记录请求数据集的内容
+            if (request.Dataset != null)
+            {
+                DicomLogger.Debug("PrintSCP", "N-SET 请求数据集:");
+                foreach (var element in request.Dataset)
+                {
+                    DicomLogger.Debug("PrintSCP", "  Tag: {Tag}, VR: {VR}, Value: {Value}",
+                        element.Tag,
+                        element.ValueRepresentation,
+                        element.ToString());
+                }
+            }
+
             if (_session.FilmSession == null)
             {
+                DicomLogger.Warning("PrintSCP", "Film Session 为空，无法处理 N-SET 请求");
                 return new DicomNSetResponse(request, DicomStatus.NoSuchObjectInstance);
             }
 
@@ -366,6 +380,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     var filePath = Path.Combine(printFolder, fileName);
                     var relativePath = Path.Combine("prints", dateFolder, fileName);
 
+                    DicomLogger.Information("PrintSCP", "准备保存图像 - 路径: {FilePath}", filePath);
+
                     var newDataset = new DicomDataset();
                     newDataset.Add(DicomTag.SOPClassUID, DicomUID.BasicGrayscaleImageBox);
                     newDataset.Add(DicomTag.SOPInstanceUID, request.SOPInstanceUID);
@@ -379,8 +395,14 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     newDataset.Add(DicomTag.SeriesNumber, "1");
                     newDataset.Add(DicomTag.InstanceNumber, "1");
 
+                    DicomLogger.Debug("PrintSCP", "图像数据集内容:");
                     foreach (var item in firstImage)
                     {
+                        DicomLogger.Debug("PrintSCP", "  Tag: {Tag}, VR: {VR}, Value: {Value}",
+                            item.Tag,
+                            item.ValueRepresentation,
+                            item.ToString());
+
                         if (!newDataset.Contains(item.Tag))
                         {
                             newDataset.Add(item);
@@ -389,37 +411,45 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
                     var file = new DicomFile(newDataset);
                     await file.SaveAsync(filePath);
+                    DicomLogger.Information("PrintSCP", "图像已保存 - 路径: {FilePath}", filePath);
 
                     // 更新打印作业
                     var parameters = new Dictionary<string, object>();
-                    
-                    // 设置图像路径（使用相对路径）
                     parameters["ImagePath"] = relativePath;
-                    
-                    // 设置状态
                     parameters["Status"] = PrintJobStatus.ImageReceived.ToString();
 
-                    // 获取 StudyInstanceUID
                     var studyUid = newDataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "");
                     if (!string.IsNullOrEmpty(studyUid))
                     {
                         parameters["StudyInstanceUID"] = studyUid;
-                        DicomLogger.Information("PrintSCP", "更新打印作业 - FilePath: {FilePath}, StudyUID: {StudyUID}, Status: {Status}", 
-                            relativePath, studyUid, PrintJobStatus.ImageReceived);
                     }
 
                     // 使用 FilmSession.SOPInstanceUID 更新打印作业
                     if (_session.FilmSession != null)
                     {
+                        DicomLogger.Information("PrintSCP", "更新打印作业 - FilmSessionUID: {Uid}, ImagePath: {Path}, Status: {Status}",
+                            _session.FilmSession.SOPInstanceUID,
+                            relativePath,
+                            PrintJobStatus.ImageReceived);
+
                         await _repository.UpdatePrintJobAsync(
                             _session.FilmSession.SOPInstanceUID,
                             parameters: parameters);
+                        DicomLogger.Information("PrintSCP", "打印作业已更新");
                     }
                     else
                     {
                         DicomLogger.Warning("PrintSCP", "FilmSession 为空，无法更新打印作业");
                     }
                 }
+                else
+                {
+                    DicomLogger.Warning("PrintSCP", "未找到图像序列或序列为空");
+                }
+            }
+            else
+            {
+                DicomLogger.Warning("PrintSCP", "请求数据集中没有图像序列");
             }
 
             // 创建响应
