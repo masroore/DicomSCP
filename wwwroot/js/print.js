@@ -10,10 +10,31 @@ class PrintManager {
         this.selectedJobId = null;
         this.printerSelectModal = null;
         this.isLoading = false;
-        this.lastSearchParams = null;
-        this.initializeEvents();
-        this.loadPrintJobs();
-        this.loadPrinters();
+
+       // 初始化事件和加载数据
+        this.init();
+    }
+
+    async init() {
+        try {
+            // 初始化事件绑定
+            this.initializeEvents();
+            
+            // 初始化打印机选择模态框
+            this.printerSelectModal = new bootstrap.Modal(document.getElementById('printerSelectModal'), {
+                backdrop: 'static',
+                keyboard: false
+            });
+
+            // 并行加载数据
+            await Promise.all([
+                this.loadPrinters(),
+                this.loadPrintJobs()
+            ]);
+        } catch (error) {
+            console.error('初始化打印管理器失败:', error);
+            showToast('error', '初始化失败', '初始化打印管理器失败');
+        }
     }
 
     initAxiosInterceptors() {
@@ -95,7 +116,18 @@ class PrintManager {
     }
 
     async loadPrintJobs() {
-        if (this.isLoading) return;
+        if (this.isLoading) {
+            console.log('正在加载中，跳过重复请求');
+            return;
+        }
+
+        const tbody = document.getElementById('print-jobs-table-body');
+        if (!tbody) {
+            console.error('找不到打印任务列表元素');
+            return;
+        }
+
+        showTableLoading(tbody, 6);  // 打印列表有6列
 
         try {
             this.isLoading = true;
@@ -110,37 +142,7 @@ class PrintManager {
                 pageSize: this.pageSize
             };
 
-            // 检查参数是否有变化
-            if (this.lastSearchParams && 
-                JSON.stringify(searchParams) === JSON.stringify(this.lastSearchParams)) {
-                this.isLoading = false;
-                return;
-            }
-
-            const tbody = document.getElementById('print-jobs-table-body');
-            if (!tbody) {
-                this.isLoading = false;
-                return;
-            }
-
-            // 显示加载状态
-            if (this.currentJobs.length === 0) {
-                // 如果当前没有数据，显示加载提示
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="text-center py-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">加载中...</span>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            } else {
-                // 如果有数据，添加加载效果
-                tbody.style.opacity = '0.6';
-                tbody.style.transition = 'opacity 0.2s';
-            }
-
+            // 构建查询参数
             const queryParams = new URLSearchParams();
             if (searchParams.callingAE) queryParams.append('callingAE', searchParams.callingAE);
             if (searchParams.studyUID) queryParams.append('studyUID', searchParams.studyUID);
@@ -152,24 +154,21 @@ class PrintManager {
             const response = await axios.get(`/api/print?${queryParams}`);
             const data = response.data;
 
-            // 缓存搜索参数
-            this.lastSearchParams = searchParams;
+            if (!data.items || data.items.length === 0) {
+                showEmptyTable(tbody, '暂无打印任务', 6);
+                return;
+            }
 
             // 更新数据和UI
             this.currentJobs = data.items;
             this.totalItems = data.total;
             this.totalPages = data.totalPages;
-
-            // 恢复透明度并更新内容
-            if (tbody.style.opacity !== '1') {
-                tbody.style.opacity = '1';
-            }
             this.updatePrintJobsTable(data.items);
             this.updatePagination();
 
         } catch (error) {
             console.error('加载打印任务失败:', error);
-            this.showToast('错误', '加载打印任务失败: ' + error.message, 'danger');
+            showEmptyTable(tbody, '加载失败，请重试', 6);
         } finally {
             this.isLoading = false;
         }
@@ -674,7 +673,7 @@ class PrintManager {
             </option>
         `).join('');
 
-        // 如果没有选中的打印机（没有默认打印机），��择第一个
+        // 如果没有选中的打印机（没有默认打印机），则选择第一个
         if (!select.value && this.printers.length > 0) {
             select.value = this.printers[0].name;
         }

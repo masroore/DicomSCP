@@ -4,6 +4,7 @@ class LogManager {
         this.pageSize = 10;
         this.currentPage = 1;
         this.allFiles = [];
+        this.isLoading = false;
         this.init();
     }
 
@@ -31,7 +32,13 @@ class LogManager {
     }
 
     async loadLogFiles(type) {
+        if (this.isLoading) return;
+
+        const tbody = document.getElementById('logFiles');
+        showTableLoading(tbody, 4);
+
         try {
+            this.isLoading = true;
             this.currentType = type;
             const response = await fetch(`/api/logs/files/${type}`);
             if (!response.ok) {
@@ -45,6 +52,8 @@ class LogManager {
         } catch (error) {
             console.error('加载日志文件失败:', error);
             showToast('error', '加载失败', '加载日志文件失败');
+        } finally {
+            this.isLoading = false;
         }
     }
 

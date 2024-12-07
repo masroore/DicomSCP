@@ -2,6 +2,7 @@ class ConfigManager {
     constructor() {
         this.editor = null;
         this.helpModal = null;
+        this.isLoading = false;
         this.initAxiosInterceptors();
         
         // 等待 DOM 加载完成后再初始化
@@ -27,6 +28,19 @@ class ConfigManager {
 
     init() {
         this.editor = document.getElementById('configEditor');
+       if (this.editor) {
+            // 设置编辑器样式
+            this.editor.style.backgroundColor = '#1e1e1e';  // VS Code 暗色主题背景色
+            this.editor.style.color = '#d4d4d4';           // VS Code 暗色主题文本色
+            this.editor.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
+            this.editor.style.fontSize = '14px';
+            this.editor.style.lineHeight = '1.5';
+            this.editor.style.padding = '12px';
+            this.editor.style.border = '1px solid #2d2d2d';
+            this.editor.style.borderRadius = '4px';
+            this.editor.style.outline = 'none';
+            this.editor.spellcheck = false;  // 禁用拼写检查
+        }
         
         // 监听页面切换事件
         document.querySelectorAll('.nav-link[data-page]').forEach(link => {
@@ -39,8 +53,8 @@ class ConfigManager {
 
         // 检查当前页面状态
         const settingsPage = document.getElementById('settings-page');
-        if (settingsPage && window.location.hash === '#settings' || 
-            settingsPage && settingsPage.style.display !== 'none') {
+        if (settingsPage && (window.location.hash === '#settings' || 
+            settingsPage.style.display !== 'none')) {
             // 延迟加载配置，确保页面已完全切换
             setTimeout(() => this.loadConfig(), 100);
         }
@@ -54,27 +68,34 @@ class ConfigManager {
     }
 
     async loadConfig() {
-        try {
-            if (!this.editor) {
-                this.editor = document.getElementById('configEditor');
-            }
-            
-            if (!this.editor) {
-                console.error('配置编辑器元素未找到');
-                return;
-            }
+        if (this.isLoading) return;
 
-            showLoading(this.editor);
+        try {
+            this.isLoading = true;
+            const editor = document.getElementById('configEditor');
+            if (!editor) return;
+
+            showLoading(editor);
             const response = await axios.get('/api/config');
-            this.editor.value = JSON.stringify(response.data, null, 2);
+            editor.value = JSON.stringify(response.data, null, 2);
+
+           // 恢复编辑器样式
+            editor.style.backgroundColor = '#1e1e1e';
+            editor.style.color = '#d4d4d4';
+
         } catch (error) {
             console.error('加载配置失败:', error);
             handleError(error, '获取配置失败');
+        } finally {
+            this.isLoading = false;
         }
     }
 
     async saveConfig() {
+        if (this.isLoading) return;
+
         try {
+            this.isLoading = true;
             // 先验证是否是有效的 JSON
             const configText = document.getElementById('configEditor').value;
             let config;
@@ -89,6 +110,8 @@ class ConfigManager {
             showSuccessMessage('配置保存成功！需要重启服务生效');
         } catch (error) {
             handleError(error, '保存配置失败');
+        } finally {
+            this.isLoading = false;
         }
     }
 

@@ -106,7 +106,7 @@ function bindWorklistEvents() {
 // 加载 Worklist 数据
 async function loadWorklistData() {
     const tbody = document.getElementById('worklist-table-body');
-    showTableLoading(tbody, 8);  // 工作列表有8列
+    showTableLoading(tbody, 8);  // 只在这里显示加载动画
 
     try {
         // 获取搜索条件
@@ -157,8 +157,6 @@ function displayWorklistData(items) {
     try {
         const tbody = document.getElementById('worklist-table-body');
         if (!tbody) throw new Error('找不到表格主体');
-
-        showLoading(tbody);
 
         const fragment = document.createDocumentFragment();
         items.forEach(item => {

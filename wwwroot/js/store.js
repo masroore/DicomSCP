@@ -1,5 +1,7 @@
 // 存储选中的文件
 let selectedFiles = new Map();
+// 存储选中的节点
+let selectedStoreNode = null;
 
 // 添加 axios 拦截器初始化
 function initAxiosInterceptors() {
@@ -30,15 +32,11 @@ document.addEventListener('DOMContentLoaded', function() {
 // 初始化拖放区域
 function initDropZone() {
     const dropZone = document.getElementById('dropZone');
-    
+    if (!dropZone) return;
+
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
     });
-
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
 
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, highlight, false);
@@ -48,15 +46,34 @@ function initDropZone() {
         dropZone.addEventListener(eventName, unhighlight, false);
     });
 
+    dropZone.addEventListener('drop', handleDrop, false);
+
     function highlight(e) {
-        dropZone.classList.add('border-primary');
+        dropZone.classList.add('drag-over');
     }
 
     function unhighlight(e) {
-        dropZone.classList.remove('border-primary');
+        dropZone.classList.remove('drag-over');
     }
 
-    dropZone.addEventListener('drop', handleDrop, false);
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function handleDrop(e) {
+        const items = e.dataTransfer.items;
+        if (items) {
+            [...items].forEach(item => {
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) {
+                        processEntry(entry);
+                    }
+                }
+            });
+        }
+    }
 }
 
 // 处理文件拖放
@@ -263,7 +280,7 @@ function updateUI() {
         // 文件列表
         fileList.innerHTML = Array.from(selectedFiles.entries())
             .map(([fileId, fileInfo]) => `
-                <tr>
+                <tr data-file-id="${fileId}">
                     <td title="${fileInfo.file.name}">
                         ${fileInfo.file.name}
                     </td>
@@ -342,17 +359,19 @@ function clearSelection() {
 
 // 加载节点列表
 async function loadStoreNodes() {
+    const select = document.getElementById('storeNode');
+    if (!select) return;
+
     try {
-        const response = await axios.get('/api/StoreSCU/nodes');
+        const response = await axios.get('/api/StoreScu/nodes');
         const nodes = response.data;
-        
-        const select = document.getElementById('storeNode');
-        
+
         if (nodes.length === 0) {
             select.innerHTML = '<option value="">未配置DICOM节点</option>';
             return;
         }
-        
+
+        // 生成节点选项
         select.innerHTML = nodes.map(node => `
             <option value="${node.name}" ${node.isDefault ? 'selected' : ''}>
                 ${node.name} (${node.aeTitle}@${node.hostName})
@@ -360,21 +379,25 @@ async function loadStoreNodes() {
         `).join('');
 
         // 如果有保存的选择，恢复它
-        if (this.selectedNode) {
-            select.value = this.selectedNode;
+        if (selectedStoreNode) {
+            select.value = selectedStoreNode;
         } else {
-            // 否则保存当前选择
-            this.selectedNode = select.value;
+            // 否则使用默认节点或第一个节点
+            const defaultNode = nodes.find(n => n.isDefault);
+            selectedStoreNode = defaultNode ? defaultNode.name : nodes[0]?.name;
+            if (selectedStoreNode) {
+                select.value = selectedStoreNode;
+            }
         }
 
         // 监听节点选择变化
         select.addEventListener('change', (e) => {
-            this.selectedNode = e.target.value;
+            selectedStoreNode = e.target.value;
         });
 
     } catch (error) {
         console.error('加载节点列表失败:', error);
-        alert('加载节点列表失败，请检查网络连接');
+        showToast('error', '加载失败', '加载节点列表失败');
     }
 }
 
@@ -491,7 +514,7 @@ class StoreManager {
             }
             this.nodes = await response.json();
             
-            // 设置默认节点：优先使用配置中标记为默认的节点，如果没有则使用第一个节点
+            // 设置默认节点：优先使用配置中为默认的节点，如果没有则使用第一个节点
             this.defaultNode = this.nodes.find(n => n.isDefault) || this.nodes[0];
         } catch (error) {
             console.error('加载节点失败:', error);
@@ -534,4 +557,53 @@ class StoreManager {
 
 // 创建全局实例
 const storeManager = new StoreManager();
+
+// 更新文件状态显示
+function updateFileStatus(fileId, status, message = '') {
+    const row = document.querySelector(`tr[data-file-id="${fileId}"]`);
+    if (!row) return;
+
+    const statusCell = row.querySelector('.file-status');
+    if (!statusCell) return;
+
+    const statusBadgeClass = {
+        'pending': 'bg-secondary',
+        'sending': 'bg-primary',
+        'success': 'bg-success',
+        'error': 'bg-danger'
+    }[status] || 'bg-secondary';
+
+    const statusText = {
+        'pending': '待发送',
+        'sending': '发送中',
+        'success': '已发送',
+        'error': '发送失败'
+    }[status] || status;
+
+    statusCell.innerHTML = `
+        <span class="badge ${statusBadgeClass}">${statusText}</span>
+        ${message ? `<small class="d-block text-muted mt-1">${message}</small>` : ''}
+    `;
+
+    // 更新操作按钮
+    const actionCell = row.querySelector('.file-actions');
+    if (actionCell) {
+        if (status === 'error') {
+            actionCell.innerHTML = `
+                <button class="btn btn-sm btn-primary" onclick="retryFile('${fileId}')">
+                    <i class="bi bi-arrow-clockwise me-1"></i>重试
+                </button>
+                <button class="btn btn-sm btn-danger ms-1" onclick="removeFile('${fileId}')">
+                    <i class="bi bi-trash me-1"></i>移除
+                </button>
+            `;
+        } else if (status === 'success') {
+            actionCell.innerHTML = `
+                <button class="btn btn-sm btn-danger" onclick="removeFile('${fileId}')">
+                    <i class="bi bi-trash me-1"></i>移除
+                </button>
+            `;
+        }
+    }
+}
  

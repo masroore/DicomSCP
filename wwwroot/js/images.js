@@ -18,6 +18,9 @@ function initializeImages() {
 
 // 加载影像数据
 async function loadImages(page = 1) {
+    const tbody = document.getElementById('images-table-body');
+    showTableLoading(tbody, 8);  // 影像列表有8列
+
     try {
         const patientId = document.getElementById('images-searchPatientId')?.value || '';
         const patientName = document.getElementById('images-searchPatientName')?.value || '';
@@ -41,6 +44,11 @@ async function loadImages(page = 1) {
         }
 
         const result = await response.json();
+        if (result.items.length === 0) {
+            showEmptyTable(tbody, '暂无影像数据', 8);
+            return;
+        }
+
         displayImages(result.items);
         updateImagesPagination(result);
         
@@ -49,42 +57,39 @@ async function loadImages(page = 1) {
         
     } catch (error) {
         console.error('加载影像失败:', error);
-        showToast('error', '加载失败', error.message);
+        showEmptyTable(tbody, '加载失败，请重试', 8);
     }
 }
 
 // 显示影像数据
 function displayImages(items) {
-    try {
-        const tbody = document.getElementById('images-table-body');
-        tbody.innerHTML = items.map(item => `
-            <tr onclick="toggleSeriesInfo(this)" data-study-uid="${item.studyInstanceUid}">
-                <td>${item.patientId || ''}</td>
-                <td>${item.patientName || ''}</td>
-                <td>${item.accessionNumber || ''}</td>
-                <td>${item.modality || ''}</td>
-                <td>${formatDate(item.studyDate) || ''}</td>
-                <td>${item.studyDescription || ''}</td>
-                <td>${item.numberOfInstances || 0}</td>
-                <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteStudy('${item.studyInstanceUid}', event)" title="删除">
-                        <i class="bi bi-trash me-1"></i>删除
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+    const tbody = document.getElementById('images-table-body');
+    if (!tbody) return;
 
-        if (items.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" class="text-center">暂无数据</td>
-                </tr>
-            `;
-        }
-    } catch (error) {
-        console.error('显示影像数据失败:', error);
-        showToast('error', '显示失败', '显示影像数据失败');
-    }
+    const fragment = document.createDocumentFragment();
+    items.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('onclick', 'toggleSeriesInfo(this)');
+        tr.setAttribute('data-study-uid', item.studyInstanceUid);
+        tr.innerHTML = `
+            <td>${item.patientId || ''}</td>
+            <td>${item.patientName || ''}</td>
+            <td>${item.accessionNumber || ''}</td>
+            <td>${item.modality || ''}</td>
+            <td>${formatDate(item.studyDate) || ''}</td>
+            <td>${item.studyDescription || ''}</td>
+            <td>${item.numberOfInstances || 0}</td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="deleteStudy('${item.studyInstanceUid}', event)" title="删除">
+                    <i class="bi bi-trash me-1"></i>删除
+                </button>
+            </td>
+        `;
+        fragment.appendChild(tr);
+    });
+
+    tbody.innerHTML = '';
+    tbody.appendChild(fragment);
 }
 
 // 更新影像分页信息
@@ -230,6 +235,18 @@ async function toggleSeriesInfo(row) {
     }
 
     try {
+        // 显示加载动画
+        const loadingRow = $(`
+            <tr class="series-info">
+                <td colspan="8" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                </td>
+            </tr>
+        `);
+        $(row).after(loadingRow);
+
         const response = await fetch(`/api/images/${studyUid}/series`);
         if (!response.ok) {
             throw new Error('获取序列数据失败');
@@ -239,7 +256,7 @@ async function toggleSeriesInfo(row) {
         
         // 创建序列信息行
         const seriesInfoRow = $(`
-            <tr class="series-info" style="display: none;">
+            <tr class="series-info">
                 <td colspan="8">
                     <div class="series-container">
                         <table class="table table-sm table-bordered series-detail-table">
@@ -249,7 +266,7 @@ async function toggleSeriesInfo(row) {
                                     <th style="width: 100px">检查类型</th>
                                     <th style="width: 500px">序列描述</th>
                                     <th style="width: 80px">图像数量</th>
-                                    <th style="width: 50px">操作</th>
+                                    <th style="width: 80px">操作</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -260,30 +277,43 @@ async function toggleSeriesInfo(row) {
         `);
         
         const tbody = seriesInfoRow.find('tbody');
-        data.forEach(series => {
+        if (data.length === 0) {
             tbody.append(`
                 <tr>
-                    <td>${series.seriesNumber}</td>
-                    <td>${series.modality || '未知'}</td>
-                    <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                    <td>${series.numberOfInstances}</td>
-                    <td>
-                        <button class="btn btn-primary btn-sm py-0" onclick="previewSeries('${studyUid}', '${series.seriesInstanceUid}')">
-                            <i class="bi bi-eye me-1"></i>预览
-                        </button>
+                    <td colspan="5" class="text-center text-muted py-3">
+                        <i class="bi bi-inbox fs-2 mb-2 d-block"></i>
+                        暂无序列数据
                     </td>
                 </tr>
             `);
-        });
+        } else {
+            data.forEach(series => {
+                tbody.append(`
+                    <tr>
+                        <td>${series.seriesNumber || ''}</td>
+                        <td>${series.modality || '未知'}</td>
+                        <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
+                        <td>${series.numberOfInstances || 0}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="previewSeries('${studyUid}', '${series.seriesInstanceUid}')">
+                                <i class="bi bi-eye me-1"></i>预览
+                            </button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }
         
-        // 移除已存在的序列信息行
+        // 移除加载动画和已存在的序列信息行
         $(row).siblings('.series-info').remove();
-        // 添加新的序列信息行并显示
+        // 添加新的序列信息行
         $(row).after(seriesInfoRow);
-        seriesInfoRow.show();
+
     } catch (error) {
         console.error('获取序列数据失败:', error);
         showToast('error', '获取失败', error.message);
+        // 移除加载动画
+        $(row).siblings('.series-info').remove();
     }
 }
 

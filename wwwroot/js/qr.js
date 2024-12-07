@@ -99,9 +99,12 @@ async function loadQRNodes() {
 
 // 执行 QR 查询
 async function searchQR() {
+    const tbody = document.getElementById('qr-table-body');
+    showTableLoading(tbody, 9);  // QR列表有9列
+
     const nodeId = document.getElementById('qrNode').value;
     if (!nodeId) {
-        alert('请选择PACS节点');
+        showEmptyTable(tbody, '请选择PACS节点', 9);
         return;
     }
 
@@ -116,30 +119,39 @@ async function searchQR() {
     try {
         const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/study`, queryParams);
         const result = response.data;
-        console.log('查询结果:', result);
+
+        if (!result || result.length === 0) {
+            showEmptyTable(tbody, '未找到匹配的检查', 9);
+            return;
+        }
 
         // 更新数据和显示
         qrAllData = result;
         qrCurrentPage = 1;
         displayQRPage(qrCurrentPage);
         updateQRPagination(qrAllData.length);
+
     } catch (error) {
         console.error('查询失败:', error);
-        alert(error.response?.data || '查询失败，请检查网络连接');
+        showEmptyTable(tbody, '查询失败，请重试', 9);
     }
 }
 
 // 显示 QR 查询结果页
 function displayQRPage(page) {
+    const tbody = document.getElementById('qr-table-body');
+    if (!tbody) return;
+
     const start = (page - 1) * qrPageSize;
     const end = start + qrPageSize;
     const pageItems = qrAllData.slice(start, end);
-    
-    console.log('显示页面数据:', pageItems);
-    
-    const tbody = document.getElementById('qr-table-body');
-    tbody.innerHTML = pageItems.map(item => `
-        <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleQRSeriesInfo(this)">
+
+    const fragment = document.createDocumentFragment();
+    pageItems.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-study-uid', item.studyInstanceUid);
+        tr.setAttribute('onclick', 'toggleQRSeriesInfo(this)');
+        tr.innerHTML = `
             <td>${item.patientId || ''}</td>
             <td>${item.patientName || ''}</td>
             <td>${item.accessionNumber || ''}</td>
@@ -153,8 +165,12 @@ function displayQRPage(page) {
                     <i class="bi bi-cloud-download me-1"></i>cmove
                 </button>
             </td>
-        </tr>
-    `).join('');
+        `;
+        fragment.appendChild(tr);
+    });
+
+    tbody.innerHTML = '';
+    tbody.appendChild(fragment);
 }
 
 // 更新 QR 分页信息
@@ -171,7 +187,7 @@ function updateQRPagination(total) {
     document.getElementById('qr-nextPage').disabled = qrCurrentPage === totalPages || total === 0;
 }
 
-// 切换 QR 序列信息显示
+// 切换序列信息显示
 async function toggleQRSeriesInfo(row) {
     const studyUid = $(row).data('study-uid');
     const seriesRow = $(row).next('.series-info');
@@ -182,13 +198,25 @@ async function toggleQRSeriesInfo(row) {
     }
 
     try {
+        // 显示加载动画
+        const loadingRow = $(`
+            <tr class="series-info">
+                <td colspan="9" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                </td>
+            </tr>
+        `);
+        $(row).after(loadingRow);
+
         const nodeId = document.getElementById('qrNode').value;
         const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/series/${studyUid}`);
         const data = response.data;
-        
+
         // 创建序列信息行
         const seriesInfoRow = $(`
-            <tr class="series-info" style="display: none;">
+            <tr class="series-info">
                 <td colspan="9">
                     <div class="series-container">
                         <table class="table table-sm table-bordered series-detail-table">
@@ -207,32 +235,45 @@ async function toggleQRSeriesInfo(row) {
                 </td>
             </tr>
         `);
-        
+
         const tbody = seriesInfoRow.find('tbody');
-        data.forEach(series => {
+        if (!data || data.length === 0) {
             tbody.append(`
                 <tr>
-                    <td>${series.seriesNumber || ''}</td>
-                    <td>${series.modality || '未知'}</td>
-                    <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                    <td>${series.instanceCount || 0}</td>
-                    <td>
-                        <button class="btn btn-sm btn-success" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
-                            <i class="bi bi-cloud-download me-1"></i>cmove
-                        </button>
+                    <td colspan="5" class="text-center text-muted py-3">
+                        <i class="bi bi-inbox fs-2 mb-2 d-block"></i>
+                        暂无序列数据
                     </td>
                 </tr>
             `);
-        });
-        
-        // 移除已���在的序列信息行
+        } else {
+            data.forEach(series => {
+                tbody.append(`
+                    <tr>
+                        <td>${series.seriesNumber || ''}</td>
+                        <td>${series.modality || '未知'}</td>
+                        <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
+                        <td>${series.instanceCount || 0}</td>
+                        <td>
+                            <button class="btn btn-sm btn-success" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
+                                <i class="bi bi-cloud-download me-1"></i>cmove
+                            </button>
+                        </td>
+                    </tr>
+                `);
+            });
+        }
+
+        // 移除加载动画和已存在的序列信息行
         $(row).siblings('.series-info').remove();
-        // 添加新的序列信息行并显示
+        // 添加新的序列信息行
         $(row).after(seriesInfoRow);
-        seriesInfoRow.show();
+
     } catch (error) {
         console.error('获取序列数据失败:', error);
-        showToast('error', '获取失败', error.response?.data || '获取序列数据失败');
+        showToast('error', '获取失败', error.message);
+        // 移除加载动画
+        $(row).siblings('.series-info').remove();
     }
 }
 
