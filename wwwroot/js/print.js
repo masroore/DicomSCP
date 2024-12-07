@@ -9,6 +9,8 @@ class PrintManager {
         this.printers = [];
         this.selectedJobId = null;
         this.printerSelectModal = null;
+        this.isLoading = false;
+        this.lastSearchParams = null;
         this.initializeEvents();
         this.loadPrintJobs();
         this.loadPrinters();
@@ -74,36 +76,102 @@ class PrintManager {
                 this.printerSelectModal.hide();
             });
         }
+
+        // 添加搜索表单事件绑定
+        const searchForm = document.getElementById('printSearchForm');
+        if (searchForm) {
+            // 查询按钮点击事件
+            const searchBtn = searchForm.querySelector('button[type="button"]');
+            if (searchBtn) {
+                searchBtn.addEventListener('click', () => this.searchPrintJobs());
+            }
+
+            // 重置按钮点击事件
+            const resetBtn = searchForm.querySelector('button.btn-secondary');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => this.resetSearch());
+            }
+        }
     }
 
     async loadPrintJobs() {
-        try {
-            const callingAE = document.getElementById('searchCallingAE')?.value || '';
-            const studyUID = document.getElementById('searchStudyUID')?.value || '';
-            const status = document.getElementById('searchPrintStatus')?.value || '';
-            const date = document.getElementById('searchDate')?.value || '';
+        if (this.isLoading) return;
 
-            const queryParams = new URLSearchParams({
+        try {
+            this.isLoading = true;
+
+            // 获取搜索参数
+            const searchParams = {
+                callingAE: document.getElementById('searchCallingAE')?.value || '',
+                studyUID: document.getElementById('searchStudyUID')?.value || '',
+                status: document.getElementById('searchPrintStatus')?.value || '',
+                date: document.getElementById('searchDate')?.value || '',
                 page: this.currentPage,
                 pageSize: this.pageSize
-            });
+            };
 
-            if (callingAE) queryParams.append('callingAE', callingAE);
-            if (studyUID) queryParams.append('studyUID', studyUID);
-            if (status) queryParams.append('status', status);
-            if (date) queryParams.append('date', date);
+            // 检查参数是否有变化
+            if (this.lastSearchParams && 
+                JSON.stringify(searchParams) === JSON.stringify(this.lastSearchParams)) {
+                this.isLoading = false;
+                return;
+            }
+
+            const tbody = document.getElementById('print-jobs-table-body');
+            if (!tbody) {
+                this.isLoading = false;
+                return;
+            }
+
+            // 显示加载状态
+            if (this.currentJobs.length === 0) {
+                // 如果当前没有数据，显示加载提示
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                // 如果有数据，添加加载效果
+                tbody.style.opacity = '0.6';
+                tbody.style.transition = 'opacity 0.2s';
+            }
+
+            const queryParams = new URLSearchParams();
+            if (searchParams.callingAE) queryParams.append('callingAE', searchParams.callingAE);
+            if (searchParams.studyUID) queryParams.append('studyUID', searchParams.studyUID);
+            if (searchParams.status) queryParams.append('status', searchParams.status);
+            if (searchParams.date) queryParams.append('date', searchParams.date);
+            queryParams.append('page', searchParams.page);
+            queryParams.append('pageSize', searchParams.pageSize);
 
             const response = await axios.get(`/api/print?${queryParams}`);
             const data = response.data;
 
+            // 缓存搜索参数
+            this.lastSearchParams = searchParams;
+
+            // 更新数据和UI
             this.currentJobs = data.items;
-            this.updatePrintJobsTable(data.items);
             this.totalItems = data.total;
             this.totalPages = data.totalPages;
+
+            // 恢复透明度并更新内容
+            if (tbody.style.opacity !== '1') {
+                tbody.style.opacity = '1';
+            }
+            this.updatePrintJobsTable(data.items);
             this.updatePagination();
+
         } catch (error) {
             console.error('加载打印任务失败:', error);
             this.showToast('错误', '加载打印任务失败: ' + error.message, 'danger');
+        } finally {
+            this.isLoading = false;
         }
     }
 
@@ -141,31 +209,41 @@ class PrintManager {
     }
 
     resetSearch() {
-        document.getElementById('printSearchForm').reset();
-        this.currentPage = 1;
-        this.loadPrintJobs();
+        const form = document.getElementById('printSearchForm');
+        if (form) {
+            form.reset();
+            this.currentPage = 1;
+            this.loadPrintJobs();
+        }
     }
 
     updatePrintJobsTable(jobs) {
         const tbody = document.getElementById('print-jobs-table-body');
         if (!tbody) return;
 
-        this.currentJobs = jobs;
-        tbody.innerHTML = jobs.map(job => `
-            <tr>
+        // 使用 DocumentFragment 提高性能
+        const fragment = document.createDocumentFragment();
+        jobs.forEach(job => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
                 <td>${job.jobId || ''}</td>
                 <td>${job.callingAE || ''}</td>
                 <td>${job.studyInstanceUID || ''}</td>
                 <td>${this.formatDateTime(job.createTime)}</td>
                 <td>${this.formatStatus(job.status)}</td>
-                <td>
-                    ${this.getActionButtons(job)}
-                </td>
-            </tr>
-        `).join('');
+                <td>${this.getActionButtons(job)}</td>
+            `;
+            fragment.appendChild(tr);
+        });
+
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
+
+        // 更新状态统计
+        this.updateJobStats(jobs);
     }
 
-    // 添加枚举映射
+    // 状态常量
     static PrintJobStatus = {
         0: 'Created',
         1: 'ImageReceived',
@@ -173,43 +251,40 @@ class PrintManager {
         3: 'Failed'
     };
 
-    getStatusBadgeClass(status) {
-        if (status === null || status === undefined) return 'bg-secondary text-white';
-        
-        // 将数字状态转换为字符串
+    // 状态文本映射
+    static StatusText = {
+        'Created': '已创建',
+        'ImageReceived': '已接收',
+        'Completed': '已完成',
+        'Failed': '失败'
+    };
+
+    formatStatus(status) {
+        if (status === null || status === undefined) {
+            return '<span class="badge bg-secondary">未知</span>';
+        }
+
+        // 先将数字状态转换为字符串状态
         const statusStr = PrintManager.PrintJobStatus[status] || status;
-        
-        switch (String(statusStr).toLowerCase()) {
-            case 'created':
+        // 再获取对应的中文文本
+        const text = PrintManager.StatusText[statusStr] || statusStr;
+        const badgeClass = this.getStatusBadgeClass(statusStr);
+        return `<span class="badge ${badgeClass}">${text}</span>`;
+    }
+
+    getStatusBadgeClass(status) {
+        switch (status) {
+            case 'Created':
                 return 'bg-secondary text-white';
-            case 'imagereceived':
+            case 'ImageReceived':
                 return 'bg-info text-white';
-            case 'completed':
+            case 'Completed':
                 return 'bg-success text-white';
-            case 'failed':
+            case 'Failed':
                 return 'bg-danger text-white';
             default:
                 return 'bg-secondary text-white';
         }
-    }
-
-    formatStatus(status) {
-        if (status === null || status === undefined) return '<span class="badge bg-secondary">未知</span>';
-
-        // 将数字状态转换为字符串
-        const statusStr = PrintManager.PrintJobStatus[status] || status;
-        
-        const statusText = {
-            'Created': '已创建',
-            'ImageReceived': '已接收',
-            'Completed': '已完成',
-            'Failed': '失败'
-        };
-
-        const badgeClass = this.getStatusBadgeClass(statusStr);
-        const text = statusText[statusStr] || statusStr;
-        
-        return `<span class="badge ${badgeClass}">${text}</span>`;
     }
 
     getActionButtons(job) {
@@ -265,7 +340,9 @@ class PrintManager {
 
     updateJobStats(jobs) {
         const stats = jobs.reduce((acc, job) => {
-            acc[job.status] = (acc[job.status] || 0) + 1;
+            // 先将数字状态转换为字符串状态
+            const statusStr = PrintManager.PrintJobStatus[job.status] || job.status;
+            acc[statusStr] = (acc[statusStr] || 0) + 1;
             return acc;
         }, {});
 
@@ -273,45 +350,28 @@ class PrintManager {
         if (statsContainer) {
             statsContainer.innerHTML = `
                 <span class="badge bg-secondary me-2">总数: ${jobs.length}</span>
-                ${stats.PENDING ? `<span class="badge bg-warning me-2">待处理: ${stats.PENDING}</span>` : ''}
-                ${stats.PRINTING ? `<span class="badge bg-primary me-2">打印中: ${stats.PRINTING}</span>` : ''}
-                ${stats.COMPLETED ? `<span class="badge bg-success me-2">已完成: ${stats.COMPLETED}</span>` : ''}
-                ${stats.FAILED ? `<span class="badge bg-danger me-2">失败: ${stats.FAILED}</span>` : ''}
+                ${stats['Created'] ? 
+                    `<span class="badge bg-secondary me-2">已创建: ${stats['Created']}</span>` : ''}
+                ${stats['ImageReceived'] ? 
+                    `<span class="badge bg-info me-2">已接收: ${stats['ImageReceived']}</span>` : ''}
+                ${stats['Completed'] ? 
+                    `<span class="badge bg-success me-2">已完成: ${stats['Completed']}</span>` : ''}
+                ${stats['Failed'] ? 
+                    `<span class="badge bg-danger me-2">失败: ${stats['Failed']}</span>` : ''}
             `;
         }
     }
 
-    showToast(title, message, type = 'success') {
-        const toast = document.getElementById('printToast');
-        const toastTitle = document.getElementById('printToastTitle');
-        const toastMessage = document.getElementById('printToastMessage');
-        
-        if (toast && toastTitle && toastMessage) {
-            // 设置标题和消息
-            toastTitle.textContent = title;
-            toastMessage.textContent = message;
-            
-            // 根据类型设置样式
-            toast.className = 'toast';
-            switch (type) {
-                case 'success':
-                    toast.classList.add('bg-success', 'text-white');
-                    break;
-                case 'error':
-                    toast.classList.add('bg-danger', 'text-white');
-                    break;
-                case 'warning':
-                    toast.classList.add('bg-warning', 'text-dark');
-                    break;
-                default:
-                    toast.classList.add('bg-light', 'text-dark');
+    showToast(type, message) {
+        if (type === 'success' || type === '成功') {
+            showSuccessMessage(message);
+        } else {
+            // 如果是错误消息，使用原始消息
+            if (message instanceof Error) {
+                handleError(message, '操作失败');
+            } else {
+                showToast('error', '操作失败', message);
             }
-            
-            // 创建Toast实例并设置选项
-            const bsToast = new bootstrap.Toast(toast, {
-                delay: 2000 // 2秒后自动关闭
-            });
-            bsToast.show();
         }
     }
 
@@ -526,17 +586,23 @@ class PrintManager {
 
     // 删除打印任务
     async deletePrintJob(jobId) {
-        if (!confirm('确定要删除这个打印任务吗？')) {
+        if (!await showConfirmDialog('确认删除', '确定要删除这个打印任务吗？')) {
             return;
         }
 
         try {
-            await axios.delete(`/api/print/${jobId}`);
-            this.showToast('成功', '删除成功');
-            await this.loadPrintJobs(); // 重新加载任务列表
+            const response = await fetch(`/api/print/${jobId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('删除失败');
+            }
+
+            showSuccessMessage('打印任务已删除');
+            await this.loadPrintJobs();
         } catch (error) {
-            console.error('删除打印任务失败:', error);
-            this.showToast('错误', error.response?.data || '删除打印任务失败', 'error');
+            handleError(error, '删除失败');
         }
     }
 
@@ -608,7 +674,7 @@ class PrintManager {
             </option>
         `).join('');
 
-        // 如果没有选中的打印机（没有默认打印机），选择第一个
+        // 如果没有选中的打印机（没有默认打印机），��择第一个
         if (!select.value && this.printers.length > 0) {
             select.value = this.printers[0].name;
         }
@@ -628,7 +694,7 @@ class PrintManager {
         const printerName = printerSelect.value;
 
         if (!printerName) {
-            this.showToast('错误', '请选择打印机', 'error');
+            this.showToast('error', '请选择打印机');
             return;
         }
 
@@ -648,13 +714,13 @@ class PrintManager {
                 throw new Error('打印失败');
             }
 
-            const result = await response.json();
-            this.showToast('成功', '打印任务已发送', 'success');
+            await response.json();
+            this.showToast('success', '打印任务已发送');
             this.printerSelectModal.hide();
             this.loadPrintJobs(); // 刷新任务列表
         } catch (error) {
             console.error('打印失败:', error);
-            this.showToast('错误', '打印失败: ' + error.message, 'error');
+            this.showToast('error', error.message || '打印失败');
         }
     }
 }

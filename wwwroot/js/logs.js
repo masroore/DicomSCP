@@ -15,11 +15,6 @@ class LogManager {
     async loadLogTypes() {
         try {
             const response = await fetch('/api/logs/types');
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
             if (!response.ok) {
                 throw new Error('获取日志类型失败');
             }
@@ -31,6 +26,7 @@ class LogManager {
             }
         } catch (error) {
             console.error('加载日志类型失败:', error);
+            showToast('error', '加载失败', '加载日志类型失败');
         }
     }
 
@@ -38,11 +34,6 @@ class LogManager {
         try {
             this.currentType = type;
             const response = await fetch(`/api/logs/files/${type}`);
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
             if (!response.ok) {
                 throw new Error('获取日志文件失败');
             }
@@ -53,16 +44,24 @@ class LogManager {
             this.updatePagination();
         } catch (error) {
             console.error('加载日志文件失败:', error);
+            showToast('error', '加载失败', '加载日志文件失败');
         }
     }
 
     renderLogTypes(types) {
+        const fragment = document.createDocumentFragment();
+        types.forEach(type => {
+            const a = document.createElement('a');
+            a.href = '#';
+            a.className = 'list-group-item list-group-item-action';
+            a.dataset.type = type;
+            a.textContent = type;
+            fragment.appendChild(a);
+        });
+        
         const container = document.getElementById('logTypes');
-        container.innerHTML = types.map(type => `
-            <a href="#" class="list-group-item list-group-item-action" data-type="${type}">
-                ${type}
-            </a>
-        `).join('');
+        container.innerHTML = '';
+        container.appendChild(fragment);
     }
 
     renderLogFiles() {
@@ -70,36 +69,38 @@ class LogManager {
         const end = start + this.pageSize;
         const pageFiles = this.allFiles.slice(start, end);
         
-        const container = document.getElementById('logFiles');
-        
         const now = new Date();
         now.setHours(0, 0, 0, 0);
         
-        container.innerHTML = pageFiles.map(file => {
+        const fragment = document.createDocumentFragment();
+        pageFiles.forEach(file => {
             const fileDate = new Date(file.lastModified);
             fileDate.setHours(0, 0, 0, 0);
-            
             const isToday = fileDate.getTime() === now.getTime();
             
-            return `
-                <tr>
-                    <td>
-                        <a href="#" onclick="logManager.viewLogContent('${file.name}'); return false;">
-                            ${file.name}
-                        </a>
-                    </td>
-                    <td>${this.formatFileSize(file.size)}</td>
-                    <td>${new Date(file.lastModified).toLocaleString()}</td>
-                    <td>
-                        ${!isToday ? `
-                            <button class="btn btn-danger btn-sm" onclick="logManager.deleteLogFile('${file.name}')">
-                                <i class="bi bi-trash"></i> 删除
-                            </button>
-                        ` : ''}
-                    </td>
-                </tr>
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <a href="#" onclick="logManager.viewLogContent('${file.name}'); return false;">
+                        ${file.name}
+                    </a>
+                </td>
+                <td>${this.formatFileSize(file.size)}</td>
+                <td>${new Date(file.lastModified).toLocaleString()}</td>
+                <td>
+                    ${!isToday ? `
+                        <button class="btn btn-danger btn-sm" onclick="logManager.deleteLogFile('${file.name}')">
+                            <i class="bi bi-trash"></i> 删除
+                        </button>
+                    ` : ''}
+                </td>
             `;
-        }).join('');
+            fragment.appendChild(tr);
+        });
+        
+        const container = document.getElementById('logFiles');
+        container.innerHTML = '';
+        container.appendChild(fragment);
     }
 
     updateActiveType() {
@@ -139,7 +140,7 @@ class LogManager {
     }
 
     async deleteLogFile(filename) {
-        if (!confirm(`确定要删除日志文件 ${filename} 吗？`)) {
+        if (!await showConfirmDialog('确认删除', `确定要删除日志文件 ${filename} 吗？`)) {
             return;
         }
 
@@ -148,18 +149,14 @@ class LogManager {
                 method: 'DELETE'
             });
             
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
             if (!response.ok) {
                 throw new Error(await response.text());
             }
             
             await this.loadLogFiles(this.currentType);
+            showToast('success', '操作成功', '日志文件已删除');
         } catch (error) {
-            alert(error.message || '删除日志文件失败');
+            showToast('error', '删除失败', error.message || '删除日志文件失败');
         }
     }
 
@@ -172,7 +169,8 @@ class LogManager {
             
             const data = await response.json();
             
-            const modalHtml = `
+            const modalDiv = document.createElement('div');
+            modalDiv.innerHTML = `
                 <div class="modal fade" id="logContentModal" tabindex="-1">
                     <div class="modal-dialog modal-lg" style="max-width: 1000px;">
                         <div class="modal-content">
@@ -204,37 +202,48 @@ class LogManager {
                     </div>
                 </div>
             `;
-
+            
             const existingModal = document.getElementById('logContentModal');
             if (existingModal) {
                 existingModal.remove();
             }
 
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.appendChild(modalDiv.firstElementChild);
             await this.updateLogFileSelect(filename);
 
             this.currentModal = new bootstrap.Modal(document.getElementById('logContentModal'), {
                 backdrop: 'static',
                 keyboard: false
             });
-            this.currentModal.show();
+            
+            requestAnimationFrame(() => {
+                this.currentModal.show();
+            });
 
         } catch (error) {
             console.error('获取日志内容失败:', error);
-            alert('获取日志内容失败');
+            showToast('error', '获取失败', '获取日志内容失败');
         }
     }
 
     async updateLogFileSelect(currentFile) {
-        const response = await fetch(`/api/logs/files/${this.currentType}`);
-        const files = await response.json();
-        
-        const select = document.getElementById('logFileSelect');
-        select.innerHTML = files.map(file => `
-            <option value="${file.name}" ${file.name === currentFile ? 'selected' : ''}>
-                ${file.name}
-            </option>
-        `).join('');
+        try {
+            const response = await fetch(`/api/logs/files/${this.currentType}`);
+            if (!response.ok) {
+                throw new Error('获取日志文件列表失败');
+            }
+            const files = await response.json();
+            
+            const select = document.getElementById('logFileSelect');
+            select.innerHTML = files.map(file => `
+                <option value="${file.name}" ${file.name === currentFile ? 'selected' : ''}>
+                    ${file.name}
+                </option>
+            `).join('');
+        } catch (error) {
+            console.error('更新日志文件列表失败:', error);
+            showToast('error', '更新失败', '更新日志文件列表失败');
+        }
     }
 
     async refreshLogContent() {
@@ -268,22 +277,17 @@ class LogManager {
             }
         } catch (error) {
             console.error('加载日志内容失败:', error);
-            alert('加载日志内容失败');
+            showToast('error', '加载失败', '加载日志内容失败');
         }
     }
 
     async clearLogContent() {
         const select = document.getElementById('logFileSelect');
-        if (select && confirm(`确定要清空日志文件 ${select.value} 吗？`)) {
+        if (select && await showConfirmDialog('确认清空', `确定要清空日志文件 ${select.value} 吗？`)) {
             try {
                 const response = await fetch(`/api/logs/${this.currentType}/${select.value}/clear`, {
                     method: 'POST'
                 });
-                
-                if (response.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
-                }
                 
                 if (!response.ok) {
                     throw new Error('清空失败');
@@ -291,42 +295,50 @@ class LogManager {
                 
                 await this.refreshLogContent();
                 await this.loadLogFiles(this.currentType);
+                showToast('success', '操作成功', '日志文件已清空');
             } catch (error) {
-                alert(error.message || '清空日志文件失败');
+                showToast('error', '清空失败', error.message || '清空日志文件失败');
             }
         }
     }
 
     updatePagination() {
-        const totalPages = Math.ceil(this.allFiles.length / this.pageSize);
-        const container = document.getElementById('logFiles-pagination');
-        if (!container) return;
+        try {
+            const totalPages = Math.ceil(this.allFiles.length / this.pageSize);
+            const container = document.getElementById('logFiles-pagination');
+            if (!container) return;
 
-        container.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mt-3">
-                <div class="pagination-info">
-                    显示 <span id="logs-currentRange">${(this.currentPage - 1) * this.pageSize + 1}-${Math.min(this.currentPage * this.pageSize, this.allFiles.length)}</span> 条，
-                    共 <span id="logs-totalCount">${this.allFiles.length}</span> 条
+            const start = (this.currentPage - 1) * this.pageSize + 1;
+            const end = Math.min(this.currentPage * this.pageSize, this.allFiles.length);
+
+            container.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="pagination-info">
+                        显示 <span id="logs-currentRange">${this.allFiles.length > 0 ? `${start}-${end}` : '0-0'}</span> 条，
+                        共 <span id="logs-totalCount">${this.allFiles.length}</span> 条
+                    </div>
+                    <nav aria-label="分页导航">
+                        <ul class="pagination mb-0">
+                            <li class="page-item ${this.currentPage <= 1 ? 'disabled' : ''}">
+                                <button class="page-link" onclick="logManager.changePage(${this.currentPage - 1})" aria-label="上一页">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                            </li>
+                            <li class="page-item">
+                                <span class="page-link">${this.currentPage}</span>
+                            </li>
+                            <li class="page-item ${this.currentPage >= totalPages ? 'disabled' : ''}">
+                                <button class="page-link" onclick="logManager.changePage(${this.currentPage + 1})" aria-label="下一页">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
                 </div>
-                <nav aria-label="分页导航">
-                    <ul class="pagination mb-0">
-                        <li class="page-item">
-                            <button class="page-link" onclick="logManager.changePage(${this.currentPage - 1})" aria-label="上一页">
-                                <span aria-hidden="true">&laquo;</span>
-                            </button>
-                        </li>
-                        <li class="page-item">
-                            <span class="page-link">${this.currentPage}</span>
-                        </li>
-                        <li class="page-item">
-                            <button class="page-link" onclick="logManager.changePage(${this.currentPage + 1})" aria-label="下一页">
-                                <span aria-hidden="true">&raquo;</span>
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
-            </div>
-        `;
+            `;
+        } catch (error) {
+            handleError(error, '更新分页信息失败');
+        }
     }
 
     changePage(page) {

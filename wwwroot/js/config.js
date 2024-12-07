@@ -1,8 +1,15 @@
 class ConfigManager {
     constructor() {
+        this.editor = null;
+        this.helpModal = null;
         this.initAxiosInterceptors();
-        this.init();
-        this.helpModal = new bootstrap.Modal(document.getElementById('configHelpModal'));
+        
+        // 等待 DOM 加载完成后再初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.init());
+        } else {
+            this.init();
+        }
     }
 
     initAxiosInterceptors() {
@@ -19,6 +26,8 @@ class ConfigManager {
     }
 
     init() {
+        this.editor = document.getElementById('configEditor');
+        
         // 监听页面切换事件
         document.querySelectorAll('.nav-link[data-page]').forEach(link => {
             link.addEventListener('click', (e) => {
@@ -28,22 +37,39 @@ class ConfigManager {
             });
         });
 
-        // 如果当前在设置页面，加载配置
-        if (window.location.hash === '#settings') {
-            this.loadConfig();
+        // 检查当前页面状态
+        const settingsPage = document.getElementById('settings-page');
+        if (settingsPage && window.location.hash === '#settings' || 
+            settingsPage && settingsPage.style.display !== 'none') {
+            // 延迟加载配置，确保页面已完全切换
+            setTimeout(() => this.loadConfig(), 100);
         }
+
+        // 添加 hashchange 事件监听
+        window.addEventListener('hashchange', () => {
+            if (window.location.hash === '#settings') {
+                this.loadConfig();
+            }
+        });
     }
 
     async loadConfig() {
         try {
-            const response = await axios.get('/api/config');
-            const editor = document.getElementById('configEditor');
-            if (editor) {
-                editor.value = JSON.stringify(response.data, null, 2);
+            if (!this.editor) {
+                this.editor = document.getElementById('configEditor');
             }
+            
+            if (!this.editor) {
+                console.error('配置编辑器元素未找到');
+                return;
+            }
+
+            showLoading(this.editor);
+            const response = await axios.get('/api/config');
+            this.editor.value = JSON.stringify(response.data, null, 2);
         } catch (error) {
-            console.error('获取配置失败:', error);
-            this.showToast('error', '获取配置失败: ' + error.message);
+            console.error('加载配置失败:', error);
+            handleError(error, '获取配置失败');
         }
     }
 
@@ -55,45 +81,65 @@ class ConfigManager {
             try {
                 config = JSON.parse(configText);
             } catch (e) {
-                this.showToast('danger', '配置格式不正确，请检查JSON格式');
+                showToast('error', '验证失败', '配置格式不正确，请检查JSON格式');
                 return;
             }
 
             await axios.post('/api/config', config);
-
-            this.showToast('success', '配置保存成功！需要重启服务生效');
+            showSuccessMessage('配置保存成功！需要重启服务生效');
         } catch (error) {
-            console.error('保存配置失败:', error);
-            this.showToast('danger', '保存配置失败: ' + error.message);
+            handleError(error, '保存配置失败');
         }
     }
 
     showToast(type, message) {
-        const toast = document.getElementById('storeToast');
-        const toastTitle = document.getElementById('storeToastTitle');
-        const toastMessage = document.getElementById('storeToastMessage');
-        
-        // 设置样式
-        toast.classList.remove('bg-success', 'bg-danger', 'text-white');
         if (type === 'success') {
-            toast.classList.add('bg-success', 'text-white');
-            toastTitle.textContent = '操作成功';
+            showSuccessMessage(message);
         } else {
-            toast.classList.add('bg-danger', 'text-white');
-            toastTitle.textContent = '操作失败';
+            handleError(new Error(message), '操作失败');
         }
-        
-        toastMessage.textContent = message;
-        
-        const bsToast = new bootstrap.Toast(toast);
-        bsToast.show();
     }
 
-    showHelp() {
-        this.helpModal.show();
+    async showHelp() {
+        try {
+            // 如果模态框不存在，创建它
+            if (!this.helpModal) {
+                // 加载 help.html 的内容
+                const response = await fetch('help.html');
+                const html = await response.text();
+
+                // 创建模态框容器
+                const modalDiv = document.createElement('div');
+                modalDiv.className = 'modal fade';
+                modalDiv.id = 'configHelpModal';
+                modalDiv.setAttribute('tabindex', '-1');
+                modalDiv.innerHTML = `
+                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                        ${html}
+                    </div>
+                `;
+                document.body.appendChild(modalDiv);
+
+                // 初始化模态框
+                this.helpModal = new bootstrap.Modal(modalDiv);
+
+                // 监听模态框隐藏事件，清理DOM
+                modalDiv.addEventListener('hidden.bs.modal', () => {
+                    document.body.removeChild(modalDiv);
+                    this.helpModal.dispose();
+                    this.helpModal = null;
+                });
+            }
+
+            // 显示模态框
+            this.helpModal.show();
+        } catch (error) {
+            console.error('加载帮助内容失败:', error);
+            showToast('error', '加载失败', '加载帮助内容失败');
+        }
     }
 }
 
-// 初始化
+// 创建全局实例
 window.configManager = new ConfigManager(); 
 

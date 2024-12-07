@@ -358,6 +358,20 @@ async function loadStoreNodes() {
                 ${node.name} (${node.aeTitle}@${node.hostName})
             </option>
         `).join('');
+
+        // 如果有保存的选择，恢复它
+        if (this.selectedNode) {
+            select.value = this.selectedNode;
+        } else {
+            // 否则保存当前选择
+            this.selectedNode = select.value;
+        }
+
+        // 监听节点选择变化
+        select.addEventListener('change', (e) => {
+            this.selectedNode = e.target.value;
+        });
+
     } catch (error) {
         console.error('加载节点列表失败:', error);
         alert('加载节点列表失败，请检查网络连接');
@@ -464,12 +478,12 @@ function showToast(message, isSuccess = true) {
 
 class StoreManager {
     constructor() {
-        this.nodes = [];
-        this.defaultNode = null;
-        this.loadNodes();
+        this.selectedNode = null;  // 添加节点选择状态
+        this.selectedFiles = new Map();
+        this.init();
     }
 
-    async loadNodes() {
+    async init() {
         try {
             const response = await fetch('/api/StoreSCU/nodes');
             if (!response.ok) {
@@ -519,4 +533,5 @@ class StoreManager {
 }
 
 // 创建全局实例
-const storeManager = new StoreManager(); 
+const storeManager = new StoreManager();
+ 

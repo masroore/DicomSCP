@@ -1,9 +1,82 @@
-// 全局变量
-let worklistModal;
-let currentWorklistId = null;
+// ================ 全局变量 ================
 let changePasswordModal;
 let viewerModal;
 
+// ================ 通用工具函数 ================
+// 统一错误处理
+function handleError(error, message) {
+    console.error(message, error);
+    showToast('error', '操作失败', error.response?.data || error.message);
+}
+
+// 统一成功提示
+function showSuccessMessage(message) {
+    showToast('success', '操作成功', message);
+}
+
+// 显示加载状态
+function showLoading(element) {
+    if (!element) return;
+    element.innerHTML = `
+        <div class="d-flex justify-content-center align-items-center p-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+        </div>
+    `;
+}
+
+// 添加通用的提示框显示函数
+function showToast(type, title, message) {
+    try {
+        const toastEl = document.getElementById('storeToast');
+        const titleEl = document.getElementById('storeToastTitle');
+        const messageEl = document.getElementById('storeToastMessage');
+        
+        toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
+        toastEl.classList.add(type === 'success' ? 'bg-success' : 'bg-danger', 'text-white');
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        
+        const storeToast = new bootstrap.Toast(toastEl);
+        storeToast.show();
+    } catch (error) {
+        console.error('显示提示失败:', error);
+    }
+}
+
+// 修改所有模态框的清理代码
+function cleanupModal(modalId, callback) {
+    return () => {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement && document.body.contains(modalElement)) {
+            modalElement.remove();
+        }
+        if (callback) {
+            delete window[callback];
+        }
+    };
+}
+
+// 添加到通用工具函数部分
+function handleApiError(error, defaultMessage) {
+    if (error.response) {
+        // 服务器返回错误
+        if (error.response.status === 404) {
+            handleError(error, '请求的资源不存在');
+        } else {
+            handleError(error, error.response.data || defaultMessage);
+        }
+    } else if (error.request) {
+        // 请求发送失败
+        handleError(error, '网络连接失败，请检查网络');
+    } else {
+        // 其他错误
+        handleError(error, defaultMessage);
+    }
+}
+
+// ================ 初始化函数 ================
 // 初始化 axios 拦截器
 function initAxiosInterceptors() {
     axios.interceptors.response.use(
@@ -22,30 +95,10 @@ function initAxiosInterceptors() {
 
     // 添加请求拦截器
     axios.interceptors.request.use(
-        config => {
-            // 统一处理请求配置
-            return config;
-        },
-        error => {
-            return Promise.reject(error);
-        }
+        config => config,
+        error => Promise.reject(error)
     );
 }
-
-// 分页参数
-let currentPage = 1;
-const pageSize = 10;
-
-
-// QR客户端相关变量
-let qrCurrentPage = 1;
-const qrPageSize = 10;
-let qrAllData = [];
-let qrSeriesModal;
-
-// 添加影像管理的分页变量
-let imagesCurrentPage = 1;
-const imagesPageSize = 10;
 
 // 页面加载完成后执行
 $(document).ready(function() {
@@ -55,13 +108,10 @@ $(document).ready(function() {
     // 初始化各种模态框和其他组件
     initializeComponents();
     
-    // 绑定Worklist相关事件
-    bindWorklistEvents();
+    // 初始化预约模块
+    initializeWorklist();
     
-    // 绑定影像管理相关事件
-    bindImagesEvents();
-    
-    // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
+    // 根据URL hash切换到对应页面，如没有hash则默认显示worklist
     const currentTab = window.location.hash.slice(1) || 'worklist';
     switchPage(currentTab);
     
@@ -73,22 +123,12 @@ $(document).ready(function() {
         switchPage(page);
     });
 
-    // 加载初始数据
-    loadWorklistData();
-    loadImages();
-    
     // 获取当前登录用户名
     getCurrentUsername();
 });
 
 // 初始化组件
 function initializeComponents() {
-    // 初始化模态框
-    const modalElement = document.getElementById('worklistModal');
-    if (modalElement) {
-        worklistModal = new bootstrap.Modal(modalElement);
-    }
-
     // 初始化修改密码模态框
     const changePasswordModalElement = document.getElementById('changePasswordModal');
     if (changePasswordModalElement) {
@@ -110,1249 +150,47 @@ function initializeComponents() {
     }
 }
 
-// 绑定Worklist相关事件
-function bindWorklistEvents() {
-    // 分页按钮
-    const prevPageEl = document.getElementById('worklist-prevPage');
-    const nextPageEl = document.getElementById('worklist-nextPage');
-
-    if (prevPageEl) {
-        prevPageEl.onclick = () => {
-            if (currentPage > 1) {
-                currentPage--;
-                loadWorklistData();
-            }
-        };
-    }
-
-    if (nextPageEl) {
-        nextPageEl.onclick = () => {
-            currentPage++;
-            loadWorklistData();
-        };
-    }
-
-    // 搜索表单事件
-    const searchForm = document.getElementById('worklistSearchForm');
-    if (searchForm) {
-        searchForm.onsubmit = (e) => {
-            e.preventDefault();
-            currentPage = 1;
-            loadWorklistData();
-        };
-
-        // 重置按钮事件
-        const resetButton = searchForm.querySelector('button[type="reset"]');
-        if (resetButton) {
-            resetButton.onclick = (e) => {
-                e.preventDefault();
-                searchForm.reset();
-                currentPage = 1;
-                loadWorklistData();
-            };
-        }
-    }
-}
-    // 初始化修改密码模态框
-    const changePasswordModalElement = document.getElementById('changePasswordModal');
-    if (changePasswordModalElement) {
-        changePasswordModal = new bootstrap.Modal(changePasswordModalElement);
-    }
-    
-    // 初始化查看器模态框
-    viewerModal = new bootstrap.Modal(document.getElementById('viewerModal'));
-    
-    // 监听模态框关闭事件，清理资源
-    document.getElementById('viewerModal').addEventListener('hidden.bs.modal', function () {
-        document.getElementById('viewerFrame').src = 'about:blank';
-    });
-    
-    // 根据URL hash切换到对应页面，如果没有hash则默认显示worklist
-    const currentTab = window.location.hash.slice(1) || 'worklist';
-    switchPage(currentTab);
-    
-    // 导航链接点击事件
-    $('.nav-link[data-page]').click(function(e) {
-        e.preventDefault();
-        const page = $(this).data('page');
-        window.location.hash = page; // 更新URL hash
-        switchPage(page);
-    });
-
-    // 加载初始数据
-    loadWorklistData();
-    loadImages();
-    
-    // 获取当前登录用户名
-    getCurrentUsername();
-
-// 绑定影像管理相关事件
-function bindImagesEvents() {
-    try {
-        // 分页事件
-        const prevPageEl = document.getElementById('images-prevPage');
-        const nextPageEl = document.getElementById('images-nextPage');
-
-        if (prevPageEl) {
-            prevPageEl.onclick = () => {
-                if (imagesCurrentPage > 1) {
-                    imagesCurrentPage--;
-                    loadImages(imagesCurrentPage);
-                }
-            };
-        }
-
-        if (nextPageEl) {
-            nextPageEl.onclick = () => {
-                imagesCurrentPage++;
-                loadImages(imagesCurrentPage);
-            };
-        }
-
-        // 搜索表单事件
-        const searchForm = document.getElementById('imagesSearchForm');
-        if (searchForm) {
-            // 搜索提交事件
-            searchForm.onsubmit = (e) => {
-                e.preventDefault();
-                imagesCurrentPage = 1;
-                loadImages(1);
-            };
-
-            // 重置按钮事件
-            const resetButton = searchForm.querySelector('button[type="reset"]');
-            if (resetButton) {
-                resetButton.onclick = (e) => {
-                    e.preventDefault();
-                    try {
-                        // 先重置表单
-                        searchForm.reset();
-                        
-                        // 再手动清空所有搜索条件（以确保select等特殊控件也被重置）
-                        const inputs = {
-                            'images-searchPatientId': '',
-                            'images-searchPatientName': '',
-                            'images-searchAccessionNumber': '',
-                            'images-searchStudyDate': '',
-                            'images-searchModality': ''
-                        };
-                        
-                        Object.entries(inputs).forEach(([id, value]) => {
-                            const element = document.getElementById(id);
-                            if (element) {
-                                element.value = value;
-                            }
-                        });
-                        
-                        // 重置页码并重新加载数据
-                        imagesCurrentPage = 1;
-                        loadImages(1);
-                    } catch (error) {
-                        console.error('重置表单失败:', error);
-                        showToast('error', '重置失败', error.message);
-                    }
-                };
-            }
-        }
-    } catch (error) {
-        console.error('绑定影像管理事件失败:', error);
-        showToast('error', '初始化失败', '绑定影像管理事件失败');
-    }
-}
-
-// 切换页面函数
+// ================ 页面切换 ================
+// 切换页函数
 function switchPage(page) {
-    // 隐藏所有页面
-    $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page, #print-page').hide();
-    
-    // 移除所有导航链接的active类
-    $('.nav-link').removeClass('active');
-    
-    // 显示选中的页面
-    $(`#${page}-page`).show();
-    
-    // 添加active类到当前导航链接
-    $(`.nav-link[data-page="${page}"]`).addClass('active');
-    
-    // 根据页面类型加载数据
-    if (page === 'worklist') {
-        loadWorklistData();
-    } else if (page === 'images') {
-        loadImages(1);
-    } else if (page === 'qr') {
-        loadQRNodes();
-    } else if (page === 'store') {
-        if (typeof loadStoreNodes === 'function') {
-            loadStoreNodes();
-        }
-    } else if (page === 'logs') {
-        if (!window.logManager) {
-            window.logManager = new LogManager();
-        }
-    } else if (page === 'print') {
-        if (!window.printManager) {
-            window.printManager = new PrintManager();
-        } else {
-            window.printManager.loadPrintJobs();
-        }
-    }
-}
-
-// 加载 Worklist 数据
-async function loadWorklistData() {
     try {
-        // 获取搜索条件
-        const patientId = document.getElementById('worklist-searchPatientId')?.value || '';
-        const patientName = document.getElementById('worklist-searchPatientName')?.value || '';
-        const accessionNumber = document.getElementById('worklist-searchAccessionNumber')?.value || '';
-        const modality = document.getElementById('worklist-searchModality')?.value || '';
-        const scheduledDate = document.getElementById('worklist-searchScheduledDate')?.value || '';
+        // 隐藏所有页面
+        $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page, #print-page').hide();
         
-
-        // 构建查询参数
-        const params = new URLSearchParams({
-            page: currentPage,
-            pageSize: pageSize
-        });
+        // 移除所有导航链接的active类
+        $('.nav-link').removeClass('active');
         
-        if (patientId) params.append('patientId', patientId);
-        if (patientName) params.append('patientName', patientName);
-        if (accessionNumber) params.append('accessionNumber', accessionNumber);
-        if (modality) params.append('modality', modality);
-        if (scheduledDate) params.append('scheduledDate', scheduledDate);
-
-        const response = await fetch(`/api/worklist?${params}`);
-        if (response.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
-        if (!response.ok) {
-            throw new Error('获取数据失败');
-        }
+        // 显示选中的页面
+        $(`#${page}-page`).show();
         
-        const result = await response.json();
-        if (!result) return;
-
-        // 更新表格数据
-        displayWorklistData(result.items);
+        // 添加active类到当前导航链接
+        $(`.nav-link[data-page="${page}"]`).addClass('active');
         
-        // 更新分页信息
-        updatePagination(result.totalCount, result.page, result.totalPages);
-    } catch (error) {
-        console.error('获取Worklist数据失败:', error);
-        alert('获取数据失败，请检查网络连接');
-    }
-}
-
-// 显示数据
-function displayWorklistData(items) {
-    const tbody = document.getElementById('worklist-table-body');
-    tbody.innerHTML = items.map(item => `
-        <tr>
-            <td title="${item.patientId}">${item.patientId}</td>
-            <td title="${item.patientName}">${item.patientName}</td>
-            <td>${formatGender(item.patientSex)}</td>
-            <td>${item.age ? item.age + '岁' : ''}</td>
-            <td title="${item.accessionNumber}">${item.accessionNumber}</td>
-            <td>${item.modality}</td>
-            <td>${formatDateTime(item.scheduledDateTime)}</td>
-            <td><span class="status-${item.status.toLowerCase()}">${formatStatus(item.status)}</span></td>
-            <td>
-<button class="btn btn-sm btn-primary" onclick="editWorklist('${item.worklistId}')">
-    <i class="bi bi-pencil me-1"></i>编辑
-</button>
-<button class="btn btn-sm btn-danger" onclick="deleteWorklist('${item.worklistId}')">
-    <i class="bi bi-trash me-1"></i>删除
-</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// 更新分页信息
-function updatePagination(totalCount, currentPage, totalPages) {
-    const currentPageEl = document.getElementById('worklist-currentPage');
-    const currentRangeEl = document.getElementById('worklist-currentRange');
-    const totalCountEl = document.getElementById('worklist-totalCount');
-    const prevPageEl = document.getElementById('worklist-prevPage');
-    const nextPageEl = document.getElementById('worklist-nextPage');
-
-    if (currentPageEl) currentPageEl.textContent = currentPage;
-    
-    const start = (currentPage - 1) * pageSize + 1;
-    const end = Math.min(currentPage * pageSize, totalCount);
-    if (currentRangeEl) {
-        currentRangeEl.textContent = totalCount > 0 ? `${start}-${end}` : '0-0';
-    }
-    if (totalCountEl) totalCountEl.textContent = totalCount;
-    
-    // 更新按钮状态
-    if (prevPageEl) prevPageEl.disabled = currentPage <= 1;
-    if (nextPageEl) nextPageEl.disabled = currentPage >= totalPages;
-}
-
-// 分页按钮事件
-
-async function loadImages(page = 1) {
-    try {
-        const patientId = document.getElementById('images-searchPatientId')?.value || '';
-        const patientName = document.getElementById('images-searchPatientName')?.value || '';
-        const accessionNumber = document.getElementById('images-searchAccessionNumber')?.value || '';
-        const modality = document.getElementById('images-searchModality')?.value || '';
-        const studyDate = document.getElementById('images-searchStudyDate')?.value || '';
-        
-        const params = new URLSearchParams({
-            page,
-            pageSize: imagesPageSize,
-            patientId,
-            patientName,
-            accessionNumber,
-            modality,
-            studyDate
-        });
-
-        const response = await fetch(`/api/images?${params}`);
-        if (!response.ok) {
-            throw new Error('获取数据失败');
-        }
-
-        const result = await response.json();
-        displayImages(result.items);
-        updateImagesPagination(result);
-        
-        // 更新当前页码
-        imagesCurrentPage = page;
-        
-    } catch (error) {
-        console.error('加载影像失败:', error);
-        showToast('error', '加载失败', error.message);
-    }
-}
-
-function displayImages(items) {
-    const tbody = document.getElementById('images-table-body');
-    tbody.innerHTML = items.map(item => `
-        <tr onclick="toggleSeriesInfo(this)" data-study-uid="${item.studyInstanceUid}">
-            <td>${item.patientId || ''}</td>
-            <td>${item.patientName || ''}</td>
-            <td>${item.accessionNumber || ''}</td>
-            <td>${item.modality || ''}</td>
-            <td>${formatDate(item.studyDate) || ''}</td>
-            <td>${item.studyDescription || ''}</td>
-            <td>${item.numberOfInstances || 0}</td>
-            <td>
-               <button class="btn btn-sm btn-danger" onclick="deleteStudy('${item.studyInstanceUid}', event)" title="删除">
-              <i class="bi bi-trash me-1"></i>删除
-                </button>
-            </td>
-        </tr>
-    `).join('');
-
-    if (items.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" class="text-center">暂无数据</td>
-            </tr>
-        `;
-    }
-}
-function updateImagesPagination(result) {
-    const { totalCount, page, pageSize, totalPages } = result;
-    const start = (page - 1) * pageSize + 1;
-    const end = Math.min(page * pageSize, totalCount);
-    
-    document.getElementById('images-currentPage').textContent = page;
-    document.getElementById('images-currentRange').textContent = 
-        totalCount > 0 ? `${start}-${end}` : '0-0';
-    document.getElementById('images-totalCount').textContent = totalCount;
-    
-    document.getElementById('images-prevPage').disabled = page <= 1;
-    document.getElementById('images-nextPage').disabled = page >= totalPages;
-}
-
-// 绑定分页事件
-document.getElementById('images-prevPage').onclick = () => {
-    if (imagesCurrentPage > 1) {
-        imagesCurrentPage--;
-        loadImages(imagesCurrentPage);
-    }
-};
-
-document.getElementById('images-nextPage').onclick = () => {
-    imagesCurrentPage++;
-    loadImages(imagesCurrentPage);
-};
-
-// 绑定搜索事件
-document.getElementById('imagesSearchForm').onsubmit = (e) => {
-    e.preventDefault();
-    imagesCurrentPage = 1;  // 搜索时重置到第一页
-    loadImages(1);
-};
-
-document.getElementById('imagesSearchForm').querySelector('button[type="reset"]').onclick = (e) => {
-    e.preventDefault();
-    
-    // 重置表单
-    document.getElementById('imagesSearchForm').reset();
-    
-    // 清空所有搜索条件
-    document.getElementById('images-searchPatientId').value = '';
-    document.getElementById('images-searchPatientName').value = '';
-    document.getElementById('images-searchAccessionNumber').value = '';
-    document.getElementById('images-searchStudyDate').value = '';
-    document.getElementById('images-searchModality').value = '';
-    
-    // 重置页码
-    imagesCurrentPage = 1;
-    
-    // 执行查询
-    loadImages(1);
-};
-// 切换序列信息显示
-function toggleSeriesInfo(row) {
-    const studyUid = $(row).data('study-uid');
-    const seriesRow = $(row).next('.series-info');
-    
-    if (seriesRow.is(':visible')) {
-        seriesRow.hide();
-        return;
-    }
-
-    fetch(`/api/images/${studyUid}/series`)
-        .then(response => {
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
+        // 根据页面类型加载数据
+        if (page === 'worklist') {
+            loadWorklistData();
+        } else if (page === 'images') {
+            initializeImages();
+        } else if (page === 'qr') {
+            initializeQR();
+        } else if (page === 'store') {
+            if (typeof loadStoreNodes === 'function') {
+                loadStoreNodes();
             }
-            if (!response.ok) {
-                throw new Error('获取数据失败');
+        } else if (page === 'logs') {
+            // 初始化日志管理器
+            if (!window.logManager) {
+                window.logManager = new LogManager();
             }
-            return response.json();
-        })
-        .then(data => {
-            if (!data) return;  // 如果是401跳转，data会是undefined
-            
-            // 创建序列信息行
-            const seriesInfoRow = $(`
-                <tr class="series-info" style="display: none;">
-                    <td colspan="9">
-                        <div class="series-container">
-                            <table class="table table-sm table-bordered series-detail-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 50px">序列号</th>
-                                        <th style="width: 100px">检查类型</th>
-                                        <th style="width: 500px">序列描述</th>
-                                        <th style="width: 80px">图像数量</th>
-                                        <th style="width: 50px">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-            `);
-            
-            const tbody = seriesInfoRow.find('tbody');
-            data.forEach(series => {
-                tbody.append(`
-                    <tr>
-                        <td>${series.seriesNumber}</td>
-                        <td>${series.modality || '未知'}</td>
-                        <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                        <td>${series.numberOfInstances}</td>
-                        <td>
-                            <button class="btn btn-primary btn-sm py-0" onclick="previewSeries('${studyUid}', '${series.seriesInstanceUid}')">
-    <i class="bi bi-eye me-1"></i>预览
-</button>
-                        </td>
-                    </tr>
-                `);
-            });
-            
-            // 移除已存在的序列信息行
-            $(row).siblings('.series-info').remove();
-            // 添加新的序列信息行并显示
-            $(row).after(seriesInfoRow);
-            seriesInfoRow.show();
-        })
-        .catch(error => {
-            console.error('获取序列数据失败:', error);
-            alert('获取序列数据失败');
-        });
-}
-
-// 打开添加预约模态框
-function openAddWorklistModal() {
-    currentWorklistId = null;
-    document.getElementById('modalTitle').textContent = '添加预约';
-    
-    // 重置表单
-    document.getElementById('worklistForm').reset();
-    
-    // 获取当前时间
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    
-    // 生成患者ID：P + 年月日时分秒
-    const patientId = `P${year}${month}${day}${hours}${minutes}${seconds}`;
-    document.getElementById('patientId').value = patientId;
-    
-    // 生成检查号：A + 年月日时分秒
-    const accessionNumber = `A${year}${month}${day}${hours}${minutes}${seconds}`;
-    document.getElementById('accessionNumber').value = accessionNumber;
-    
-    // 设置默认预约时间为当前时间
-    const defaultDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-    document.getElementById('scheduledDateTime').value = defaultDateTime;
-    
-    // 显示模态框
-    worklistModal.show();
-}
-
-// 编辑预约时，格式化日期时间
-function editWorklist(worklistId) {
-    currentWorklistId = worklistId;
-    document.getElementById('modalTitle').textContent = '编辑预约';
-    
-    axios.get(`/api/worklist/${worklistId}`)
-        .then(response => {
-            const data = response.data;
-            // 填充表单数据
-            document.getElementById('patientId').value = data.patientId || '';
-            document.getElementById('patientName').value = data.patientName || '';
-            document.getElementById('patientSex').value = data.patientSex || '';
-            document.getElementById('patientAge').value = data.age || '';
-            document.getElementById('accessionNumber').value = data.accessionNumber || '';
-            document.getElementById('modality').value = data.modality || '';
-            document.getElementById('scheduledAET').value = data.scheduledAET || '';
-            document.getElementById('scheduledStationName').value = data.scheduledStationName || '';
-            document.getElementById('bodyPartExamined').value = data.bodyPartExamined || '';
-            document.getElementById('status').value = data.status || 'SCHEDULED';
-            
-            // 格式化预约时间
-            if (data.scheduledDateTime) {
-                try {
-                    const date = new Date(data.scheduledDateTime);
-                    if (!isNaN(date)) {
-                        const year = date.getFullYear();
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const hours = String(date.getHours()).padStart(2, '0');
-                        const minutes = String(date.getMinutes()).padStart(2, '0');
-                        
-                        document.getElementById('scheduledDateTime').value = 
-                            `${year}-${month}-${day}T${hours}:${minutes}`;
-                    }
-                } catch (error) {
-                    console.warn('日期格式化失败:', error);
-                }
-            }
-            
-            worklistModal.show();
-        })
-        .catch(error => {
-            console.error('获取预约数据失败:', error);
-            alert('获取预约数据失败');
-        });
-}
-
-// 保存 Worklist
-function saveWorklist() {
-    // 验证年龄
-    const ageInput = document.getElementById('patientAge');
-    if (!ageInput.value) {
-        alert('请输入年龄');
-        ageInput.focus();
-        return;
-    }
-    
-    const age = parseInt(ageInput.value);
-    if (isNaN(age) || age < 0 || age > 150) {
-        alert('请输入有效的年龄（0-150岁）');
-        ageInput.focus();
-        return;
-    }
-
-    const data = {
-        worklistId: currentWorklistId || '',
-        patientId: document.getElementById('patientId').value,
-        patientName: document.getElementById('patientName').value,
-        patientSex: document.getElementById('patientSex').value,
-        age: age,
-        accessionNumber: document.getElementById('accessionNumber').value,
-        modality: document.getElementById('modality').value,
-        scheduledDateTime: document.getElementById('scheduledDateTime').value,
-        scheduledAET: document.getElementById('scheduledAET').value,
-        scheduledStationName: document.getElementById('scheduledStationName').value,
-        bodyPartExamined: document.getElementById('bodyPartExamined').value,
-        status: document.getElementById('status').value,
-        studyDescription: '',
-        scheduledProcedureStepID: '',
-        scheduledProcedureStepDescription: '',
-        requestedProcedureID: '',
-        requestedProcedureDescription: '',
-        referringPhysicianName: ''
-    };
-
-    const url = currentWorklistId ? `/api/worklist/${currentWorklistId}` : '/api/worklist';
-    const method = currentWorklistId ? 'PUT' : 'POST';
-
-    fetch(url, {
-        method: method,
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-    })
-    .then(async response => {
-        const text = await response.text();
-        if (!response.ok) {
-            throw new Error(`保存失败: ${text}`);
-        }
-        try {
-            const data = text ? JSON.parse(text) : {};
-            return data;
-        } catch (e) {
-            console.warn('响应不是 JSON 格式:', text);
-            return {};
-        }
-    })
-    .then(data => {
-        console.log('保存成功:', data);
-        worklistModal.hide();
-        loadWorklistData();
-    })
-    .catch(error => {
-        console.error('保存检查数据失败:', error);
-        alert(`保存失败: ${error.message}`);
-    });
-}
-// 删除 Worklist
-function deleteWorklist(id) {
-    if (!confirm('确定要删除这条检查记录吗？')) {
-        return;
-    }
-
-    fetch(`/api/worklist/${id}`, {
-        method: 'DELETE'
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('删除失败');
-        }
-        loadWorklistData();
-    })
-    .catch(error => {
-        console.error('删除检查数据失败:', error);
-        alert('删除失败，请重试');
-    });
-}
-
-// 格式化日期时间为input标签所需格式
-function formatDateTimeForInput(dateTimeStr) {
-    try {
-        if (!dateTimeStr) {
-            return '';
-        }
-        
-        if (!isNaN(dateTimeStr)) {
-            const timestamp = parseInt(dateTimeStr);
-            dateTimeStr = new Date(timestamp).toISOString();
-        }
-        
-        const date = new Date(dateTimeStr);
-        if (isNaN(date.getTime())) {
-            console.error('无效的日期时间:', dateTimeStr);
-            return '';
-        }
-        
-        return date.toISOString().slice(0, 16);
-    } catch (error) {
-        console.error('格式化日期时间败:', error);
-        return '';
-    }
-}
-
-// 格式化日期时间显示
-function formatDateTime(dateTimeStr) {
-    try {
-        if (!dateTimeStr) {
-            return '';
-        }
-        
-        // 处理 YYYYMMDD 格式
-        if (dateTimeStr.length === 8 && !isNaN(dateTimeStr)) {
-            const year = dateTimeStr.substring(0, 4);
-            const month = dateTimeStr.substring(4, 6);
-            const day = dateTimeStr.substring(6, 8);
-            return `${year}-${month}-${day}`;
-        }
-        
-        // 处理其他格式的日期
-        const date = new Date(dateTimeStr);
-        if (isNaN(date.getTime())) {
-            console.warn('无法解析的日期时间:', dateTimeStr);
-            return dateTimeStr;
-        }
-        
-        return date.toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (error) {
-        console.error('格式化日期时间失败:', error);
-        return dateTimeStr;
-    }
-}
-
-// 格式化状态显示
-function formatStatus(status) {
-    const statusMap = {
-        'SCHEDULED': '已预约',
-        'IN_PROGRESS': '检查中',
-        'COMPLETED': '已完成',
-        'DISCONTINUED': '已中断'
-    };
-    return statusMap[status] || status;
-}
-
-// 格式化性别显示
-function formatGender(gender) {
-    const genderMap = {
-        'M': '男',
-        'F': '女',
-        'O': '其'
-    };
-    return genderMap[gender] || gender;
-}
-
-// 计算患者年龄
-function calculatePatientAge(birthDate) {
-    if (!birthDate) return '';
-    
-    try {
-        const today = new Date();
-        const birthYear = parseInt(birthDate.substring(0, 4));
-        const birthMonth = parseInt(birthDate.substring(4, 6)) - 1;
-        const birthDay = parseInt(birthDate.substring(6, 8));
-        
-        const birthDateTime = new Date(birthYear, birthMonth, birthDay);
-        let age = today.getFullYear() - birthDateTime.getFullYear();
-        
-        // 检查是否已过生日
-        if (today.getMonth() < birthDateTime.getMonth() || 
-            (today.getMonth() === birthDateTime.getMonth() && today.getDate() < birthDateTime.getDate())) {
-            age--;
-        }
-        
-        return `${age}岁`;
-    } catch (error) {
-        console.error('计算年龄失败:', error);
-        return '';
-    }
-}
-
-// 显示修改密码模态框
-function showChangePasswordModal() {
-    document.getElementById('changePasswordForm').reset();
-    changePasswordModal.show();
-}
-
-// 修改密码
-function changePassword() {
-    const oldPassword = document.getElementById('oldPassword').value;
-    const newPassword = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-
-    // 验证新密码
-    if (newPassword !== confirmPassword) {
-        alert('两次输入的新密码不一致');
-        return;
-    }
-
-    // 验证新密码长度
-    if (newPassword.length < 6) {
-        alert('新密码长度不能少于6位');
-        return;
-    }
-
-    axios.post('/api/auth/change-password', {
-        oldPassword: oldPassword,
-        newPassword: newPassword
-    })
-    .then(() => {
-        alert('密码修改成功，请重登录');
-        changePasswordModal.hide();
-        window.location.href = '/login.html';
-    })
-    .catch(error => {
-        alert(error.response?.data || '修改密码失败，请重试');
-    });
-}
-
-// 获取当前用户名
-async function getCurrentUsername() {
-    try {
-        const response = await axios.get('/api/auth/check-session');
-        document.getElementById('currentUsername').textContent = response.data.username;
-    } catch (error) {
-        // 401 会被全局拦截器处理，这里不需要特别处理
-        console.error('获取用户信息失败:', error);
-    }
-}
-
-// 删除影像数据
-function deleteStudy(studyInstanceUid, event) {
-    // 阻止事件冒泡，防止触发行的点击事件
-    event.stopPropagation();
-    
-    if (confirm('确定要删除这个检查吗？\n此操作将删除所有相关的序列和图像且不可恢复。')) {
-        axios.delete(`/api/images/${studyInstanceUid}`)
-        .then(() => {
-            // 删除成功后刷新列表
-            loadImages();
-        })
-        .catch(error => {
-            console.error('删除失败:', error);
-            alert(error.response?.data || error.message || '删除失败，请重试');
-        });
-    }
-}
-
-// 修改预览函数
-function previewSeries(studyUid, seriesUid, event) {
-    // 防止事件冒泡
-    if (event) {
-        event.stopPropagation();
-    }
-    
-    // 设置 iframe 源
-    const viewerUrl = `/viewer.html?studyUid=${encodeURIComponent(studyUid)}&seriesUid=${encodeURIComponent(seriesUid)}`;
-    document.getElementById('viewerFrame').src = viewerUrl;
-    
-    // 显示模态框
-    viewerModal.show();
-}
-
-
-// 加载QR节点列表
-async function loadQRNodes() {
-    try {
-        const response = await axios.get('/api/QueryRetrieve/nodes');
-        const nodes = response.data;
-
-        const select = document.getElementById('qrNode');
-        select.innerHTML = nodes.map(node => `
-            <option value="${node.name}">${node.name} (${node.aeTitle}@${node.hostName})</option>
-        `).join('');
-        
-        // 选择默认节点
-        const defaultNode = nodes.find(n => n.isDefault);
-        if (defaultNode) {
-            select.value = defaultNode.name;
         }
     } catch (error) {
-        if (!error.config?.skipErrorHandler) {
-            console.error('加载PACS节点失败:', error);
-            alert('加载PACS节点失败，请检查网络连接');
-        }
+        console.error('切换页面失败:', error);
+        showToast('error', '切换失败', '页面切换失败');
     }
 }
 
-// 执行QR查询
-async function searchQR() {
-    const nodeId = document.getElementById('qrNode').value;
-    if (!nodeId) {
-        alert('请选择PACS节点');
-        return;
-    }
-
-    const queryParams = {
-        patientId: document.getElementById('qrPatientId').value,
-        patientName: document.getElementById('qrPatientName').value,
-        accessionNumber: document.getElementById('qrAccessionNumber').value,
-        modality: document.getElementById('qrModality').value,
-        studyDate: document.getElementById('qrStudyDate').value
-    };
-
-    try {
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/study`, queryParams);
-        const result = response.data;
-        console.log('查询结果:', result);  // 添加调试日志
-
-        // 更新数据和显示
-        qrAllData = result;
-        qrCurrentPage = 1;
-        displayQRPage(qrCurrentPage);
-        updateQRPagination(qrAllData.length);
-    } catch (error) {
-        console.error('查询失败:', error);
-        alert(error.response?.data || '查询失败，请检查网络连接');
-    }
-}
-
-// 显示QR查询结果页
-function displayQRPage(page) {
-    const start = (page - 1) * qrPageSize;
-    const end = start + qrPageSize;
-    const pageItems = qrAllData.slice(start, end);
-    
-    console.log('显示页面数据:', pageItems);  // 添加调试日志
-    
-    const tbody = document.getElementById('qr-table-body');
-    tbody.innerHTML = pageItems.map(item => `
-        <tr data-study-uid="${item.studyInstanceUid}" onclick="toggleQRSeriesInfo(this)">
-            <td>${item.patientId || ''}</td>
-            <td>${item.patientName || ''}</td>
-            <td>${item.accessionNumber || ''}</td>
-            <td>${item.modalities || item.modality || ''}</td>
-            <td>${formatQRDate(item.studyDate) || ''}</td>
-            <td>${item.studyDescription || ''}</td>
-            <td>${item.numberOfSeries || 0}</td>
-            <td>${item.numberOfInstances || 0}</td>
-            <td>
-                <button class="btn btn-sm btn-success" onclick="moveQRStudy('${item.studyInstanceUid}', event)">
-    <i class="bi bi-cloud-download me-1"></i>cmove
-</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// 更新QR分页信息
-function updateQRPagination(total) {
-    const totalPages = Math.ceil(total / qrPageSize);
-    const start = (qrCurrentPage - 1) * qrPageSize + 1;
-    const end = Math.min(qrCurrentPage * qrPageSize, total);
-    
-    document.getElementById('qr-currentRange').textContent = total > 0 ? `${start}-${end}` : '0-0';
-    document.getElementById('qr-totalCount').textContent = total;
-    document.getElementById('qr-currentPage').textContent = qrCurrentPage;
-    
-    document.getElementById('qr-prevPage').disabled = qrCurrentPage === 1;
-    document.getElementById('qr-nextPage').disabled = qrCurrentPage === totalPages || total === 0;
-}
-
-// 切换序列信息显示
-async function toggleQRSeriesInfo(row) {
-    const studyUid = $(row).data('study-uid');
-    const seriesRow = $(row).next('.series-info');
-    const nodeId = document.getElementById('qrNode').value;
-    
-    if (seriesRow.is(':visible')) {
-        seriesRow.hide();
-        return;
-    }
-
-    try {
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/series/${studyUid}`);
-        const result = response.data;
-
-        // 创建序列信息行
-        const seriesInfoRow = $(`
-            <tr class="series-info" style="display: none;">
-                <td colspan="9">
-                    <div class="series-container">
-                        <table class="table table-sm table-bordered series-detail-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px">序列号</th>
-                                    <th style="width: 100px">检查类型</th>
-                                    <th style="width: 500px">序列描述</th>
-                                    <th style="width: 80px">图像数量</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </td>
-            </tr>
-        `);
-        
-        const tbody = seriesInfoRow.find('tbody');
-        result.forEach(series => {
-            tbody.append(`
-                <tr>
-                    <td>${series.seriesNumber || ''}</td>
-                    <td>${series.modality || ''}</td>
-                    <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                    <td>${series.instanceCount || 0}</td>
-                </tr>
-            `);
-        });
-        
-        // 移除已存在的序列信息行
-        $(row).siblings('.series-info').remove();
-        // 添加新的序列信息行并显示
-        $(row).after(seriesInfoRow);
-        seriesInfoRow.show();
-    } catch (error) {
-        console.error('获取序列失败:', error);
-        alert(error.response?.data || '获取序列失败，请检查网络连接');
-    }
-}
-
-// 获取检查
-async function moveQRStudy(studyUid, event) {
-    if (event) {
-        event.stopPropagation();
-    }
-
-    // 保留确认对话框
-    if (!await showConfirmMoveDialog()) {
-        return;  // 用户取消
-    }
-
-    const nodeId = document.getElementById('qrNode').value;
-    try {
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`);
-        const result = response.data;
-
-        if (result.success !== false) {
-            showToast('success', '操作成功', '检查传输已开始，请稍后去影像管理查看！');
-        } else {
-            throw new Error(result.message || '传输失败');
-        }
-    } catch (error) {
-        console.error('传输失败:', error);
-        showToast('error', '操作失败', error.response?.data || error.message || '传输失败，请检查网络连接');
-    }
-}
-
-// 格式化日期
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    return dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
-}
-
-// 添加QR分页事件监听
-document.getElementById('qr-prevPage').onclick = () => {
-    if (qrCurrentPage > 1) {
-        qrCurrentPage--;
-        displayQRPage(qrCurrentPage);
-        updateQRPagination(qrAllData.length);
-    }
-};
-
-document.getElementById('qr-nextPage').onclick = () => {
-    const totalPages = Math.ceil(qrAllData.length / qrPageSize);
-    if (qrCurrentPage < totalPages) {
-        qrCurrentPage++;
-        displayQRPage(qrCurrentPage);
-        updateQRPagination(qrAllData.length);
-    }
-};
-
-function formatQRDate(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    }).replace(/\//g, '-');
-}
-
-// 重置QR查询条件
-function resetQRSearch() {
-    // 重置表单
-    document.getElementById('qrSearchForm').reset();
-    
-    // 清空结果
-    qrAllData = [];
-    qrCurrentPage = 1;
-    
-    // 更新显示
-    const tbody = document.getElementById('qr-table-body');
-    tbody.innerHTML = `
-        <tr>
-            <td colspan="9" class="text-center">请输入查询条件</td>
-        </tr>
-    `;
-    
-    // 更新分页信息
-    updateQRPagination(0);
-}
-
-
-// 添加通用的提示框显示函数
-function showToast(type, title, message) {
-    const toastEl = document.getElementById('storeToast');
-    const titleEl = document.getElementById('storeToastTitle');
-    const messageEl = document.getElementById('storeToastMessage');
-    
-    toastEl.classList.remove('bg-success', 'bg-danger', 'text-white');
-    toastEl.classList.add(type === 'success' ? 'bg-success' : 'bg-danger', 'text-white');
-    titleEl.textContent = title;
-    messageEl.textContent = message;
-    
-    const storeToast = new bootstrap.Toast(toastEl);
-    storeToast.show();
-}
-
-// 添加这些新函数到 main.js 文件末尾
-
-// 回传检查
-async function sendStudy(studyInstanceUid, event) {
-    // 阻止事件冒泡
-    if (event) {
-        event.stopPropagation();
-    }
-
-    try {
-        // 加载远程节点列表
-        const response = await axios.get('/api/StoreSCU/nodes');
-        const nodes = response.data;
-
-        if (!nodes || nodes.length === 0) {
-            alert('未配置远程节点');
-            return;
-        }
-
-        // 显示节点选择对话框
-        const nodeOptions = nodes.map(node => {
-            return `${node.name} (${node.aeTitle}@${node.hostName}:${node.port})`;
-        });
-
-        const selectedIndex = await showNodeSelectionDialog(nodeOptions);
-        if (selectedIndex === -1) return;  // 用户取消
-        
-        const selectedNode = nodes[selectedIndex];
-
-        // 调用发送接口
-        const sendResponse = await axios.post(`/api/StoreSCU/sendStudy/${selectedNode.name}/${studyInstanceUid}`);
-        const result = sendResponse.data;
-        
-        // 显示结果提示
-        showToast('success', '操作成功', `图像发送成功，共发送 ${result.totalFiles} 个文件`);
-    } catch (error) {
-        console.error('发送失败:', error);
-        showToast('error', '操作失败', error.message || '发送失败，请检查网络连接');
-    }
-}
-
-// 显示节点选择对话框
-function showNodeSelectionDialog(nodeOptions) {
-    return new Promise((resolve) => {
-        const html = `
-            <div class="modal fade" id="nodeSelectModal" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">选择目标节点</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">请选择要发送到的PACS节点：</label>
-                                <select class="form-select" id="nodeSelect">
-                                    ${nodeOptions.map((node, index) => 
-                                        `<option value="${index}">${node}</option>`
-                                    ).join('')}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                            <button type="button" class="btn btn-primary" onclick="confirmNodeSelection()">发送</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.insertAdjacentHTML('beforeend', html);
-        const modal = new bootstrap.Modal(document.getElementById('nodeSelectModal'));
-
-        window.confirmNodeSelection = () => {
-            const select = document.getElementById('nodeSelect');
-            const selectedIndex = parseInt(select.value);
-            modal.hide();
-            resolve(selectedIndex);
-            
-            setTimeout(() => {
-                document.getElementById('nodeSelectModal').remove();
-                delete window.confirmNodeSelection;
-            }, 300);
-        };
-
-        document.getElementById('nodeSelectModal').addEventListener('hidden.bs.modal', () => {
-            resolve(-1);
-            setTimeout(() => {
-                document.getElementById('nodeSelectModal').remove();
-                delete window.confirmNodeSelection;
-            }, 300);
-        });
-
-        modal.show();
-    });
-}
-
-// 添加确认对话框函数
-function showConfirmMoveDialog() {
-    return new Promise((resolve) => {
-        const html = `
-            <div class="modal fade" id="confirmMoveModal" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">确认回取图像</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p>确定要回取这个检查/序列的图像吗？</p>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                            <button type="button" class="btn btn-primary" onclick="confirmMove()">确定</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // 添加模态框到页面
-        document.body.insertAdjacentHTML('beforeend', html);
-        
-        const modal = new bootstrap.Modal(document.getElementById('confirmMoveModal'));
-        
-        // 处理确认
-        window.confirmMove = () => {
-            modal.hide();
-            resolve(true);
-            
-            // 清理模态框
-            setTimeout(() => {
-                document.getElementById('confirmMoveModal').remove();
-                delete window.confirmMove;
-            }, 300);
-        };
-        
-        // 处理取消
-        document.getElementById('confirmMoveModal').addEventListener('hidden.bs.modal', () => {
-            resolve(false);
-            // 清理模态框
-            setTimeout(() => {
-                document.getElementById('confirmMoveModal').remove();
-                delete window.confirmMove;
-            }, 300);
-        });
-        
-        modal.show();
-    });
-}
-
+// ================ 用户相关函数 ================
+// 登出
 function logout() {
     axios.post('/api/auth/logout')
         .then(() => {
@@ -1363,4 +201,340 @@ function logout() {
             window.location.href = '/login.html';  // 登出失败也跳转到登录页
         });
 }
+
+// 获取当前用户名
+async function getCurrentUsername() {
+    try {
+        const response = await axios.get('/api/auth/check-session');
+        const username = response.data.username;
+        document.getElementById('currentUsername').textContent = username;
+    } catch (error) {
+        // 401 错误会被全局拦截器处理，这里只处理其他错误
+        if (error.response?.status !== 401) {
+            console.error('获取用户信息失败:', error);
+            document.getElementById('currentUsername').textContent = '未知用户';
+        }
+    }
+}
+
+// 修改密码
+async function changePassword() {
+    const oldPassword = document.getElementById('oldPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+
+    // 验证新密码
+    if (newPassword !== confirmPassword) {
+        showToast('error', '验证失败', '两次输入的新密码不一致');
+        return;
+    }
+
+    // 验证新密码长度
+    if (newPassword.length < 6) {
+        showToast('error', '验证失败', '新密码长度不能少于6位');
+        return;
+    }
+
+    try {
+        await axios.post('/api/auth/change-password', {
+            oldPassword: oldPassword,
+            newPassword: newPassword
+        });
+        
+        showToast('success', '操作成功', '密码修改成功，请重新登录');
+        changePasswordModal.hide();
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 1500);
+    } catch (error) {
+        showToast('error', '修改失败', error.response?.data || '修改密码失败，请重试');
+    }
+}
+
+// 显示修改密码模态框
+function showChangePasswordModal() {
+    document.getElementById('changePasswordForm').reset();
+    changePasswordModal.show();
+}
+
+// ================ 对话框相关函数 ================
+// 显示节点选择对话框
+function showNodeSelectionDialog(nodeOptions) {
+    return new Promise((resolve) => {
+        try {
+            // 移除旧的对话框（如果存在）
+            const oldModal = document.getElementById('nodeSelectModal');
+            if (oldModal && document.body.contains(oldModal)) {
+                const oldInstance = bootstrap.Modal.getInstance(oldModal);
+                if (oldInstance) {
+                    oldInstance.dispose();
+                }
+                oldModal.remove();
+            }
+
+            const html = `
+                <div class="modal fade" id="nodeSelectModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="nodeSelectTitle">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="nodeSelectTitle">选择目标节点</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">请选择要发送到的PACS节点：</label>
+                                    <select class="form-select" id="nodeSelect">
+                                        ${nodeOptions.map((node, index) => 
+                                            `<option value="${index}">${node}</option>`
+                                        ).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                <button type="button" class="btn btn-primary" id="nodeSelectConfirm">发送</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', html);
+            const modalElement = document.getElementById('nodeSelectModal');
+            if (!modalElement) {
+                throw new Error('无法创建节点选择对话框');
+            }
+
+            let isResolved = false;
+            let modalInstance = null;
+
+            const cleanup = () => {
+                try {
+                    if (modalInstance) {
+                        modalInstance.dispose();
+                    }
+                    if (modalElement && document.body.contains(modalElement)) {
+                        modalElement.remove();
+                    }
+                } catch (error) {
+                    console.error('清理对话框失败:', error);
+                }
+            };
+
+            modalInstance = new bootstrap.Modal(modalElement, {
+                backdrop: 'static',
+                keyboard: false
+            });
+
+            const confirmButton = modalElement.querySelector('#nodeSelectConfirm');
+            if (confirmButton) {
+                confirmButton.addEventListener('click', () => {
+                    try {
+                        const select = document.getElementById('nodeSelect');
+                        const selectedIndex = parseInt(select.value);
+                        isResolved = true;
+                        modalInstance.hide();
+                        resolve(selectedIndex);
+                    } catch (error) {
+                        console.error('确认选择失败:', error);
+                        cleanup();
+                        resolve(-1);
+                    }
+                });
+            }
+
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                try {
+                    if (!isResolved) {
+                        resolve(-1);
+                    }
+                    cleanup();
+                } catch (error) {
+                    console.error('处理对话框关闭事件失败:', error);
+                    resolve(-1);
+                }
+            });
+
+            modalInstance.show();
+
+        } catch (error) {
+            console.error('显示节点选择对话框失败:', error);
+            resolve(-1);
+        }
+    });
+}
+
+// 添加确认对话框函数
+function showConfirmMoveDialog() {
+    return showConfirmDialog('确认回取图像', '确定要回取这个检查/序列的图像吗？');
+}
+
+// 修改确认对话框函数
+function showConfirmDialog(title, message) {
+    return new Promise((resolve) => {
+        try {
+            // 移除旧的对话框（如果存在）
+            const oldModal = document.getElementById('confirmDialog');
+            if (oldModal && document.body.contains(oldModal)) {
+                const oldInstance = bootstrap.Modal.getInstance(oldModal);
+                if (oldInstance) {
+                    oldInstance.dispose();
+                }
+                oldModal.remove();
+            }
+
+            const html = `
+                <div class="modal fade" id="confirmDialog" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="confirmDialogTitle">${title}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>${message}</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                <button type="button" class="btn btn-primary" id="confirmDialogConfirm">确定</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', html);
+            const modalElement = document.getElementById('confirmDialog');
+            if (!modalElement) {
+                throw new Error('无法创建确认对话框');
+            }
+
+            let isResolved = false;
+            let modalInstance = null;
+
+            const cleanup = () => {
+                try {
+                    if (modalInstance) {
+                        modalInstance.dispose();
+                    }
+                    if (modalElement && document.body.contains(modalElement)) {
+                        modalElement.remove();
+                    }
+                } catch (error) {
+                    console.error('清理对话框失败:', error);
+                }
+            };
+
+            modalInstance = new bootstrap.Modal(modalElement, {
+                backdrop: 'static',
+                keyboard: false
+            });
+
+            // 使用事件监听而不是全局函数
+            const confirmButton = modalElement.querySelector('#confirmDialogConfirm');
+            if (confirmButton) {
+                confirmButton.addEventListener('click', () => {
+                    try {
+                        isResolved = true;
+                        modalInstance.hide();
+                        resolve(true);
+                    } catch (error) {
+                        console.error('确认按钮点击处理失败:', error);
+                        cleanup();
+                        resolve(false);
+                    }
+                });
+            }
+
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                try {
+                    if (!isResolved) {
+                        resolve(false);
+                    }
+                    cleanup();
+                } catch (error) {
+                    console.error('处理对话框关闭事件失败:', error);
+                    resolve(false);
+                }
+            });
+
+            modalInstance.show();
+
+            // 设置焦点到确定按钮
+            if (confirmButton) {
+                confirmButton.focus();
+            }
+
+        } catch (error) {
+            console.error('显示确认对话框失败:', error);
+            resolve(false);
+        }
+    });
+}
+
+// 添加模态框管理器
+const ModalManager = {
+    activeModals: new Set(),
+
+    show(modalId, options = {}) {
+        const modal = new bootstrap.Modal(document.getElementById(modalId), options);
+        this.activeModals.add(modalId);
+        modal.show();
+        return modal;
+    },
+
+    hide(modalId) {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            }
+        }
+        this.activeModals.delete(modalId);
+    },
+
+    cleanup(modalId) {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement && document.body.contains(modalElement)) {
+            modalElement.remove();
+        }
+        this.activeModals.delete(modalId);
+    },
+
+    hideAll() {
+        this.activeModals.forEach(modalId => this.hide(modalId));
+    }
+};
+
+// 显示列表加载动画
+function showTableLoading(tbody, colSpan = 6) {
+    if (!tbody) return;
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="${colSpan}" class="text-center py-4">
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="spinner-border text-primary me-2" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <span class="text-primary">正在加载数据...</span>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+// 显示空数据提示
+function showEmptyTable(tbody, message = '暂无数据', colSpan = 6) {
+    if (!tbody) return;
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="${colSpan}" class="text-center py-4 text-muted">
+                <i class="bi bi-inbox fs-2 mb-2 d-block"></i>
+                ${message}
+            </td>
+        </tr>
+    `;
+}
+
 
