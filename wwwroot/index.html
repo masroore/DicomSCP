@@ -311,29 +311,29 @@
             <div id="qr-page" style="display: none;">
                 <!-- 查询表单 -->
                 <div class="card mb-3">
-                    <div class="card-body">
+                    <div class="card-body p-3">
                         <form id="qrSearchForm" class="row g-3">
-                            <div class="col-md-3">
+                            <div class="col-auto me-4" style="width: 250px;">
                                 <label class="form-label">PACS节点</label>
-                                <select class="form-select" id="qrNode">
+                                <select class="form-select" id="qrNode" style="width: 250px;">
                                     <!-- 节点列表将通过JavaScript动态加载 -->
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-auto me-4" style="width: 180px;">
                                 <label class="form-label">病人ID</label>
-                                <input type="text" class="form-control" id="qrPatientId">
+                                <input type="text" class="form-control" id="qrPatientId" style="width: 180px;">
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">病人姓名</label>
-                                <input type="text" class="form-control" id="qrPatientName">
+                            <div class="col-auto me-4" style="width: 180px;">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="qrPatientName" style="width: 180px;">
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-auto me-4" style="width: 180px;">
                                 <label class="form-label">检查号</label>
-                                <input type="text" class="form-control" id="qrAccessionNumber">
+                                <input type="text" class="form-control" id="qrAccessionNumber" style="width: 180px;">
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-auto me-4" style="width: 180px;">
                                 <label class="form-label">检查类型</label>
-                                <select class="form-select" id="qrModality">
+                                <select class="form-select" id="qrModality" style="width: 180px;">
                                     <option value="">全部</option>
                                     <option value="CT">CT</option>
                                     <option value="MR">MR</option>
@@ -341,15 +341,15 @@
                                     <option value="US">US</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-auto me-4" style="width: 180px;">
                                 <label class="form-label">检查日期</label>
-                                <input type="date" class="form-control" id="qrStudyDate">
+                                <input type="date" class="form-control" id="qrStudyDate" style="width: 180px;">
                             </div>
-                            <div class="col-md-6 d-flex align-items-end">
-                                <button type="button" class="btn btn-primary" onclick="searchQR()">
+                            <div class="col-auto d-flex align-items-end">
+                                <button type="button" class="btn btn-primary me-2" onclick="searchQR()">
                                     <i class="bi bi-search me-1"></i>查询
                                 </button>
-                                <button type="button" class="btn btn-secondary ms-2" onclick="resetQRSearch()">
+                                <button type="button" class="btn btn-secondary" onclick="resetQRSearch()">
                                     <i class="bi bi-arrow-counterclockwise me-1"></i>重置
                                 </button>
                             </div>
