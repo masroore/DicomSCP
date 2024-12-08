@@ -10,6 +10,174 @@ using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Controllers;
 
+// 在文件开头添加传输语法枚举
+public enum DicomTransferSyntaxType
+{
+    /// <summary>
+    /// 隐式 VR Little Endian - 默认传输语法
+    /// UID: 1.2.840.10008.1.2
+    /// Code: IVLE
+    /// </summary>
+    ImplicitVRLittleEndian,
+    
+    /// <summary>
+    /// 显式 VR Little Endian - 常用于网络传输
+    /// UID: 1.2.840.10008.1.2.1
+    /// Code: EVLE
+    /// </summary>
+    ExplicitVRLittleEndian,
+    
+    /// <summary>
+    /// 显式 VR Big Endian - 已弃用，但某些老设备可能需要
+    /// UID: 1.2.840.10008.1.2.2
+    /// Code: EVBE
+    /// </summary>
+    ExplicitVRBigEndian,
+    
+    /// <summary>
+    /// JPEG Baseline (Process 1) - 有损压缩
+    /// UID: 1.2.840.10008.1.2.4.50
+    /// Code: JPEG_BASELINE
+    /// </summary>
+    JPEGBaseline,
+    
+    /// <summary>
+    /// JPEG Lossless (Process 14) - 无损压缩
+    /// UID: 1.2.840.10008.1.2.4.57
+    /// Code: JPEG_LOSSLESS
+    /// </summary>
+    JPEGLossless,
+    
+    /// <summary>
+    /// JPEG 2000 有损压缩
+    /// UID: 1.2.840.10008.1.2.4.91
+    /// Code: JPEG2000_LOSSY
+    /// </summary>
+    JPEG2000Lossy,
+    
+    /// <summary>
+    /// JPEG 2000 无损压缩
+    /// UID: 1.2.840.10008.1.2.4.90
+    /// Code: JPEG2000_LOSSLESS
+    /// </summary>
+    JPEG2000Lossless,
+    
+    /// <summary>
+    /// RLE 无损压缩
+    /// UID: 1.2.840.10008.1.2.5
+    /// Code: RLE
+    /// </summary>
+    RLELossless,
+    
+    /// <summary>
+    /// JPEG-LS 无损压缩
+    /// UID: 1.2.840.10008.1.2.4.80
+    /// Code: JPEGLS_LOSSLESS
+    /// </summary>
+    JPEGLSLossless,
+    
+    /// <summary>
+    /// JPEG-LS 近无损压缩
+    /// UID: 1.2.840.10008.1.2.4.81
+    /// Code: JPEGLS_NEAR_LOSSLESS
+    /// </summary>
+    JPEGLSNearLossless
+}
+
+// 添加传输语法扩展方法
+public static class DicomTransferSyntaxExtensions
+{
+    public static string GetUID(this DicomTransferSyntaxType transferSyntax)
+    {
+        return transferSyntax switch
+        {
+            DicomTransferSyntaxType.ImplicitVRLittleEndian => "1.2.840.10008.1.2",
+            DicomTransferSyntaxType.ExplicitVRLittleEndian => "1.2.840.10008.1.2.1",
+            DicomTransferSyntaxType.ExplicitVRBigEndian => "1.2.840.10008.1.2.2",
+            DicomTransferSyntaxType.JPEGBaseline => "1.2.840.10008.1.2.4.50",
+            DicomTransferSyntaxType.JPEGLossless => "1.2.840.10008.1.2.4.57",
+            DicomTransferSyntaxType.JPEG2000Lossy => "1.2.840.10008.1.2.4.91",
+            DicomTransferSyntaxType.JPEG2000Lossless => "1.2.840.10008.1.2.4.90",
+            DicomTransferSyntaxType.RLELossless => "1.2.840.10008.1.2.5",
+            DicomTransferSyntaxType.JPEGLSLossless => "1.2.840.10008.1.2.4.80",
+            DicomTransferSyntaxType.JPEGLSNearLossless => "1.2.840.10008.1.2.4.81",
+            _ => throw new ArgumentException($"不支持的传输语法类型: {transferSyntax}")
+        };
+    }
+
+    public static string GetDescription(this DicomTransferSyntaxType transferSyntax)
+    {
+        return transferSyntax switch
+        {
+            DicomTransferSyntaxType.ImplicitVRLittleEndian => "隐式 VR Little Endian (默认)",
+            DicomTransferSyntaxType.ExplicitVRLittleEndian => "显式 VR Little Endian",
+            DicomTransferSyntaxType.ExplicitVRBigEndian => "显式 VR Big Endian",
+            DicomTransferSyntaxType.JPEGBaseline => "JPEG Baseline (有损)",
+            DicomTransferSyntaxType.JPEGLossless => "JPEG 无损",
+            DicomTransferSyntaxType.JPEG2000Lossy => "JPEG 2000 有损",
+            DicomTransferSyntaxType.JPEG2000Lossless => "JPEG 2000 无损",
+            DicomTransferSyntaxType.RLELossless => "RLE 无损",
+            DicomTransferSyntaxType.JPEGLSLossless => "JPEG-LS 无损",
+            DicomTransferSyntaxType.JPEGLSNearLossless => "JPEG-LS 近无损",
+            _ => throw new ArgumentException($"不支持的传输语法类型: {transferSyntax}")
+        };
+    }
+}
+
+// 添加传输语法解析和验证类
+public static class DicomTransferSyntaxParser
+{
+    private static readonly Dictionary<string, string> _uidMap = new()
+    {
+        { "1.2.840.10008.1.2", "ImplicitVRLittleEndian" },
+        { "1.2.840.10008.1.2.1", "ExplicitVRLittleEndian" },
+        { "1.2.840.10008.1.2.2", "ExplicitVRBigEndian" },
+        { "1.2.840.10008.1.2.4.50", "JPEGBaseline" },
+        { "1.2.840.10008.1.2.4.57", "JPEGLossless" },
+        { "1.2.840.10008.1.2.4.91", "JPEG2000Lossy" },
+        { "1.2.840.10008.1.2.4.90", "JPEG2000Lossless" },
+        { "1.2.840.10008.1.2.5", "RLELossless" },
+        { "1.2.840.10008.1.2.4.80", "JPEGLSLossless" },
+        { "1.2.840.10008.1.2.4.81", "JPEGLSNearLossless" }
+    };
+
+    private static readonly Dictionary<string, string> _codeMap = new()
+    {
+        { "IVLE", "ImplicitVRLittleEndian" },
+        { "EVLE", "ExplicitVRLittleEndian" },
+        { "EVBE", "ExplicitVRBigEndian" },
+        { "JPEG_BASELINE", "JPEGBaseline" },
+        { "JPEG_LOSSLESS", "JPEGLossless" },
+        { "JPEG2000_LOSSY", "JPEG2000Lossy" },
+        { "JPEG2000_LOSSLESS", "JPEG2000Lossless" },
+        { "RLE", "RLELossless" },
+        { "JPEGLS_LOSSLESS", "JPEGLSLossless" },
+        { "JPEGLS_NEAR_LOSSLESS", "JPEGLSNearLossless" }
+    };
+
+    public static DicomTransferSyntaxType? Parse(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return null;
+
+        // 1. 尝试直接解析枚举名称
+        if (Enum.TryParse<DicomTransferSyntaxType>(value, true, out var result))
+            return result;
+
+        // 2. 尝试从 UID 映射
+        if (_uidMap.TryGetValue(value, out var uidMapped))
+            if (Enum.TryParse<DicomTransferSyntaxType>(uidMapped, true, out result))
+                return result;
+
+        // 3. 尝试从代码映射
+        if (_codeMap.TryGetValue(value.ToUpper(), out var codeMapped))
+            if (Enum.TryParse<DicomTransferSyntaxType>(codeMapped, true, out result))
+                return result;
+
+        throw new ArgumentException($"不支持的传输语法: {value}");
+    }
+}
+
 [ApiController]
 [Route("api/[controller]")]
 public class QueryRetrieveController : ControllerBase
@@ -256,8 +424,40 @@ public class QueryRetrieveController : ControllerBase
 
             DicomLogger.Debug(LogPrefix, "Move请求数据集: {0}", dataset.ToString());
 
-            // 直接使用本地 AE Title
-            var success = await _queryRetrieveScu.MoveAsync(node, queryLevel, dataset, _settings.AeTitle);
+            // 解析传输语法
+            string? transferSyntax = null;
+            if (!string.IsNullOrEmpty(moveRequest.TransferSyntax))
+            {
+                try
+                {
+                    var syntaxType = DicomTransferSyntaxParser.Parse(moveRequest.TransferSyntax);
+                    if (syntaxType.HasValue)
+                    {
+                        transferSyntax = syntaxType.Value.GetUID();
+                        DicomLogger.Debug(LogPrefix, 
+                            "使用指定的传输语法: {0} ({1}) [输入: {2}]", 
+                            syntaxType.Value.GetDescription(),
+                            transferSyntax,
+                            moveRequest.TransferSyntax);
+                    }
+                }
+                catch (ArgumentException ex)
+                {
+                    return BadRequest(new MoveResponse 
+                    { 
+                        Success = false,
+                        Message = ex.Message
+                    });
+                }
+            }
+
+            // 直接使用本地 AE Title，并传入传输语法参数
+            var success = await _queryRetrieveScu.MoveAsync(
+                node, 
+                queryLevel, 
+                dataset, 
+                _settings.AeTitle,
+                transferSyntax);
             
             if (!success)
             {
@@ -739,4 +939,15 @@ public class DicomPatientResult
             NumberOfStudies = dataset.GetSingleValueOrDefault(DicomTag.NumberOfPatientRelatedStudies, 0)
         };
     }
+}
+
+// 在 MoveRequest 类中添加传输语法参数
+public class MoveRequest
+{
+    public string PatientId { get; set; } = string.Empty;
+    public string StudyInstanceUid { get; set; } = string.Empty;
+    public string SeriesInstanceUid { get; set; } = string.Empty;
+    public string SopInstanceUid { get; set; } = string.Empty;
+    // 使用字符串，可以接受 UID、代码或枚举名称
+    public string? TransferSyntax { get; set; }
 }
