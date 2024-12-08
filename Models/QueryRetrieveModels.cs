@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using DicomSCP.Configuration;
 using FellowOakDicom;
+using System.ComponentModel.DataAnnotations;
+using FellowOakDicom.Network;
 
 namespace DicomSCP.Models;
 
@@ -24,42 +26,89 @@ public class DicomNodeConfig
 
 public class QueryRequest
 {
+    // Patient Level 支持的查询条件
     [JsonPropertyName("patientId")]
-    public string? PatientId { get; set; }
+    public string? PatientId { get; set; }  // 病人ID
 
     [JsonPropertyName("patientName")]
-    public string? PatientName { get; set; }
+    public string? PatientName { get; set; }  // 病人姓名
 
-    [JsonPropertyName("accessionNumber")]
-    public string? AccessionNumber { get; set; }
+    [JsonPropertyName("patientBirthDate")]
+    public string? PatientBirthDate { get; set; }  // 出生日期
+
+    [JsonPropertyName("patientSex")]
+    public string? PatientSex { get; set; }  // 性别
+
+    // Study Level 支持的查询条件
+    [JsonPropertyName("studyInstanceUid")]
+    public string? StudyInstanceUid { get; set; }  // 检查实例UID
 
     [JsonPropertyName("studyDate")]
-    public string? StudyDate { get; set; }
+    public string? StudyDate { get; set; }  // 检查日期
+
+    [JsonPropertyName("studyTime")]
+    public string? StudyTime { get; set; }  // 检查时间
+
+    [JsonPropertyName("accessionNumber")]
+    public string? AccessionNumber { get; set; }  // 检查号
+
+    [JsonPropertyName("studyDescription")]
+    public string? StudyDescription { get; set; }  // 检查描述
 
     [JsonPropertyName("modality")]
-    public string? Modality { get; set; }
+    public string? Modality { get; set; }  // 检查设备类型
 
-    [JsonPropertyName("studyInstanceUid")]
-    public string? StudyInstanceUid { get; set; }
-
+    // Series Level 支持的查询条件
     [JsonPropertyName("seriesInstanceUid")]
-    public string? SeriesInstanceUid { get; set; }
+    public string? SeriesInstanceUid { get; set; }  // 序列实例UID
+
+    [JsonPropertyName("seriesNumber")]
+    public string? SeriesNumber { get; set; }  // 序列号
+
+    [JsonPropertyName("seriesDescription")]
+    public string? SeriesDescription { get; set; }  // 序列描述
+
+    [JsonPropertyName("seriesModality")]
+    public string? SeriesModality { get; set; }  // 序列设备类型
+
+    // Image Level 支持的查询条件
+    [JsonPropertyName("sopInstanceUid")]
+    public string? SopInstanceUid { get; set; }  // 影像实例UID
+
+    [JsonPropertyName("instanceNumber")]
+    public string? InstanceNumber { get; set; }  // 影像号
+
+    // 验证方法
+    public bool ValidateImageLevelQuery()
+    {
+        return !string.IsNullOrEmpty(StudyInstanceUid) 
+            && !string.IsNullOrEmpty(SeriesInstanceUid);
+    }
 }
 
 public class MoveRequest
 {
-    [JsonPropertyName("destinationAe")]
-    public string DestinationAe { get; set; } = string.Empty;
+    /// <summary>
+    /// 病人ID（当level为PATIENT时必填）
+    /// </summary>
+    [JsonPropertyName("patientId")]
+    public string? PatientId { get; set; }
 
-    [JsonPropertyName("level")]
-    public string Level { get; set; } = "STUDY";  // STUDY, SERIES, IMAGE
-
+    /// <summary>
+    /// 研究实例UID（当level为STUDY/SERIES/IMAGE时必填）
+    /// </summary>
     [JsonPropertyName("studyInstanceUid")]
-    public string StudyInstanceUid { get; set; } = string.Empty;
+    public string? StudyInstanceUid { get; set; }
 
+    /// <summary>
+    /// 序列实例UID（当level为SERIES或IMAGE时必填）
+    /// </summary>
     [JsonPropertyName("seriesInstanceUid")]
     public string? SeriesInstanceUid { get; set; }
 
+    /// <summary>
+    /// 影像实例UID（当level为IMAGE时必填）
+    /// </summary>
     [JsonPropertyName("sopInstanceUid")]
     public string? SopInstanceUid { get; set; }
 }

@@ -10,10 +10,9 @@ namespace DicomSCP.Services;
 
 public interface IQueryRetrieveSCU
 {
-    Task<IEnumerable<DicomDataset>> QueryStudyAsync(RemoteNode node, DicomDataset query);
-    Task<IEnumerable<DicomDataset>> QuerySeriesAsync(RemoteNode node, DicomDataset query);
-    Task<IEnumerable<DicomDataset>> QueryImageAsync(RemoteNode node, DicomDataset query);
-    Task<bool> MoveStudyAsync(RemoteNode node, string studyInstanceUid, string destinationAe);
+    Task<IEnumerable<DicomDataset>> QueryAsync(RemoteNode node, DicomQueryRetrieveLevel level, DicomDataset query);
+    Task<bool> MoveAsync(RemoteNode node, DicomQueryRetrieveLevel level, DicomDataset dataset, string destinationAe);
+    Task<bool> VerifyConnectionAsync(RemoteNode node);
 }
 
 public class QueryRetrieveSCU : IQueryRetrieveSCU
@@ -42,7 +41,7 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             node.AeTitle);
     }
 
-    public async Task<bool> MoveStudyAsync(RemoteNode node, string studyInstanceUid, string destinationAe)
+    public async Task<bool> MoveAsync(RemoteNode node, DicomQueryRetrieveLevel level, DicomDataset dataset, string destinationAe)
     {
         try
         {
@@ -58,64 +57,64 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             var client = CreateClient(node);
             
             DicomLogger.Information("QueryRetrieveSCU", 
-                "开始执行C-MOVE - 源AET: {SourceAet}, 目标AET: {DestinationAe}, StudyInstanceUid: {StudyUid}", 
-                node.AeTitle, destinationAe, studyInstanceUid);
-                
-            var request = new DicomCMoveRequest(destinationAe, studyInstanceUid);
-            var success = true;
+                "开始执行{Level}级别C-MOVE - 源AET: {SourceAet}, 目标AET: {DestinationAe}", 
+                level, node.AeTitle, destinationAe);
+
+            // 添加查询级别
+            dataset.AddOrUpdate(DicomTag.QueryRetrieveLevel, level.ToString().ToUpper());
+
+            // 获取 StudyInstanceUID 作为 presentationContextId
+            var studyUid = dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "");
+            
+            // 使用正确的构造函数
+            var request = new DicomCMoveRequest(destinationAe, studyUid);
+            request.Dataset = dataset;  // 设置完整的数据集
+
+            var hasReceivedResponse = false;
 
             request.OnResponseReceived += (req, response) =>
             {
-                if (response.Status == DicomStatus.Success)
+                hasReceivedResponse = true;
+
+                if (response.Status == DicomStatus.Pending)
                 {
-                    DicomLogger.Information("QueryRetrieveSCU",
-                        "C-MOVE完成 - StudyInstanceUid: {StudyUid}", 
-                        studyInstanceUid);
-                }
-                else if (response.Status == DicomStatus.Pending && response.HasDataset)
-                {
-                    // 只记录进度，不影响成功状态
-                    var remaining = response.Dataset.GetSingleValueOrDefault(DicomTag.NumberOfRemainingSuboperations, 0);
-                    var completed = response.Dataset.GetSingleValueOrDefault(DicomTag.NumberOfCompletedSuboperations, 0);
-                    var failed = response.Dataset.GetSingleValueOrDefault(DicomTag.NumberOfFailedSuboperations, 0);
-                    
-                    DicomLogger.Debug("QueryRetrieveSCU",
-                        "C-MOVE进度 - 已完成: {Completed}, 失败: {Failed}, 剩余: {Remaining}, StudyInstanceUid: {StudyUid}",
-                        completed, failed, remaining, studyInstanceUid);
+                    DicomLogger.Debug("QueryRetrieveSCU", 
+                        "{Level}级别C-MOVE正在传输", level);
                 }
                 else if (response.Status.State == DicomState.Failure)
                 {
-                    // 只有明确的失败状态才标记为失败
-                    success = false;
                     DicomLogger.Warning("QueryRetrieveSCU", 
-                        "C-MOVE失败 - Status: {Status}, StudyInstanceUid: {StudyUid}", 
-                        response.Status, studyInstanceUid);
+                        "{Level}级别C-MOVE失败 - {Error}", 
+                        level, response.Status.ErrorComment);
                 }
             };
 
             await client.AddRequestAsync(request);
             await client.SendAsync();
 
-            return success;
+            // 只要收到响应就返回成功
+            return hasReceivedResponse;
         }
         catch (Exception ex)
         {
             DicomLogger.Error("QueryRetrieveSCU", ex, 
-                "C-MOVE操作失败 - StudyInstanceUid: {StudyUid}", 
-                studyInstanceUid);
+                "{Level}级别C-MOVE失败", level);
             throw;
         }
     }
 
-    public async Task<IEnumerable<DicomDataset>> QueryStudyAsync(RemoteNode node, DicomDataset query)
+    public async Task<IEnumerable<DicomDataset>> QueryAsync(RemoteNode node, DicomQueryRetrieveLevel level, DicomDataset query)
     {
         var results = new List<DicomDataset>();
         var client = CreateClient(node);
         
-        DicomLogger.Information("QueryRetrieveSCU", "开始执行Study级别C-FIND查询 - AET: {AeTitle}, Host: {Host}:{Port}", 
-            node.AeTitle, node.HostName, node.Port);
-        
-        var request = new DicomCFindRequest(DicomQueryRetrieveLevel.Study);
+        DicomLogger.Information("QueryRetrieveSCU", 
+            "开始执行{Level}级别C-FIND查询 - AET: {AeTitle}, Host: {Host}:{Port}", 
+            level, node.AeTitle, node.HostName, node.Port);
+
+        var startTime = DateTime.Now;  // 添加计时
+
+        var request = new DicomCFindRequest(level);
         request.Dataset = query;
         
         request.OnResponseReceived += (request, response) =>
@@ -123,9 +122,12 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             if (response.Status == DicomStatus.Pending && response.HasDataset)
             {
                 results.Add(response.Dataset);
-                DicomLogger.Debug("QueryRetrieveSCU", "收到Study查询结果 - PatientId: {PatientId}, StudyInstanceUid: {StudyUid}",
-                    response.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, "(no id)"),
-                    response.Dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "(no uid)"));
+                // 记录每个响应的时间
+                var elapsed = DateTime.Now - startTime;
+                DicomLogger.Debug("QueryRetrieveSCU", 
+                    "收到第{Count}个响应 - 耗时: {Elapsed}ms", 
+                    results.Count, elapsed.TotalMilliseconds);
+                LogQueryResult(level, response.Dataset);
             }
         };
 
@@ -134,83 +136,92 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             await client.AddRequestAsync(request);
             await client.SendAsync();
             
-            DicomLogger.Information("QueryRetrieveSCU", "Study查询完成 - 共找到 {Count} 条结果", results.Count);
+            var totalTime = DateTime.Now - startTime;
+            DicomLogger.Information("QueryRetrieveSCU", 
+                "{Level}查询完成 - 共找到 {Count} 条结果, 总耗时: {Elapsed}ms", 
+                level, results.Count, totalTime.TotalMilliseconds);
+
             return results;
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QueryRetrieveSCU", ex, "执行Study查询时发生错误");
+            DicomLogger.Error("QueryRetrieveSCU", ex, 
+                "执行{Level}查询时发生错误", level);
             throw;
         }
     }
 
-    public async Task<IEnumerable<DicomDataset>> QuerySeriesAsync(RemoteNode node, DicomDataset query)
+    private void LogQueryResult(DicomQueryRetrieveLevel level, DicomDataset dataset)
     {
-        var results = new List<DicomDataset>();
-        var client = CreateClient(node);
-        
-        DicomLogger.Information("QueryRetrieveSCU", "开始执行Series级别C-FIND查询 - AET: {AeTitle}, StudyInstanceUid: {StudyUid}", 
-            node.AeTitle, query.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "(no uid)"));
-        
-        var request = new DicomCFindRequest(DicomQueryRetrieveLevel.Series);
-        request.Dataset = query;
-        
-        request.OnResponseReceived += (request, response) =>
+        switch (level)
         {
-            if (response.Status == DicomStatus.Pending && response.HasDataset)
-            {
-                results.Add(response.Dataset);
-                DicomLogger.Debug("QueryRetrieveSCU", "收到Series查询结果 - SeriesInstanceUid: {SeriesUid}, Modality: {Modality}",
-                    response.Dataset.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, "(no uid)"),
-                    response.Dataset.GetSingleValueOrDefault(DicomTag.Modality, "(no modality)"));
-            }
-        };
-
-        try
-        {
-            await client.AddRequestAsync(request);
-            await client.SendAsync();
-            return results;
-        }
-        catch (Exception ex)
-        {
-            DicomLogger.Error("QueryRetrieveSCU", ex, "执行Series查询时发生错误");
-            throw;
+            case DicomQueryRetrieveLevel.Patient:
+                DicomLogger.Debug("QueryRetrieveSCU", 
+                    "收到Patient查询结果 - PatientId: {PatientId}, PatientName: {PatientName}",
+                    dataset.GetSingleValueOrDefault(DicomTag.PatientID, "(no id)"),
+                    dataset.GetSingleValueOrDefault(DicomTag.PatientName, "(no name)"));
+                break;
+            case DicomQueryRetrieveLevel.Study:
+                DicomLogger.Debug("QueryRetrieveSCU", 
+                    "收到Study查询结果 - PatientId: {PatientId}, StudyInstanceUid: {StudyUid}",
+                    dataset.GetSingleValueOrDefault(DicomTag.PatientID, "(no id)"),
+                    dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "(no uid)"));
+                break;
+            case DicomQueryRetrieveLevel.Series:
+                DicomLogger.Debug("QueryRetrieveSCU", 
+                    "收到Series查询结果 - StudyInstanceUid: {StudyUid}, SeriesInstanceUid: {SeriesUid}",
+                    dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "(no study uid)"),
+                    dataset.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, "(no series uid)"));
+                break;
+            case DicomQueryRetrieveLevel.Image:
+                DicomLogger.Debug("QueryRetrieveSCU", 
+                    "收到Image查询结果 - StudyInstanceUid: {StudyUid}, SeriesInstanceUid: {SeriesUid}, SopInstanceUid: {SopUid}",
+                    dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, "(no study uid)"),
+                    dataset.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, "(no series uid)"),
+                    dataset.GetSingleValueOrDefault(DicomTag.SOPInstanceUID, "(no sop uid)"));
+                break;
         }
     }
 
-    public async Task<IEnumerable<DicomDataset>> QueryImageAsync(RemoteNode node, DicomDataset query)
+    public async Task<bool> VerifyConnectionAsync(RemoteNode node)
     {
-        var results = new List<DicomDataset>();
-        var client = CreateClient(node);
-        
-        DicomLogger.Information("QueryRetrieveSCU", "开始执行Image级别C-FIND查询 - AET: {AeTitle}, SeriesInstanceUid: {SeriesUid}", 
-            node.AeTitle, query.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, "(no uid)"));
-        
-        var request = new DicomCFindRequest(DicomQueryRetrieveLevel.Image);
-        request.Dataset = query;
-        
-        request.OnResponseReceived += (request, response) =>
-        {
-            if (response.Status == DicomStatus.Pending && response.HasDataset)
-            {
-                results.Add(response.Dataset);
-                DicomLogger.Debug("QueryRetrieveSCU", "收到Image查询结果 - SopInstanceUid: {SopInstanceUid}, InstanceNumber: {Number}",
-                    response.Dataset.GetSingleValueOrDefault(DicomTag.SOPInstanceUID, "(no uid)"),
-                    response.Dataset.GetSingleValueOrDefault(DicomTag.InstanceNumber, "(no number)"));
-            }
-        };
-
         try
         {
+            var client = CreateClient(node);
+            
+            DicomLogger.Information("QueryRetrieveSCU", 
+                "开始测试DICOM连接 - LocalAE: {LocalAE}, RemoteAE: {RemoteAE}, Host: {Host}:{Port}", 
+                _config.LocalAeTitle, node.AeTitle, node.HostName, node.Port);
+
+            // 创建 C-ECHO 请求
+            var request = new DicomCEchoRequest();
+            
+            var success = true;
+            request.OnResponseReceived += (req, response) => {
+                if (response.Status.State != DicomState.Success)
+                {
+                    success = false;
+                    DicomLogger.Warning("QueryRetrieveSCU", 
+                        "C-ECHO失败 - Status: {Status}", response.Status);
+                }
+            };
+
             await client.AddRequestAsync(request);
             await client.SendAsync();
-            return results;
+
+            if (success)
+            {
+                DicomLogger.Information("QueryRetrieveSCU", 
+                    "DICOM连接测试成功 - RemoteAE: {RemoteAE}", node.AeTitle);
+            }
+
+            return success;
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QueryRetrieveSCU", ex, "执行Image查询时发生错误");
-            throw;
+            DicomLogger.Error("QueryRetrieveSCU", ex, 
+                "DICOM连接测试失败 - RemoteAE: {RemoteAE}", node.AeTitle);
+            return false;
         }
     }
 } 

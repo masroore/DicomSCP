@@ -117,19 +117,25 @@ async function searchQR() {
     };
 
     try {
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/study`, queryParams);
+        // 默认使用 study 级别查询
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query?level=STUDY`, queryParams);
         const result = response.data;
 
-        if (!result || result.length === 0) {
+        if (!result.success) {
+            showEmptyTable(tbody, result.message || '查询失败', 9);
+            return;
+        }
+
+        if (!result.data || result.data.length === 0) {
             showEmptyTable(tbody, '未找到匹配的检查', 9);
             return;
         }
 
         // 更新数据和显示
-        qrAllData = result;
+        qrAllData = result.data;
         qrCurrentPage = 1;
         displayQRPage(qrCurrentPage);
-        updateQRPagination(qrAllData.length);
+        updateQRPagination(result.total);
 
     } catch (error) {
         console.error('查询失败:', error);
@@ -211,8 +217,15 @@ async function toggleQRSeriesInfo(row) {
         $(row).after(loadingRow);
 
         const nodeId = document.getElementById('qrNode').value;
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query/series/${studyUid}`);
-        const data = response.data;
+        // 使用 series 级别查询
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/query?level=SERIES`, {
+            studyInstanceUid: studyUid
+        });
+        const result = response.data;
+
+        if (!result.success || !result.data) {
+            throw new Error(result.message || '获取序列数据失败');
+        }
 
         // 创建序列信息行
         const seriesInfoRow = $(`
@@ -237,7 +250,7 @@ async function toggleQRSeriesInfo(row) {
         `);
 
         const tbody = seriesInfoRow.find('tbody');
-        if (!data || data.length === 0) {
+        if (!result.data || result.data.length === 0) {
             tbody.append(`
                 <tr>
                     <td colspan="5" class="text-center text-muted py-3">
@@ -247,13 +260,13 @@ async function toggleQRSeriesInfo(row) {
                 </tr>
             `);
         } else {
-            data.forEach(series => {
+            result.data.forEach(series => {
                 tbody.append(`
                     <tr>
                         <td>${series.seriesNumber || ''}</td>
                         <td>${series.modality || '未知'}</td>
                         <td title="${series.seriesDescription || ''}">${series.seriesDescription || ''}</td>
-                        <td>${series.instanceCount || 0}</td>
+                        <td>${series.numberOfInstances || 0}</td>
                         <td>
                             <button class="btn btn-sm btn-success" onclick="moveQRSeries('${studyUid}', '${series.seriesInstanceUid}', event)">
                                 <i class="bi bi-cloud-download me-1"></i>cmove
@@ -284,50 +297,55 @@ async function moveQRStudy(studyUid, event) {
     }
 
     // 使用确认对话框
-    if (!await showConfirmDialog('确认移动', '确定要移动选中的检查吗？')) {
+    if (!await showConfirmDialog('确认获取', '确定要获取选中的检查吗？')) {
         return;  // 用户取消
     }
 
     const nodeId = document.getElementById('qrNode').value;
     try {
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/move/${studyUid}`);
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/move?level=STUDY`, {
+            studyInstanceUid: studyUid
+        });
         const result = response.data;
 
-        if (result.success !== false) {
-            window.showToast('检查传输已开始，请稍后去影像管理查看！', 'success');
+        if (result.success) {
+            window.showToast(result.message || '检查获取请求已发送，请稍后在影像管理中查看！', 'success');
         } else {
-            throw new Error(result.message || '传输失败');
+            throw new Error(result.message || '获取失败');
         }
     } catch (error) {
-        console.error('传输失败:', error);
-        window.showToast(error.response?.data || error.message || '传输失败，请检查网络连接', 'error');
+        console.error('获取失败:', error);
+        window.showToast(error.response?.data?.message || error.message || '获取失败，请检查网络连接', 'error');
     }
 }
 
-// 回取单个序列
+// 获取单个序列
 async function moveQRSeries(studyUid, seriesUid, event) {
     if (event) {
         event.stopPropagation();
     }
 
     // 使用确认对话框
-    if (!await showConfirmDialog('确认移动', '确定要移动选中的序列吗？')) {
+    if (!await showConfirmDialog('确认获取', '确定要获取选中的序列吗？')) {
         return;  // 用户取消
     }
 
     const nodeId = document.getElementById('qrNode').value;
     try {
-        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/move/${studyUid}/${seriesUid}`);
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/move?level=SERIES`, {
+            studyInstanceUid: studyUid,
+            seriesInstanceUid: seriesUid
+        });
         const result = response.data;
 
-        if (result.success !== false) {
-            window.showToast('序列传输已开始，请稍后去影像管理查看！', 'success');
+        if (result.success) {
+            window.showToast(result.message || '序列获取请求已发送，请稍后在影像管理中查看！', 'success');
         } else {
-            throw new Error(result.message || '传输失败');
+            throw new Error(result.message || '获取失败');
         }
     } catch (error) {
-        console.error('传输失败:', error);
-        window.showToast(error.response?.data || error.message || '传输失败，请检查网络连接', 'error');
+        console.error('获取失败:', error);
+        window.showToast(error.response?.data?.message || error.message || '获取失败，请检查网络连接', 'error');
     }
 }
 
