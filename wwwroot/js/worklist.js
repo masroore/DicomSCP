@@ -99,7 +99,6 @@ function bindWorklistEvents() {
             prevPageBtn.replaceWith(prevPageBtn.cloneNode(true));
             const newPrevBtn = document.getElementById('worklist-prevPage');
             newPrevBtn.addEventListener('click', () => {
-                console.log('点击上一页，当前页码：', currentPage);
                 if (currentPage > 1) {
                     currentPage--;
                     loadWorklistData();
@@ -113,7 +112,6 @@ function bindWorklistEvents() {
             const newNextBtn = document.getElementById('worklist-nextPage');
             newNextBtn.addEventListener('click', () => {
                 const totalPages = parseInt(newNextBtn.getAttribute('data-total-pages') || '1');
-                console.log('点击下一页，当前页码：', currentPage, '总页数：', totalPages); // 试日志
                 if (currentPage < totalPages) {
                     currentPage++;
                     loadWorklistData();
@@ -189,7 +187,7 @@ async function loadWorklistData() {
             throw new Error('返回数据格式错误');
         }
 
-        // 确保返回的数据包含所需的分页信息
+        // 解构后端返回的分页信息
         const { items, totalCount, page, totalPages } = result;
         
         if (typeof totalCount !== 'number' || typeof page !== 'number' || typeof totalPages !== 'number') {
@@ -299,13 +297,17 @@ function updatePagination(totalCount, currentPage, totalPages) {
         const prevPageBtn = document.getElementById('worklist-prevPage');
         const nextPageBtn = document.getElementById('worklist-nextPage');
 
+        // 更新当前页码
         if (currentPageEl) currentPageEl.textContent = currentPage;
         
+        // 更新显示范围（如：1-10 / 100）
         const start = (currentPage - 1) * pageSize + 1;
         const end = Math.min(currentPage * pageSize, totalCount);
         if (currentRangeEl) {
             currentRangeEl.textContent = totalCount > 0 ? `${start}-${end}` : '0-0';
         }
+        
+        // 更新总记录数
         if (totalCountEl) totalCountEl.textContent = totalCount;
         
         // 更新按钮状态和数据属性

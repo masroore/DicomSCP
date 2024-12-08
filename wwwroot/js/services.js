@@ -10,10 +10,6 @@ class ServiceManager {
         axios.interceptors.response.use(
             response => response,
             error => {
-                if (error.response && error.response.status === 401) {
-                    window.location.href = '/login.html';
-                    return new Promise(() => {});
-                }
                 return Promise.reject(error);
             }
         );

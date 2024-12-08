@@ -11,10 +11,6 @@ function initAxiosInterceptors() {
     axios.interceptors.response.use(
         response => response,
         error => {
-            if (error.response && error.response.status === 401) {
-                window.location.href = '/login.html';
-                return new Promise(() => {});
-            }
             return Promise.reject(error);
         }
     );
@@ -156,7 +152,7 @@ async function loadImages() {
         }
     } catch (error) {
         console.error('[Error] Failed to load images:', error);
-        alert('Failed to load images');
+        window.showToast('加载图像失败', 'error');
     }
 }
 
@@ -181,10 +177,11 @@ async function displayImage(index) {
         updateCornerInfo(image);
     } catch (error) {
         console.error('显示图像失败:', error);
+        window.showToast('显示图像失败', 'error');
     }
 }
 
-// 更���角落信息
+// 更新角落信息
 function updateCornerInfo(image) {
     // 患者信息
     document.getElementById('patientInfo').innerHTML = `

@@ -8,10 +8,6 @@ function initAxiosInterceptors() {
     axios.interceptors.response.use(
         response => response,
         error => {
-            if (error.response && error.response.status === 401) {
-                window.location.href = '/login.html';
-                return new Promise(() => {});
-            }
             return Promise.reject(error);
         }
     );
@@ -408,7 +404,7 @@ async function loadStoreNodes() {
 
     } catch (error) {
         console.error('加载节点列表失败:', error);
-        window.showToast('error', '加载失败', '加载节点列表失败');
+        window.showToast('加载节点列表失败', 'error');
     }
 }
 
@@ -475,7 +471,7 @@ async function sendFiles() {
 
     } catch (error) {
         console.error('发送失败:', error);
-        window.showToast('发送失败: ' + (error.response?.data || error.message), false);
+        window.showToast(error.response?.data || error.message, 'error');
     } finally {
         sendButton.disabled = false;
         clearButton.disabled = false;

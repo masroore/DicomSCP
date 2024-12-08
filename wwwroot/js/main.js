@@ -1,5 +1,7 @@
 // ================ 全局变量 ================
 
+// 定义默认路由
+const defaultRoute = 'images';  // 修改默认路由为影像管理页面
 
 // ================ 通用工具函数 ================
 // 统一错误处理
@@ -97,20 +99,62 @@ $(document).ready(function() {
     initAxiosInterceptors();
     
     // 根据URL hash切换到对应页面
-    const currentTab = window.location.hash.slice(1) || 'worklist';
+    const currentTab = window.location.hash.slice(1) || defaultRoute;
     switchPage(currentTab);
     
     // 导航链接点击事件
     $('.nav-link[data-page]').click(function(e) {
         e.preventDefault();
         const page = $(this).data('page');
-        window.location.hash = page; // 更新URL hash
+        window.location.hash = page;
         switchPage(page);
     });
 
     // 获取当前登录用户名
     getCurrentUsername();
+    
+    // 添加版权信息到底部
+    addCopyright();
 });
+
+// 添加版权信息
+function addCopyright() {
+    const footer = document.createElement('footer');
+    footer.className = 'footer mt-auto py-3';
+    footer.innerHTML = `
+        <div class="container text-center">
+            <span class="text-muted">
+                © ${new Date().getFullYear()} DICOM管理系统 by 
+                <a href="https://github.com/fightroad" target="_blank">
+                    平凡之路 <i class="bi bi-github"></i>
+                </a>
+            </span>
+        </div>
+    `;
+    document.body.appendChild(footer);
+
+    // 添加样式以确保页脚始终在底部
+    const style = document.createElement('style');
+    style.textContent = `
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .footer {
+            margin-top: auto;
+            background-color: #f8f9fa;
+        }
+        .footer a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            color: #0d6efd;
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 // ================ 页面切换 ================
 // 切换页面函数
@@ -340,6 +384,12 @@ function showDialog({
             resolve(false);
         }
     });
+}
+
+// 路由处理
+function handleRoute() {
+    const path = window.location.hash.slice(1) || defaultRoute;
+    switchPage(path);
 }
 
 
