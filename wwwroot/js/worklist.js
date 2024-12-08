@@ -2,6 +2,7 @@
 let currentWorklistId = null;
 const pageSize = 10;
 let currentPage = 1;
+let isLoading = false;
 
 // 修改 DOMContentLoaded 事件监听
 document.addEventListener('DOMContentLoaded', () => {
@@ -40,6 +41,17 @@ function validateWorklistForm(form) {
         return false;
     }
 
+    // 验证必填字段
+    const requiredFields = ['patientId', 'patientName', 'accessionNumber', 'scheduledDateTime', 'modality'];
+    for (const fieldId of requiredFields) {
+        const field = form.querySelector(`#${fieldId}`);
+        if (!field || !field.value.trim()) {
+            window.showToast(`${fieldId === 'modality' ? '检查类型' : fieldId} 不能为空`, 'error');
+            field?.focus();
+            return false;
+        }
+    }
+
     // 验证年龄
     const ageInput = form.querySelector('#patientAge');
     const age = parseInt(ageInput.value);
@@ -48,6 +60,13 @@ function validateWorklistForm(form) {
         ageInput.focus();
         return false;
     }
+
+    // 移除预约时间验证
+    // const scheduledDateTime = new Date(form.querySelector('#scheduledDateTime').value);
+    // if (scheduledDateTime < new Date()) {
+    //     window.showToast('预约时间不能早于当前时间', 'error');
+    //     return false;
+    // }
 
     return true;
 }
@@ -94,7 +113,7 @@ function bindWorklistEvents() {
             const newNextBtn = document.getElementById('worklist-nextPage');
             newNextBtn.addEventListener('click', () => {
                 const totalPages = parseInt(newNextBtn.getAttribute('data-total-pages') || '1');
-                console.log('点击下一页，当前页码：', currentPage, '总页数：', totalPages); // 调试日志
+                console.log('点击下一页，当前页码：', currentPage, '总页数：', totalPages); // 试日志
                 if (currentPage < totalPages) {
                     currentPage++;
                     loadWorklistData();
@@ -129,9 +148,12 @@ function bindWorklistEvents() {
 
 // 加载 Worklist 数据
 async function loadWorklistData() {
+    if (isLoading) return;
+    
     const tbody = document.getElementById('worklist-table-body');
     if (!tbody) return;
 
+    isLoading = true;
     showTableLoading(tbody, 8);
 
     try {
@@ -162,8 +184,17 @@ async function loadWorklistData() {
         const result = await response.json();
         if (!result) return;
 
+        // 验证返回数据格式
+        if (!Array.isArray(result.items)) {
+            throw new Error('返回数据格式错误');
+        }
+
         // 确保返回的数据包含所需的分页信息
         const { items, totalCount, page, totalPages } = result;
+        
+        if (typeof totalCount !== 'number' || typeof page !== 'number' || typeof totalPages !== 'number') {
+            throw new Error('分页信息格式错误');
+        }
 
         if (!items || items.length === 0) {
             showEmptyTable(tbody, '暂无预约检查', 8);
@@ -183,6 +214,8 @@ async function loadWorklistData() {
     } catch (error) {
         handleError(error, '获取预约数据失败');
         showEmptyTable(tbody, '加载失败，请重试', 8);
+    } finally {
+        isLoading = false;
     }
 }
 
@@ -194,21 +227,34 @@ function displayWorklistData(items) {
 
         const fragment = document.createDocumentFragment();
         items.forEach(item => {
+            // 添加数据安全处理
+            const safeItem = {
+                patientId: item.patientId || '',
+                patientName: item.patientName || '',
+                patientSex: item.patientSex || '',
+                age: item.age || '',
+                accessionNumber: item.accessionNumber || '',
+                modality: item.modality || '',
+                scheduledDateTime: item.scheduledDateTime || '',
+                status: item.status || 'SCHEDULED',
+                worklistId: item.worklistId || ''
+            };
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td title="${item.patientId}">${item.patientId}</td>
-                <td title="${item.patientName}">${item.patientName}</td>
-                <td>${formatGender(item.patientSex)}</td>
-                <td>${item.age ? item.age + '岁' : ''}</td>
-                <td title="${item.accessionNumber}">${item.accessionNumber}</td>
-                <td>${item.modality}</td>
-                <td>${formatDateTime(item.scheduledDateTime)}</td>
-                <td><span class="status-${item.status.toLowerCase()}">${formatStatus(item.status)}</span></td>
+                <td title="${safeItem.patientId}">${safeItem.patientId}</td>
+                <td title="${safeItem.patientName}">${safeItem.patientName}</td>
+                <td>${formatGender(safeItem.patientSex)}</td>
+                <td>${safeItem.age ? safeItem.age + '岁' : ''}</td>
+                <td title="${safeItem.accessionNumber}">${safeItem.accessionNumber}</td>
+                <td>${safeItem.modality}</td>
+                <td>${formatDateTime(safeItem.scheduledDateTime)}</td>
+                <td><span class="status-${safeItem.status.toLowerCase()}">${formatStatus(safeItem.status)}</span></td>
                 <td>
-                    <button type="button" class="btn btn-sm btn-primary edit-btn" data-id="${item.worklistId}">
+                    <button type="button" class="btn btn-sm btn-primary edit-btn" data-id="${safeItem.worklistId}">
                         <i class="bi bi-pencil me-1"></i>编辑
                     </button>
-                    <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="${item.worklistId}">
+                    <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="${safeItem.worklistId}">
                         <i class="bi bi-trash me-1"></i>删除
                     </button>
                 </td>
@@ -445,31 +491,37 @@ async function editWorklist(worklistId) {
                 }, 100);  // 给一个小延时确保 DOM 已更新
             },
             onConfirm: async () => {
-                const form = document.querySelector('.modal.show form');
-                if (!form) {
-                    throw new Error('找不到表单');
+                const submitBtn = document.querySelector('.modal.show .submit-btn');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
                 }
-
-                if (!validateWorklistForm(form)) {
-                    return false;
-                }
-
-                const data = {
-                    worklistId: currentWorklistId,
-                    patientId: form.querySelector('#patientId').value.trim(),
-                    patientName: form.querySelector('#patientName').value.trim(),
-                    patientSex: form.querySelector('#patientSex').value,
-                    age: parseInt(form.querySelector('#patientAge').value),
-                    accessionNumber: form.querySelector('#accessionNumber').value.trim(),
-                    modality: form.querySelector('#modality').value,
-                    scheduledDateTime: form.querySelector('#scheduledDateTime').value,
-                    scheduledAET: form.querySelector('#scheduledAET').value.trim(),
-                    scheduledStationName: form.querySelector('#scheduledStationName').value.trim(),
-                    bodyPartExamined: form.querySelector('#bodyPartExamined').value.trim(),
-                    status: form.querySelector('#status').value
-                };
-
+                
                 try {
+                    const form = document.querySelector('.modal.show form');
+                    if (!form) {
+                        throw new Error('找不到表单');
+                    }
+
+                    if (!validateWorklistForm(form)) {
+                        return false;
+                    }
+
+                    const data = {
+                        worklistId: currentWorklistId,
+                        patientId: form.querySelector('#patientId').value.trim(),
+                        patientName: form.querySelector('#patientName').value.trim(),
+                        patientSex: form.querySelector('#patientSex').value,
+                        age: parseInt(form.querySelector('#patientAge').value),
+                        accessionNumber: form.querySelector('#accessionNumber').value.trim(),
+                        modality: form.querySelector('#modality').value,
+                        scheduledDateTime: form.querySelector('#scheduledDateTime').value,
+                        scheduledAET: form.querySelector('#scheduledAET').value.trim(),
+                        scheduledStationName: form.querySelector('#scheduledStationName').value.trim(),
+                        bodyPartExamined: form.querySelector('#bodyPartExamined').value.trim(),
+                        status: form.querySelector('#status').value
+                    };
+
                     const response = await fetch(`/api/worklist/${currentWorklistId}`, {
                         method: 'PUT',
                         headers: {
@@ -489,6 +541,11 @@ async function editWorklist(worklistId) {
                 } catch (error) {
                     handleError(error, '保存预约数据失败');
                     return false;
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '确定';
+                    }
                 }
             }
         });
