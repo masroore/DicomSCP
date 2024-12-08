@@ -55,7 +55,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         }
         else
         {
-            DicomLogger.Information("WorklistSCP", "连接正常关闭");
+            DicomLogger.Debug("WorklistSCP", "连接正常关闭");
         }
     }
 
@@ -95,7 +95,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             }
         }
 
-        DicomLogger.Information("WorklistSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+        DicomLogger.Debug("WorklistSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
             calledAE, association.CallingAE);
 
         foreach (var pc in association.PresentationContexts)
@@ -107,7 +107,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
                     DicomTransferSyntax.ImplicitVRLittleEndian,
                     DicomTransferSyntax.ExplicitVRLittleEndian,
                     DicomTransferSyntax.ExplicitVRBigEndian);
-                DicomLogger.Information("WorklistSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
+                DicomLogger.Debug("WorklistSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
                     association.CallingAE, pc.AbstractSyntax.Name);
             }
             else
@@ -123,13 +123,13 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
     public Task OnReceiveAssociationReleaseRequestAsync()
     {
-        DicomLogger.Information("接收到关联释放请求");
+        DicomLogger.Debug("WorklistSCP", "接收到关联释放请求");
         return SendAssociationReleaseResponseAsync();
     }
 
     public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
     {
-        DicomLogger.Warning("接收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
+        DicomLogger.Warning("WorklistSCP", "接收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
     }
 
     public async IAsyncEnumerable<DicomCFindResponse> OnCFindRequestAsync(DicomCFindRequest request)
@@ -141,7 +141,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             yield break;
         }
 
-        DicomLogger.Information("WorklistSCP", "收到工作列表查询请求 - 原始数据集: {@Dataset}", 
+        DicomLogger.Debug("WorklistSCP", "收到工作列表查询请求 - 原始数据集: {@Dataset}", 
             request.Dataset.ToDictionary(x => x.Tag.ToString(), x => x.ToString()));
 
         var responses = await Task.Run(() => ProcessWorklistQuery(request));
@@ -175,7 +175,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
         if (worklistItems.Count == 0)
         {
-            DicomLogger.Information("WorklistSCP", "未找到匹配的工作列表项");
+            DicomLogger.Debug("WorklistSCP", "未找到匹配的工作列表项");
             return new[] { new DicomCFindResponse(request, DicomStatus.Success) };
         }
 
@@ -367,7 +367,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
             request.Dataset.GetSingleValueOrDefault<string>(DicomTag.ScheduledStationName, string.Empty)
         );
 
-        DicomLogger.Information("WorklistSCP", "解析后的查询参数 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}, " +
+        DicomLogger.Debug("WorklistSCP", "解析后的查询参数 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}, " +
             "日期范围: {StartDate} - {EndDate}, Modality: {Modality}, StationName: {StationName}",
             parameters.PatientId,
             parameters.AccessionNumber,
@@ -460,7 +460,7 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
     {
-        DicomLogger.Information("收到 C-ECHO 请求");
+        DicomLogger.Debug("WorklistSCP", "收到 C-ECHO 请求");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
 } 
