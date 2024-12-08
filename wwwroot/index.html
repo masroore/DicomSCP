@@ -57,20 +57,24 @@
                 </ul>
                 
                 <div class="d-flex align-items-center ms-auto">
-                    <div class="system-status-group me-auto">
+                    <div class="system-status-group me-auto" style="cursor: pointer;">
                         <div class="d-flex flex-column">
-                            <div class="status-item mb-1" title="系统CPU使用率">
+                            <div class="status-item mb-1">
                                 <i class="bi bi-cpu"></i>
                                 <span id="cpuStatus">0%</span>
                             </div>
-                            <div class="status-item" title="程序内存使用">
+                            <div class="status-item">
                                 <i class="bi bi-memory"></i>
                                 <span id="memoryStatus">0MB</span>
                             </div>
                         </div>
                     </div>
+                    <div class="status-tip position-absolute bg-dark text-white p-2 rounded" 
+                        style="display: none; font-size: 0.8rem; z-index: 1000;">
+                        点击查看详细信息
+                    </div>
 
-                    <div class="service-status-group me-0">
+                    <div class="service-status-group me-0" style="cursor: pointer;">
                         <span class="service-status">
                             <span class="service-name">StoreSCP</span>
                             <span id="storeScp-status" class="badge bg-secondary">加载中...</span>
@@ -97,7 +101,7 @@
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li>
-                                    <a class="dropdown-item" href="#" onclick="showChangePasswordModal()">
+                                    <a class="dropdown-item" href="#" onclick="changePassword()">
                                         <i class="bi bi-key me-2"></i>修改密码
                                     </a>
                                 </li>
@@ -728,33 +732,18 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="changePassword()">确认修改</button>
+                    <button type="button" class="btn btn-primary" onclick="savePasswordChange()">确认修改</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 修改查看器模态框 -->
-    <div class="modal fade" id="viewerModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered" style="max-width: 900px; margin: 1.75rem auto;">
-            <div class="modal-content" style="height: calc(100vh - 3.5rem);">
-                <div class="modal-header py-1" style="background-color: #343a40; border-bottom: 1px solid #454d55;">
-                    <h5 class="modal-title" style="color: #fff; font-size: 1rem;">DICOM 查看器</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body p-0" style="overflow: hidden;">
-                    <iframe id="viewerFrame" style="width: 100%; height: 100%; border: none;"></iframe>
-                </div>
-            </div>
-        </div>
-    </div>
-
-   
     <script src="lib/jquery/jquery.min.js"></script>
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="lib/axios/axios.min.js"></script>
 
     <script src="js/main.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/services.js"></script>
 
     <script src="js/config.js"></script>
@@ -773,127 +762,6 @@
             <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
         <div class="toast-body"></div>
-    </div>
-</div>
-    <div class="modal fade" id="systemInfoModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">系统资源使用情况</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="list-group">
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <strong>CPU使用率</strong>
-                                <span id="modalCpuStatus">0%</span>
-                            </div>
-                            <div class="progress mt-2" style="height: 5px;">
-                                <div id="modalCpuProgress" class="progress-bar" style="width: 0%"></div>
-                            </div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <strong>系统内存</strong>
-                                <span id="modalSystemMemory">0MB / 0MB (0%)</span>
-                            </div>
-                            <div class="progress mt-2" style="height: 5px;">
-                                <div id="modalSystemMemoryProgress" class="progress-bar" style="width: 0%"></div>
-                            </div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <strong>处理器</strong>
-                                <span id="modalProcessorInfo">0核 Unknown</span>
-                            </div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <strong>程序内存</strong>
-                                <span id="modalProcessMemory">0MB</span>
-                            </div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <strong>运行时间</strong>
-                                <span id="modalUptime">0天0小时</span>
-                            </div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
-                                <strong>操作系统</strong>
-                                <span id="modalOsVersion">Unknown</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" id="serviceStatusModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">DICOM 服务状态</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="list-group">
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <strong>存储服务 (StoreSCP)</strong>
-                                <span id="modalStoreScp" class="badge bg-secondary">加载中...</span>
-                            </div>
-                            <div class="small text-muted mt-1" id="modalStoreScpInfo">AET: - 端口: -</div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <strong>检查列表 (WorklistSCP)</strong>
-                                <span id="modalWorklistScp" class="badge bg-secondary">加载中...</span>
-                            </div>
-                            <div class="small text-muted mt-1" id="modalWorklistScpInfo">AET: - 端口: -</div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <strong>查询服务 (QRSCP)</strong>
-                                <span id="modalQrScp" class="badge bg-secondary">加载中...</span>
-                            </div>
-                            <div class="small text-muted mt-1" id="modalQrScpInfo">AET: - 端口: -</div>
-                        </div>
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <strong>打印服务 (PrintSCP)</strong>
-                                <span id="modalPrintScp" class="badge bg-secondary">加载中...</span>
-                            </div>
-                            <div class="small text-muted mt-1" id="modalPrintScpInfo">AET: - 端口: -</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- 打印机选择对话框 -->
-<div class="modal fade" id="printerSelectModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">选择打印机</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label">可用打印机</label>
-                    <select class="form-select" id="printerSelect">
-                        <!-- 打印机列表将通过 JavaScript 动态填充 -->
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" id="confirmPrint">确认打印</button>
-            </div>
-        </div>
     </div>
 </div>
 </body>

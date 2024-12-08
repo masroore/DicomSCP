@@ -179,55 +179,66 @@ class LogManager {
             const data = await response.json();
             
             const modalDiv = document.createElement('div');
+            modalDiv.className = 'modal';
+            modalDiv.setAttribute('tabindex', '-1');
+            modalDiv.setAttribute('data-dynamic', 'true');
             modalDiv.innerHTML = `
-                <div class="modal fade" id="logContentModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg" style="max-width: 1000px;">
-                        <div class="modal-content">
-                            <div class="modal-header" style="background: white; position: sticky; top: 0; z-index: 1020;">
-                                <div class="d-flex align-items-center">
-                                    <select class="form-select form-select-sm me-2" id="logFileSelect" style="width: auto;">
-                                        <!-- 日志文件列表将动态填充 -->
-                                    </select>
-                                </div>
-                                <div>
-                                    <button type="button" class="btn btn-outline-primary btn-sm me-1" onclick="logManager.refreshLogContent()">
-                                        刷新
-                                    </button>
-                                    <button type="button" class="btn btn-outline-warning btn-sm me-1" onclick="logManager.clearLogContent()">
-                                        清空
-                                    </button>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
+                <div class="modal-dialog modal-lg" style="max-width: 1000px;">
+                    <div class="modal-content">
+                        <div class="modal-header" style="background: white; position: sticky; top: 0; z-index: 1020;">
+                            <div class="d-flex align-items-center">
+                                <select class="form-select form-select-sm me-2" id="logFileSelect" style="width: auto;">
+                                    <!-- 日志文件列表将动态填充 -->
+                                </select>
                             </div>
-                            <div class="modal-body p-2" style="height: calc(100vh - 280px);">
-                                <div style="height: 100%; border: 1px solid #dee2e6; border-radius: 4px; overflow: hidden;">
-                                    <pre class="log-content" style="height: 100%; margin: 0; padding: 1rem; color: #d4d4d4; 
-                                        font-family: Consolas, monospace; font-size: 0.9rem; line-height: 1.5;
-                                        background-color: #1e1e1e; overflow-y: auto; overflow-x: hidden;
-                                        white-space: pre-wrap;">${data.content.reverse().join('\n') || '暂无日志内容'}</pre>
-                                </div>
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm me-1" onclick="logManager.refreshLogContent()">
+                                    刷新
+                                </button>
+                                <button type="button" class="btn btn-outline-warning btn-sm me-1" onclick="logManager.clearLogContent()">
+                                    清空
+                                </button>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                        </div>
+                        <div class="modal-body p-2" style="height: calc(100vh - 280px);">
+                            <div style="height: 100%; border: 1px solid #dee2e6; border-radius: 4px; overflow: hidden;">
+                                <pre class="log-content" style="height: 100%; margin: 0; padding: 1rem; color: #d4d4d4; 
+                                    font-family: Consolas, monospace; font-size: 0.9rem; line-height: 1.5;
+                                    background-color: #1e1e1e; overflow-y: auto; overflow-x: hidden;
+                                    white-space: pre-wrap;">${data.content.reverse().join('\n') || '暂无日志内容'}</pre>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
-            
-            const existingModal = document.getElementById('logContentModal');
-            if (existingModal) {
-                existingModal.remove();
-            }
+            document.body.appendChild(modalDiv);
 
-            document.body.appendChild(modalDiv.firstElementChild);
+            const modal = new bootstrap.Modal(modalDiv);
+
+            // 更新文件选择列表
             await this.updateLogFileSelect(filename);
 
-            this.currentModal = new bootstrap.Modal(document.getElementById('logContentModal'), {
-                backdrop: 'static',
-                keyboard: false
-            });
-            
-            requestAnimationFrame(() => {
-                this.currentModal.show();
-            });
+            // 监听关闭事件
+            const handleHidden = () => {
+                // 移除事件监听
+                modalDiv.removeEventListener('hidden.bs.modal', handleHidden);
+                
+                // 确保模态框实例还存在
+                const instance = bootstrap.Modal.getInstance(modalDiv);
+                if (instance) {
+                    instance.dispose();
+                }
+                
+                // 从 DOM 中移除
+                if (document.body.contains(modalDiv)) {
+                    modalDiv.remove();
+                }
+            };
+
+            modalDiv.addEventListener('hidden.bs.modal', handleHidden);
+
+            modal.show();
 
         } catch (error) {
             console.error('获取日志内容失败:', error);

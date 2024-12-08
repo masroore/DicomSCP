@@ -1,6 +1,5 @@
 // ================ 全局变量 ================
-let changePasswordModal;
-let viewerModal;
+
 
 // ================ 通用工具函数 ================
 // 统一错误处理
@@ -76,58 +75,19 @@ window.showToast = function(message, type = 'success') {
     }
 };
 
-// 修改所有模态框的清理代码
-function cleanupModal(modalId, callback) {
-    return () => {
-        const modalElement = document.getElementById(modalId);
-        if (modalElement && document.body.contains(modalElement)) {
-            modalElement.remove();
-        }
-        if (callback) {
-            delete window[callback];
-        }
-    };
-}
-
-// 添加到通用工具函数部分
-function handleApiError(error, defaultMessage) {
-    if (error.response) {
-        // 服务器返回错误
-        if (error.response.status === 404) {
-            handleError(error, '请求的资源不存在');
-        } else {
-            handleError(error, error.response.data || defaultMessage);
-        }
-    } else if (error.request) {
-        // 请求发送失败
-        handleError(error, '网络连接失败，请检查网络');
-    } else {
-        // 其他错误
-        handleError(error, defaultMessage);
-    }
-}
-
 // ================ 初始化函数 ================
 // 初始化 axios 拦截器
 function initAxiosInterceptors() {
     axios.interceptors.response.use(
-        response => response,  // 正常响应直接返回
+        response => response,
         error => {
             if (error.response && error.response.status === 401) {
-                // 未登录或会话过期，重定向到登录页
                 console.log("[Auth] 检测到未授权访问，重定向到登录页");
                 window.location.href = '/login.html';
-                // 阻止显示其他错误提示
                 return new Promise(() => {});
             }
             return Promise.reject(error);
         }
-    );
-
-    // 添加请求拦截器
-    axios.interceptors.request.use(
-        config => config,
-        error => Promise.reject(error)
     );
 }
 
@@ -136,13 +96,7 @@ $(document).ready(function() {
     // 初始化 axios 拦截器
     initAxiosInterceptors();
     
-    // 初始化各种模态框和其他组件
-    initializeComponents();
-    
-    // 初始化预约模块
-    initializeWorklist();
-    
-    // 根据URL hash切换到对应页面，如没有hash则默认显示worklist
+    // 根据URL hash切换到对应页面
     const currentTab = window.location.hash.slice(1) || 'worklist';
     switchPage(currentTab);
     
@@ -157,29 +111,6 @@ $(document).ready(function() {
     // 获取当前登录用户名
     getCurrentUsername();
 });
-
-// 初始化组件
-function initializeComponents() {
-    // 初始化修改密码模态框
-    const changePasswordModalElement = document.getElementById('changePasswordModal');
-    if (changePasswordModalElement) {
-        changePasswordModal = new bootstrap.Modal(changePasswordModalElement);
-    }
-    
-    // 初始化查看器模态框
-    const viewerModalElement = document.getElementById('viewerModal');
-    if (viewerModalElement) {
-        viewerModal = new bootstrap.Modal(viewerModalElement);
-        
-        // 监听模态框关闭事件，清理资源
-        viewerModalElement.addEventListener('hidden.bs.modal', function () {
-            const viewerFrame = document.getElementById('viewerFrame');
-            if (viewerFrame) {
-                viewerFrame.src = 'about:blank';
-            }
-        });
-    }
-}
 
 // ================ 页面切换 ================
 // 切换页面函数
@@ -197,36 +128,9 @@ function switchPage(page) {
         // 添加active类到当前导航链接
         $(`.nav-link[data-page="${page}"]`).addClass('active');
 
-        // 关闭所有打开的模态框
-        $('.modal.show').each(function() {
-            // 先移除焦点
-            const focusedElement = this.querySelector(':focus');
-            if (focusedElement) {
-                focusedElement.blur();
-            }
+        // 关闭所有模态框
+        ModalManager.closeAll();
 
-            // 移除 aria-hidden 属性
-            this.removeAttribute('aria-hidden');
-            
-            // 获取并关闭模态框
-            const modal = bootstrap.Modal.getInstance(this);
-            if (modal) {
-                // 监听关闭事件
-                this.addEventListener('hidden.bs.modal', function() {
-                    // 移除所有可能的 aria 属性
-                    this.removeAttribute('aria-hidden');
-                    this.removeAttribute('aria-modal');
-                    
-                    // 如果是动态创建的模态框，移除DOM
-                    if (this.hasAttribute('data-dynamic')) {
-                        this.remove();
-                    }
-                }, { once: true });
-
-                modal.hide();
-            }
-        });
-        
         // 根据页面类型加载数据
         if (page === 'worklist') {
             loadWorklistData();
@@ -239,7 +143,6 @@ function switchPage(page) {
                 loadStoreNodes();
             }
         } else if (page === 'logs') {
-            // 初始化日志管理器
             if (!window.logManager) {
                 window.logManager = new LogManager();
             }
@@ -263,311 +166,70 @@ function logout() {
         });
 }
 
-// 获取当前用户名
-async function getCurrentUsername() {
-    try {
-        const response = await axios.get('/api/auth/check-session');
-        const username = response.data.username;
-        document.getElementById('currentUsername').textContent = username;
-    } catch (error) {
-        // 401 错误会被全局拦截器处理，这里只处理其他错误
-        if (error.response?.status !== 401) {
-            console.error('获取用户信息失败:', error);
-            document.getElementById('currentUsername').textContent = '未知用户';
-        }
-    }
-}
-
-// 修改密码
-async function changePassword() {
-    const oldPassword = document.getElementById('oldPassword').value;
-    const newPassword = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-
-    // 验证新密码
-    if (newPassword !== confirmPassword) {
-        window.showToast('两次输入的新密码不一致', 'error');
-        return;
-    }
-
-    // 验证新密码长度
-    if (newPassword.length < 6) {
-        window.showToast('新密码长度不能少于6位', 'error');
-        return;
-    }
-
-    try {
-        await axios.post('/api/auth/change-password', {
-            oldPassword: oldPassword,
-            newPassword: newPassword
-        });
-        
-        window.showToast('密码修改成功，请重新登录', 'success');
-        changePasswordModal.hide();
-        setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 1500);
-    } catch (error) {
-        window.showToast(error.response?.data || '修改密码失败，请重试', 'error');
-    }
-}
-
-// 显示修改密码模态框
-function showChangePasswordModal() {
-    document.getElementById('changePasswordForm').reset();
-    changePasswordModal.show();
-}
-
 // ================ 对话框相关函数 ================
 // 显示节点选择对话框
 function showNodeSelectionDialog(nodeOptions) {
-    return new Promise((resolve) => {
-        try {
-            // 移除旧的对话框（如果存在）
-            const oldModal = document.getElementById('nodeSelectModal');
-            if (oldModal && document.body.contains(oldModal)) {
-                const oldInstance = bootstrap.Modal.getInstance(oldModal);
-                if (oldInstance) {
-                    oldInstance.dispose();
-                }
-                oldModal.remove();
-            }
-
-            const html = `
-                <div class="modal fade" id="nodeSelectModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="nodeSelectTitle">
-                    <div class="modal-dialog" role="document">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="nodeSelectTitle">选择目标节点</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="mb-3">
-                                    <label class="form-label">请选择要发送到的PACS节点：</label>
-                                    <select class="form-select" id="nodeSelect">
-                                        ${nodeOptions.map((node, index) => 
-                                            `<option value="${index}">${node}</option>`
-                                        ).join('')}
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                                <button type="button" class="btn btn-primary" id="nodeSelectConfirm">发送</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.body.insertAdjacentHTML('beforeend', html);
-            const modalElement = document.getElementById('nodeSelectModal');
-            if (!modalElement) {
-                throw new Error('无法创建节点选择对话框');
-            }
-
-            let isResolved = false;
-            let modalInstance = null;
-
-            const cleanup = () => {
-                try {
-                    if (modalInstance) {
-                        modalInstance.dispose();
-                    }
-                    if (modalElement && document.body.contains(modalElement)) {
-                        modalElement.remove();
-                    }
-                } catch (error) {
-                    console.error('清理对话框失败:', error);
-                }
-            };
-
-            modalInstance = new bootstrap.Modal(modalElement, {
-                backdrop: 'static',
-                keyboard: false
-            });
-
-            const confirmButton = modalElement.querySelector('#nodeSelectConfirm');
-            if (confirmButton) {
-                confirmButton.addEventListener('click', () => {
-                    try {
-                        const select = document.getElementById('nodeSelect');
-                        const selectedIndex = parseInt(select.value);
-                        isResolved = true;
-                        modalInstance.hide();
-                        resolve(selectedIndex);
-                    } catch (error) {
-                        console.error('确认选择失败:', error);
-                        cleanup();
-                        resolve(-1);
-                    }
-                });
-            }
-
-            modalElement.addEventListener('hidden.bs.modal', () => {
-                try {
-                    if (!isResolved) {
-                        resolve(-1);
-                    }
-                    cleanup();
-                } catch (error) {
-                    console.error('处理对话框关闭事件失败:', error);
-                    resolve(-1);
-                }
-            });
-
-            modalInstance.show();
-
-        } catch (error) {
-            console.error('显示节点选择对话框失败:', error);
-            resolve(-1);
+    return showDialog({
+        title: '选择目标节点',
+        content: `
+            <select class="form-select" id="nodeSelect">
+                ${nodeOptions.map((node, index) => 
+                    `<option value="${index}">${node}</option>`
+                ).join('')}
+            </select>
+        `,
+        onConfirm: async () => {
+            const select = document.getElementById('nodeSelect');
+            return parseInt(select.value);
         }
     });
 }
 
-// 添加确认对话框函数
-function showConfirmMoveDialog() {
-    return showConfirmDialog('确认回取图像', '确定要回取这个检查/序列的图像吗？');
-}
-
-// 修改确认对话框函数
+// 显示确认对话框
 function showConfirmDialog(title, message) {
-    return new Promise((resolve) => {
-        try {
-            // 移除旧的对话框（如果存在）
-            const oldModal = document.getElementById('confirmDialog');
-            if (oldModal && document.body.contains(oldModal)) {
-                const oldInstance = bootstrap.Modal.getInstance(oldModal);
-                if (oldInstance) {
-                    oldInstance.dispose();
-                }
-                oldModal.remove();
-            }
-
-            const html = `
-                <div class="modal fade" id="confirmDialog" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle">
-                    <div class="modal-dialog" role="document">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="confirmDialogTitle">${title}</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                            </div>
-                            <div class="modal-body">
-                                <p>${message}</p>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                                <button type="button" class="btn btn-primary" id="confirmDialogConfirm">确定</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.body.insertAdjacentHTML('beforeend', html);
-            const modalElement = document.getElementById('confirmDialog');
-            if (!modalElement) {
-                throw new Error('无法创建确认对话框');
-            }
-
-            let isResolved = false;
-            let modalInstance = null;
-
-            const cleanup = () => {
-                try {
-                    if (modalInstance) {
-                        modalInstance.dispose();
-                    }
-                    if (modalElement && document.body.contains(modalElement)) {
-                        modalElement.remove();
-                    }
-                } catch (error) {
-                    console.error('清理对话框失败:', error);
-                }
-            };
-
-            modalInstance = new bootstrap.Modal(modalElement, {
-                backdrop: 'static',
-                keyboard: false
-            });
-
-            // 使用事件监听而不是全局函数
-            const confirmButton = modalElement.querySelector('#confirmDialogConfirm');
-            if (confirmButton) {
-                confirmButton.addEventListener('click', () => {
-                    try {
-                        isResolved = true;
-                        modalInstance.hide();
-                        resolve(true);
-                    } catch (error) {
-                        console.error('确认按钮点击处理失败:', error);
-                        cleanup();
-                        resolve(false);
-                    }
-                });
-            }
-
-            modalElement.addEventListener('hidden.bs.modal', () => {
-                try {
-                    if (!isResolved) {
-                        resolve(false);
-                    }
-                    cleanup();
-                } catch (error) {
-                    console.error('处理对话框关闭事件失败:', error);
-                    resolve(false);
-                }
-            });
-
-            modalInstance.show();
-
-            // 设置焦点到确定按钮
-            if (confirmButton) {
-                confirmButton.focus();
-            }
-
-        } catch (error) {
-            console.error('显示确认对话框失败:', error);
-            resolve(false);
-        }
+    return showDialog({
+        title: title,
+        content: `<p>${message}</p>`,
+        onConfirm: async () => true
     });
 }
 
-// 添加模态框管理器
+// 全局模态框管理器
 const ModalManager = {
-    activeModals: new Set(),
-
-    show(modalId, options = {}) {
-        const modal = new bootstrap.Modal(document.getElementById(modalId), options);
-        this.activeModals.add(modalId);
-        modal.show();
-        return modal;
+    init() {
+        // 监听所有模态框的隐藏事件
+        $(document).on('hidden.bs.modal', '.modal', function() {
+            // 移除所有焦点
+            $(this).find('button, [role="button"], a, input, select, textarea').blur();
+            
+            // 如果是动态创建的模态框，清理它
+            if ($(this).data('dynamic')) {
+                const modal = bootstrap.Modal.getInstance(this);
+                if (modal) {
+                    modal.dispose();
+                }
+                $(this).remove();
+            }
+        });
     },
 
-    hide(modalId) {
-        const modalElement = document.getElementById(modalId);
-        if (modalElement) {
-            const modal = bootstrap.Modal.getInstance(modalElement);
+    // 关闭所有模态框
+    closeAll() {
+        $('.modal.show').each(function() {
+            const modal = bootstrap.Modal.getInstance(this);
             if (modal) {
                 modal.hide();
             }
-        }
-        this.activeModals.delete(modalId);
-    },
-
-    cleanup(modalId) {
-        const modalElement = document.getElementById(modalId);
-        if (modalElement && document.body.contains(modalElement)) {
-            modalElement.remove();
-        }
-        this.activeModals.delete(modalId);
-    },
-
-    hideAll() {
-        this.activeModals.forEach(modalId => this.hide(modalId));
+        });
     }
 };
 
+// 初始化模态框管理器
+document.addEventListener('DOMContentLoaded', () => {
+    ModalManager.init();
+});
+
+// ================ 工具函数 ================
 // 显示列表加载动画
 function showTableLoading(tbody, colSpan = 6) {
     if (!tbody) return;
@@ -596,6 +258,88 @@ function showEmptyTable(tbody, message = '暂无数据', colSpan = 6) {
             </td>
         </tr>
     `;
+}
+
+// 通用对话框函数
+function showDialog({ 
+    title, 
+    content, 
+    onShow, 
+    onConfirm,
+    showFooter = true,
+    size = '',
+    fullHeight = false
+}) {
+    return new Promise((resolve) => {
+        try {
+            const modalDiv = document.createElement('div');
+            modalDiv.className = 'modal';
+            modalDiv.setAttribute('tabindex', '-1');
+            modalDiv.setAttribute('data-dynamic', 'true');
+            modalDiv.innerHTML = `
+                <div class="modal-dialog ${size ? `modal-${size}` : ''} ${fullHeight ? 'modal-dialog-scrollable' : ''}">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            ${content}
+                        </div>
+                        ${showFooter ? `
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="dialogConfirm">确定</button>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modalDiv);
+
+            const modal = new bootstrap.Modal(modalDiv);
+            let isResolved = false;
+
+            // 确认按钮点击事件
+            const confirmButton = modalDiv.querySelector('#dialogConfirm');
+            if (confirmButton) {
+                confirmButton.addEventListener('click', async () => {
+                    if (onConfirm) {
+                        const result = await onConfirm();
+                        if (result === false) return;
+                    }
+                    isResolved = true;
+                    modal.hide();
+                    resolve(true);
+                });
+            }
+
+            // 监听关闭事件
+            const handleHidden = () => {
+                modalDiv.removeEventListener('hidden.bs.modal', handleHidden);
+                const instance = bootstrap.Modal.getInstance(modalDiv);
+                if (instance) {
+                    instance.dispose();
+                }
+                if (document.body.contains(modalDiv)) {
+                    modalDiv.remove();
+                }
+                if (!isResolved) {
+                    resolve(false);
+                }
+            };
+
+            modalDiv.addEventListener('hidden.bs.modal', handleHidden);
+
+            // 显示对话框
+            if (onShow) onShow();
+            modal.show();
+
+        } catch (error) {
+            console.error('显示对话框失败:', error);
+            resolve(false);
+        }
+    });
 }
 
 

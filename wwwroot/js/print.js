@@ -7,8 +7,6 @@ class PrintManager {
         this.totalItems = 0;
         this.currentJobs = [];
         this.printers = [];
-        this.selectedJobId = null;
-        this.printerSelectModal = null;
         this.isLoading = false;
 
        // 初始化事件和加载数据
@@ -20,20 +18,13 @@ class PrintManager {
             // 初始化事件绑定
             this.initializeEvents();
             
-            // 初始化打印机选择模态框
-            this.printerSelectModal = new bootstrap.Modal(document.getElementById('printerSelectModal'), {
-                backdrop: 'static',
-                keyboard: false
-            });
-
-            // 并行加载数据
-            await Promise.all([
-                this.loadPrinters(),
-                this.loadPrintJobs()
-            ]);
+            // 加载打印机列表
+            await this.loadPrinters();
+            // 加载任务列表
+            await this.loadPrintJobs();
         } catch (error) {
             console.error('初始化打印管理器失败:', error);
-            this.showToast(error.message);
+            window.showToast(error.message, 'error');
         }
     }
 
@@ -51,6 +42,20 @@ class PrintManager {
     }
 
     initializeEvents() {
+        // 添加日志
+        console.log('Initializing print events');
+        
+        // 绑定打印按钮点击事件
+        document.querySelectorAll('.print-button').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const jobId = button.getAttribute('data-job-id');
+                if (jobId) {
+                    await this.showPrinterSelect(jobId);
+                }
+            });
+        });
+
         // 绑定刷新按钮事件
         const refreshBtn = document.getElementById('print-refresh');
         if (refreshBtn) {
@@ -68,50 +73,13 @@ class PrintManager {
             nextBtn.addEventListener('click', () => this.nextPage());
         }
 
-        // 初始化打印机选择模态框
-        this.printerSelectModal = new bootstrap.Modal(document.getElementById('printerSelectModal'), {
-            backdrop: 'static',  // 点击背景不关闭
-            keyboard: false      // 按ESC键不关闭
-        });
-        
-        // 绑定确认打印按钮事件
-        const confirmPrintBtn = document.getElementById('confirmPrint');
-        if (confirmPrintBtn) {
-            confirmPrintBtn.addEventListener('click', () => this.confirmPrint());
-        }
-
-        // 绑定取消按钮事件
-        const cancelPrintBtn = document.getElementById('printerSelectModal').querySelector('.btn-secondary');
-        if (cancelPrintBtn) {
-            cancelPrintBtn.addEventListener('click', () => {
-                this.selectedJobId = null;
-                this.printerSelectModal.hide();
-            });
-        }
-
-        // 绑定关闭按钮事件
-        const closeBtn = document.getElementById('printerSelectModal').querySelector('.btn-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                this.selectedJobId = null;
-                this.printerSelectModal.hide();
-            });
-        }
-
         // 添加搜索表单事件绑定
         const searchForm = document.getElementById('printSearchForm');
         if (searchForm) {
-            // 查询按钮点击事件
-            const searchBtn = searchForm.querySelector('button[type="button"]');
-            if (searchBtn) {
-                searchBtn.addEventListener('click', () => this.searchPrintJobs());
-            }
-
-            // 重置按钮点击事件
-            const resetBtn = searchForm.querySelector('button.btn-secondary');
-            if (resetBtn) {
-                resetBtn.addEventListener('click', () => this.resetSearch());
-            }
+            searchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.loadPrintJobs();
+            });
         }
     }
 
@@ -372,94 +340,50 @@ class PrintManager {
     // 预览图像
     async previewImage(jobId) {
         try {
-            // 创建模态框（如果不存在）
-            let modal = document.getElementById('previewModal');
-            if (!modal) {
-                modal = this.createPreviewModal();
-            }
+            return showDialog({
+                title: '预览',
+                content: `
+                    <div class="text-center position-relative" style="height: calc(90vh - 120px);">
+                        <div id="imageLoading" class="spinner-border text-primary position-absolute top-50 start-50" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <img id="previewImage" 
+                            style="max-width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.3s;" 
+                            alt="预览图像"
+                        />
+                    </div>
+                `,
+                onShow: () => {
+                    const img = document.getElementById('previewImage');
+                    const loading = document.getElementById('imageLoading');
 
-            // 显示模态框
-            const bsModal = new bootstrap.Modal(modal);
-            bsModal.show();
+                    // 重置图像
+                    img.style.opacity = '0';
+                    loading.style.display = 'block';
 
-            // 获取图像元素和加载示
-            const img = document.getElementById('previewImage');
-            const loading = document.getElementById('imageLoading');
+                    // 设置图像源
+                    img.src = `/api/print/${jobId}/image?width=1200`;  // 增加图像宽度
 
-            // 重置图像
-            img.style.opacity = '0';
-            loading.style.display = 'block';
+                    // 图像加载完成后隐藏加载提示
+                    img.onload = () => {
+                        loading.style.display = 'none';
+                        img.style.opacity = '1';
+                    };
 
-            // 设置图像源
-            img.src = `/api/print/${jobId}/image?width=800`;
-
-            // 图像加载完成后隐藏加载提示
-            img.onload = () => {
-                loading.style.display = 'none';
-                img.style.opacity = '1';
-            };
-
-            // 图像加载失败处理
-            img.onerror = () => {
-                loading.style.display = 'none';
-                this.showToast('图像加载失败');
-                bsModal.hide();
-            };
+                    // 图像加载失败处理
+                    img.onerror = () => {
+                        loading.style.display = 'none';
+                        window.showToast('图像加载失败', 'error');
+                    };
+                },
+                showFooter: false,  // 不显示底部按钮
+                size: 'xl',  // 使用超大对话框
+                fullHeight: true  // 使用全高度
+            });
         } catch (error) {
             console.error('预览图像失败:', error);
-            this.showToast('预览图像失败');
+            window.showToast('预览图像失败', 'error');
         }
-    }
-
-    // 创建预览模态框
-    createPreviewModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.id = 'previewModal';
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg" style="max-width: 800px; margin: 1.75rem auto;">
-                <div class="modal-content" style="background-color: #f8f9fa;">
-                    <div class="modal-header py-2">
-                        <h5 class="modal-title">图像预览</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body p-0 text-center" style="background-color: #000;">
-                        <div style="position: relative; width: 100%; height: 600px; display: flex; align-items: center; justify-content: center;">
-                            <img id="previewImage" 
-                                style="max-width: 100%; max-height: 100%; object-fit: contain;" 
-                                alt="预览图像"
-                                onload="this.style.opacity='1'"
-                            />
-                            <div id="imageLoading" class="position-absolute" style="color: #fff;">
-                                <i class="bi bi-arrow-repeat spin"></i> 加载中...
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // 添加加载动画样式
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-            }
-            .spin {
-                animation: spin 1s linear infinite;
-                display: inline-block;
-                font-size: 2rem;
-            }
-            #previewImage {
-                opacity: 0;
-                transition: opacity 0.3s ease-in-out;
-            }
-        `;
-        document.head.appendChild(style);
-
-        document.body.appendChild(modal);
-        return modal;
     }
 
     // 显示任务详情
@@ -469,118 +393,32 @@ class PrintManager {
             if (!response.ok) {
                 throw new Error('获取任务详情失败');
             }
+            const data = await response.json();
 
-            const job = await response.json();
-            
-            // 创建模态框（如果不存在）
-            let modal = document.getElementById('detailModal');
-            if (!modal) {
-                modal = this.createDetailModal();
-            }
-
-            // 填充详情内容
-            const tbody = document.getElementById('jobDetails');
-            tbody.innerHTML = this.generateDetailRows(job);
-
-            // 显示模态框
-            const bsModal = new bootstrap.Modal(modal);
-            bsModal.show();
+            return showDialog({
+                title: '任务详情',
+                content: `
+                    <div class="table-responsive" style="max-height: calc(90vh - 120px); overflow-y: auto;">
+                        <table class="table table-sm table-hover">
+                            <tbody>
+                                ${this.generateDetailRows(data)}
+                            </tbody>
+                        </table>
+                    </div>
+                `,
+                showFooter: false,  // 不显示底部按钮
+                size: 'lg',  // 使用大对话框
+                fullHeight: true  // 使用全高度
+            });
         } catch (error) {
             console.error('获取任务详情失败:', error);
-            this.showToast('获取任务详情失败');
+            window.showToast('获取任务详情失败', 'error');
         }
-    }
-
-    // 建详情模态框
-    createDetailModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.id = 'detailModal';
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg" style="max-width: 800px;">
-                <div class="modal-content">
-                    <div class="modal-header py-2 bg-light" style="position: sticky; top: 0; z-index: 1050;">
-                        <h5 class="modal-title">任务详情</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body p-0">
-                        <div class="table-responsive" style="max-height: 600px;">
-                            <table class="table table-bordered mb-0">
-                                <tbody id="jobDetails"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        return modal;
-    }
-
-    // 生成详情行
-    generateDetailRows(job) {
-        const sections = [
-            {
-                title: '基本信息',
-                fields: [
-                    { key: 'jobId', name: '任务ID' },
-                    { key: 'callingAE', name: '请求方AE' },
-                    { key: 'status', name: '状态' },
-                    { key: 'errorMessage', name: '错误信息' }
-                ]
-            },
-            {
-                title: 'Film Session 参数',
-                fields: [
-                    { key: 'numberOfCopies', name: '份数' },
-                    { key: 'printPriority', name: '优先级' },
-                    { key: 'mediumType', name: '介质类型' },
-                    { key: 'filmDestination', name: '目标位置' }
-                ]
-            },
-            {
-                title: 'Film Box 参数',
-                fields: [
-                    { key: 'printInColor', name: '彩色印' },
-                    { key: 'filmOrientation', name: '方向' },
-                    { key: 'filmSizeID', name: '尺寸' },
-                    { key: 'imageDisplayFormat', name: '显示格式' },
-                    { key: 'magnificationType', name: '放大类型' },
-                    { key: 'smoothingType', name: '平滑类型' },
-                    { key: 'borderDensity', name: '边框密度' },
-                    { key: 'emptyImageDensity', name: '空白密度' },
-                    { key: 'trim', name: '裁剪' }
-                ]
-            },
-            {
-                title: '其他信息',
-                fields: [
-                    { key: 'studyInstanceUID', name: '检查UID' },
-                    { key: 'imagePath', name: '图像路径' },
-                    { key: 'createTime', name: '创建时间' },
-                    { key: 'updateTime', name: '更新时间' }
-                ]
-            }
-        ];
-
-        return sections.map(section => `
-            <tr>
-                <th colspan="2" class="fw-bold" style="background-color: #f8f9fa; color: #495057; padding: 0.75rem;">
-                    ${section.title}
-                </th>
-            </tr>
-            ${section.fields.map(field => `
-                <tr>
-                    <th style="width: 150px; background-color: #fff;">${field.name}</th>
-                    <td style="background-color: #fff;">${this.formatFieldValue(field.key, job[field.key])}</td>
-                </tr>
-            `).join('')}
-        `).join('');
     }
 
     // 删除打印任务
     async deletePrintJob(jobId) {
-        if (!await showConfirmDialog('确认删除', '确定要删除这个打印任务吗？')) {
+        if (!await showConfirmDialog('确认删除', '确定要删除个打印任务吗？')) {
             return;
         }
 
@@ -600,34 +438,6 @@ class PrintManager {
         }
     }
 
-    // 格式化字段名称
-    formatFieldName(key) {
-        const fieldNames = {
-            jobId: '任务ID',
-            filmSessionId: '胶片会话ID',
-            filmBoxId: '胶片盒ID',
-            callingAE: '调用方AE',
-            status: '状态',
-            imagePath: '图像路径',
-            patientId: '患者ID',
-            patientName: '患者姓名',
-            accessionNumber: '检查号',
-            filmSize: '胶片尺寸',
-            filmOrientation: '胶片方向',
-            filmLayout: '胶片布局',
-            magnificationType: '放大类型',
-            borderDensity: '边框密度',
-            emptyImageDensity: '空图像密度',
-            minDensity: '最小密度',
-            maxDensity: '最大密度',
-            trimValue: '裁剪值',
-            configurationInfo: '配置信息',
-            createTime: '创建时间',
-            updateTime: '更新时间'
-        };
-        return fieldNames[key] || key;
-    }
-
     // 格式化字段值
     formatFieldValue(key, value) {
         if (value === null || value === undefined) return '';
@@ -645,22 +455,18 @@ class PrintManager {
         }
     }
 
-    // 加载打印机列表
-    async loadPrinters() {
-        try {
-            const response = await axios.get('/api/PrintScu/printers');
-            this.printers = response.data;
-            this.updatePrinterSelect();
-        } catch (error) {
-            console.error('加载打印机失败:', error);
-            this.showToast('加载打印机列表失败: ' + error.message);
-        }
-    }
-
     // 更新打印机下拉列表
     updatePrinterSelect() {
         const select = document.getElementById('printerSelect');
-        if (!select) return;
+        if (!select) {
+            console.error('找不到打印机选择框');
+            return;
+        }
+
+        if (!this.printers || this.printers.length === 0) {
+            select.innerHTML = '<option value="">暂无可用打印机</option>';
+            return;
+        }
 
         select.innerHTML = this.printers.map(printer => `
             <option value="${printer.name}" ${printer.isDefault ? 'selected' : ''}>
@@ -668,30 +474,51 @@ class PrintManager {
             </option>
         `).join('');
 
-        // 如果没有选中的打印机（没有默认打印机），则选择第一个
+        // 如果没有选中的打印机，则选择第一个
         if (!select.value && this.printers.length > 0) {
             select.value = this.printers[0].name;
         }
     }
 
     // 显示打印机选择对话框
-    showPrinterSelect(jobId) {
-        this.selectedJobId = jobId;
-        this.printerSelectModal.show();
+    async showPrinterSelect(jobId) {
+        try {
+            // 确保打印机列表已加载
+            if (this.printers.length === 0) {
+                await this.loadPrinters();
+            }
+
+            return showDialog({
+                title: '选择打印机',
+                content: `
+                    <div class="mb-3">
+                        <label class="form-label">可用打印机</label>
+                        <select class="form-select" id="printerSelect">
+                            <!-- 打印机列表将动态填充 -->
+                        </select>
+                    </div>
+                `,
+                onShow: () => {
+                    this.updatePrinterSelect();  // 更新打印机列表
+                },
+                onConfirm: async () => {
+                    const select = document.getElementById('printerSelect');
+                    const printerName = select.value;
+                    if (!printerName) {
+                        window.showToast('请选择打印机', 'error');
+                        return false;
+                    }
+                    return await this.confirmPrint(jobId, printerName);
+                }
+            });
+        } catch (error) {
+            console.error('显示打印机选择对话框失败:', error);
+            window.showToast('显示打印机选择对话框失败', 'error');
+        }
     }
 
     // 确认打印
-    async confirmPrint() {
-        if (!this.selectedJobId) return;
-
-        const printerSelect = document.getElementById('printerSelect');
-        const printerName = printerSelect.value;
-
-        if (!printerName) {
-            this.showToast('请选择打印机');
-            return;
-        }
-
+    async confirmPrint(jobId, printerName) {
         try {
             const response = await fetch('/api/PrintScu/print-by-job', {
                 method: 'POST',
@@ -699,7 +526,7 @@ class PrintManager {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    jobId: this.selectedJobId,
+                    jobId: jobId,
                     printerName: printerName
                 })
             });
@@ -709,13 +536,118 @@ class PrintManager {
             }
 
             await response.json();
-            this.showToast('打印任务已发送');
-            this.printerSelectModal.hide();
+            window.showToast('打印任务已发送', 'success');
             this.loadPrintJobs(); // 刷新任务列表
+            return true;  // 返回 true 让对话框关闭
         } catch (error) {
             console.error('打印失败:', error);
-            this.showToast(error.message || '打印失败');
+            window.showToast(error.message || '打印失败', 'error');
+            return false;  // 返回 false 让对话框保持打开
         }
+    }
+
+    // 加载打印机列表
+    async loadPrinters() {
+        try {
+            const response = await fetch('/api/PrintScu/printers');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || '获取打印机列表失败');
+            }
+            this.printers = await response.json();
+        } catch (error) {
+            console.error('加载打印机列表失败:', error);
+            window.showToast('加载打印机列表失败', 'error');
+            throw error;
+        }
+    }
+
+    renderPrintJobs(jobs) {
+        const tbody = document.getElementById('print-table-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = jobs.map(job => `
+            <tr>
+                <td>${job.jobId}</td>
+                <td>${job.patientName} (${job.patientId})</td>
+                <td>${job.accessionNumber}</td>
+                <td>${this.formatStatus(job.status)}</td>
+                <td>${this.formatDateTime(job.createTime)}</td>
+                <td>
+                    <button class="btn btn-primary btn-sm print-button" data-job-id="${job.jobId}">
+                        <i class="bi bi-printer"></i> 打印
+                    </button>
+                    <button class="btn btn-info btn-sm" onclick="printManager.previewImage('${job.jobId}')">
+                        <i class="bi bi-eye"></i> 预览
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="printManager.deletePrintJob('${job.jobId}')">
+                        <i class="bi bi-trash"></i> 删除
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+        // 重新绑定打印按钮事件
+        this.initializeEvents();
+    }
+
+    // 生成详情行
+    generateDetailRows(job) {
+        const sections = [
+            {
+                title: '基本信息',
+                fields: [
+                    { key: 'jobId', name: '任务ID' },
+                    { key: 'callingAE', name: '请求方AE' },
+                    { key: 'status', name: '状态' },
+                    { key: 'errorMessage', name: '错误信息' }
+                ]
+            },
+            {
+                title: 'Film Session 参数',
+                fields: [
+                    { key: 'numberOfCopies', name: '打印份数' },
+                    { key: 'printPriority', name: '打印优先级' },
+                    { key: 'mediumType', name: '介质类型' },
+                    { key: 'filmDestination', name: '胶片目标' }
+                ]
+            },
+            {
+                title: 'Film Box 参数',
+                fields: [
+                    { key: 'printInColor', name: '彩色打印' },
+                    { key: 'filmOrientation', name: '胶片方向' },
+                    { key: 'filmSizeID', name: '胶片尺寸' },
+                    { key: 'imageDisplayFormat', name: '图像显示格式' },
+                    { key: 'magnificationType', name: '放大类型' },
+                    { key: 'borderDensity', name: '边框密度' },
+                    { key: 'emptyImageDensity', name: '空图像密度' },
+                    { key: 'minDensity', name: '最小密度' },
+                    { key: 'maxDensity', name: '最大密度' }
+                ]
+            },
+            {
+                title: '其他信息',
+                fields: [
+                    { key: 'studyInstanceUID', name: '检查实例UID' },
+                    { key: 'imagePath', name: '图像路径' },
+                    { key: 'createTime', name: '创建时间' },
+                    { key: 'updateTime', name: '更新时间' }
+                ]
+            }
+        ];
+
+        return sections.map(section => `
+            <tr>
+                <th colspan="2" class="bg-light">${section.title}</th>
+            </tr>
+            ${section.fields.map(field => job[field.key] !== undefined ? `
+                <tr>
+                    <th class="text-nowrap" style="width: 150px">${field.name}</th>
+                    <td>${this.formatFieldValue(field.key, job[field.key])}</td>
+                </tr>
+            ` : '').join('')}
+        `).join('');
     }
 }
 

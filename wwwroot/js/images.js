@@ -320,15 +320,24 @@ async function toggleSeriesInfo(row) {
 // 预览序列
 function previewSeries(studyUid, seriesUid) {
     try {
-        const viewerUrl = `/viewer.html?studyUid=${encodeURIComponent(studyUid)}&seriesUid=${encodeURIComponent(seriesUid)}`;
-        const viewerFrame = document.getElementById('viewerFrame');
-        if (!viewerFrame) {
-            throw new Error('找不到预览框架');
-        }
-        viewerFrame.src = viewerUrl;
-        viewerModal.show();
+        return showDialog({
+            title: 'DICOM 查看器',
+            content: `
+                <div style="height: calc(90vh - 120px);">
+                    <iframe 
+                        src="/viewer.html?studyUid=${encodeURIComponent(studyUid)}&seriesUid=${encodeURIComponent(seriesUid)}"
+                        style="width: 100%; height: 100%; border: none;"
+                        onload="this.style.opacity='1'"
+                    ></iframe>
+                </div>
+            `,
+            showFooter: false,  // 不显示底部按钮
+            size: 'xl',  // 使用超大对话框
+            fullHeight: true  // 使用全高度
+        });
     } catch (error) {
-        handleError(error, '预览序列失败');
+        console.error('预览序列失败:', error);
+        window.showToast('预览序列失败', 'error');
     }
 }
 

@@ -283,8 +283,8 @@ async function moveQRStudy(studyUid, event) {
         event.stopPropagation();
     }
 
-    // 保留确认对话框
-    if (!await showConfirmMoveDialog()) {
+    // 使用确认对话框
+    if (!await showConfirmDialog('确认移动', '确定要移动选中的检查吗？')) {
         return;  // 用户取消
     }
 
@@ -310,8 +310,8 @@ async function moveQRSeries(studyUid, seriesUid, event) {
         event.stopPropagation();
     }
 
-    // 保留确认对话框
-    if (!await showConfirmMoveDialog()) {
+    // 使用确认对话框
+    if (!await showConfirmDialog('确认移动', '确定要移动选中的序列吗？')) {
         return;  // 用户取消
     }
 
@@ -362,3 +362,4 @@ function formatQRDate(dateString) {
         day: '2-digit'
     }).replace(/\//g, '-');
 }
+

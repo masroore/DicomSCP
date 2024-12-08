@@ -1,9 +1,7 @@
 class ConfigManager {
     constructor() {
         this.editor = null;
-        this.helpModal = null;
         this.isLoading = false;
-        this.initAxiosInterceptors();
         
         // 等待 DOM 加载完成后再初始化
         if (document.readyState === 'loading') {
@@ -13,25 +11,12 @@ class ConfigManager {
         }
     }
 
-    initAxiosInterceptors() {
-        axios.interceptors.response.use(
-            response => response,
-            error => {
-                if (error.response && error.response.status === 401) {
-                    window.location.href = '/login.html';
-                    return new Promise(() => {});
-                }
-                return Promise.reject(error);
-            }
-        );
-    }
-
     init() {
         this.editor = document.getElementById('configEditor');
-       if (this.editor) {
+        if (this.editor) {
             // 设置编辑器样式
-            this.editor.style.backgroundColor = '#1e1e1e';  // VS Code 暗色主题背景色
-            this.editor.style.color = '#d4d4d4';           // VS Code 暗色主题文本色
+            this.editor.style.backgroundColor = '#1e1e1e';
+            this.editor.style.color = '#d4d4d4';
             this.editor.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
             this.editor.style.fontSize = '14px';
             this.editor.style.lineHeight = '1.5';
@@ -39,7 +24,7 @@ class ConfigManager {
             this.editor.style.border = '1px solid #2d2d2d';
             this.editor.style.borderRadius = '4px';
             this.editor.style.outline = 'none';
-            this.editor.spellcheck = false;  // 禁用拼写检查
+            this.editor.spellcheck = false;
         }
         
         // 监听页面切换事件
@@ -116,44 +101,49 @@ class ConfigManager {
 
     async showHelp() {
         try {
-            // 如果模态框不存在，创建它
-            if (!this.helpModal) {
-                // 加载 help.html 的内容
-                const response = await fetch('help.html');
-                const html = await response.text();
+            const response = await fetch('help.html');
+            const html = await response.text();
 
-                // 创建模态框容器
-                const modalDiv = document.createElement('div');
-                modalDiv.className = 'modal fade';
-                modalDiv.id = 'configHelpModal';
-                modalDiv.setAttribute('tabindex', '-1');
-                modalDiv.innerHTML = `
-                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                        ${html}
-                    </div>
-                `;
-                document.body.appendChild(modalDiv);
+            const modalDiv = document.createElement('div');
+            modalDiv.className = 'modal';
+            modalDiv.setAttribute('tabindex', '-1');
+            modalDiv.setAttribute('data-dynamic', 'true');
+            modalDiv.innerHTML = `
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    ${html}
+                </div>
+            `;
+            document.body.appendChild(modalDiv);
 
-                // 初始化模态框
-                this.helpModal = new bootstrap.Modal(modalDiv);
+            const modal = new bootstrap.Modal(modalDiv);
 
-                // 监听模态框隐藏事件，清理DOM
-                modalDiv.addEventListener('hidden.bs.modal', () => {
-                    document.body.removeChild(modalDiv);
-                    this.helpModal.dispose();
-                    this.helpModal = null;
-                });
-            }
+            // 监听关闭事件
+            const handleHidden = () => {
+                // 移除事件监听
+                modalDiv.removeEventListener('hidden.bs.modal', handleHidden);
+                
+                // 确保模态框实例还存在
+                const instance = bootstrap.Modal.getInstance(modalDiv);
+                if (instance) {
+                    instance.dispose();
+                }
+                
+                // 从 DOM 中移除
+                if (document.body.contains(modalDiv)) {
+                    modalDiv.remove();
+                }
+            };
 
-            // 显示模态框
-            this.helpModal.show();
+            modalDiv.addEventListener('hidden.bs.modal', handleHidden);
+
+            modal.show();
         } catch (error) {
             console.error('加载帮助内容失败:', error);
-            showToast('error', '加载失败', '加载帮助内容失败');
+            window.showToast('加载帮助内容失败', 'error');
         }
     }
 }
 
 // 创建全局实例
-window.configManager = new ConfigManager(); 
+window.configManager = new ConfigManager();
 
