@@ -518,7 +518,49 @@ function initializeTools() {
     cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
     cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
 
+    // 初始化翻层工具
+    cornerstoneTools.addTool(cornerstoneTools.StackScrollTool);
+    cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 });
+
+    // 初始化探针工具
+    cornerstoneTools.addTool(cornerstoneTools.ProbeTool);
+    
+    // 工具按钮点击事件处理
+    const toolButtons = document.querySelectorAll('.tool-button[data-tool]');
+    toolButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+            // 移除所有工具按钮的 active 类
+            toolButtons.forEach(btn => btn.classList.remove('active'));
+            // 为当前点击的按钮添加 active 类
+            button.classList.add('active');
+
+            // 获取工具名称
+            const tool = button.getAttribute('data-tool');
+
+            // 停用所有工具
+            disableAllTools();
+
+            // 根据工具类型激活相应的工具
+            switch (tool) {
+                case 'Stack':
+                    cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 });
+                    break;
+                case 'Probe':
+                    cornerstoneTools.setToolActive('Probe', { mouseButtonMask: 1 });
+                    break;
+                // ... 其他工具的 case
+            }
+        });
+    });
+
     setupToolEvents();
+}
+
+// 禁用所有工具
+function disableAllTools() {
+    cornerstoneTools.setToolDisabled('StackScroll');
+    cornerstoneTools.setToolDisabled('Probe');
+    // ... 禁用其他工具
 }
 
 // 优化工具事件设置
@@ -602,7 +644,7 @@ function activateTool(toolName) {
     }
 }
 
-// 设��工具栏
+// 设置工具栏
 function setupToolbar() {
     document.querySelectorAll('.tool-button').forEach(button => {
         button.addEventListener('click', handleToolButtonClick);
@@ -814,6 +856,26 @@ function handleImageLoaded(image, imageId) {
         }
     } else {
         imageIds.push(imageId);
+    }
+
+    // 为探针工具添加事件监听
+    element.addEventListener('cornerstonetoolsmeasurementcompleted', function(e) {
+        if (e.detail.toolType === 'Probe') {
+            const data = e.detail.measurementData;
+            // 在这里可以处理探针测量的数据
+            console.log('探针值:', data.currentPoints.image);
+        }
+    });
+
+    // 如果是多帧图像，设置堆栈状态
+    if (imageIds.length > 1) {
+        const stack = {
+            currentImageIdIndex: 0,
+            imageIds: imageIds
+        };
+        
+        cornerstoneTools.addStackStateManager(element, ['stack']);
+        cornerstoneTools.addToolState(element, 'stack', stack);
     }
 }
 
@@ -1058,6 +1120,112 @@ function handleMeasurementCompleted(event) {
             activateTool(currentTool);
         }
     }
+}
+
+// 添加键盘事件支持翻层
+function initializeKeyboardControls() {
+    document.addEventListener('keydown', (e) => {
+        const element = document.getElementById('viewer');
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            const stack = cornerstoneTools.getToolState(element, 'stack');
+            if (stack && stack.data && stack.data.length) {
+                const stackData = stack.data[0];
+                if (e.key === 'ArrowUp' && stackData.currentImageIdIndex > 0) {
+                    stackData.currentImageIdIndex--;
+                } else if (e.key === 'ArrowDown' && stackData.currentImageIdIndex < stackData.imageIds.length - 1) {
+                    stackData.currentImageIdIndex++;
+                }
+                cornerstone.loadAndCacheImage(stackData.imageIds[stackData.currentImageIdIndex])
+                    .then(image => {
+                        cornerstone.displayImage(element, image);
+                        updateImageInfo(image); // 更新图像信息显示
+                    });
+            }
+        }
+    });
+}
+
+// 更新图像信息显示
+function updateImageInfo(image) {
+    const imageInfo = document.getElementById('imageInfo');
+    const stack = cornerstoneTools.getToolState(element, 'stack');
+    if (stack && stack.data && stack.data.length) {
+        const stackData = stack.data[0];
+        const currentIndex = stackData.currentImageIdIndex + 1;
+        const totalImages = stackData.imageIds.length;
+        imageInfo.textContent = `图像: ${currentIndex}/${totalImages}`;
+    }
+    // ... 其他图像信息更新
+}
+
+// 添加保存功能
+function initializeSaveFunction() {
+    const saveButton = document.getElementById('saveImage');
+    saveButton.addEventListener('click', saveCurrentImage);
+}
+
+// 保存当前图像
+async function saveCurrentImage() {
+    try {
+        // 获取当前图像
+        const element = document.getElementById('viewer');
+        const enabledElement = cornerstone.getEnabledElement(element);
+        
+        if (!enabledElement || !enabledElement.image) {
+            throw new Error('No image to save');
+        }
+
+        // 创建一个新的 canvas
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+
+        // 设置 canvas 尺寸为当前视图的尺寸
+        canvas.width = element.offsetWidth;
+        canvas.height = element.offsetHeight;
+
+        // 将 cornerstone 元素渲染到 canvas
+        cornerstone.draw(canvas, enabledElement.image);
+
+        // 获取图像信息用于文件名
+        const image = cornerstone.getImage(element);
+        const imageId = image.imageId;
+        const instanceNumber = image.data.string('x00200013') || '';
+        const seriesNumber = image.data.string('x00200011') || '';
+        const studyDate = image.data.string('x00080020') || '';
+        
+        // 生成文件名
+        const fileName = `Image_S${seriesNumber}_I${instanceNumber}_${studyDate}.png`;
+
+        // 将 canvas 转换为 blob
+        canvas.toBlob((blob) => {
+            // 创建下载链接
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            
+            // 触发下载
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 'image/png');
+
+        Logger.log(Logger.levels.INFO, '图像已保存', { fileName });
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, '保存图像失败', error);
+        alert('保存图像失败: ' + error.message);
+    }
+}
+
+// 在初始化函数中添加保存功能的初始化
+function initialize() {
+    // ... 其他初始化代码 ...
+    initializeTools();
+    initializeKeyboardControls();
+    initializeSaveFunction();
 }
 
 // 初始化并加载图像
