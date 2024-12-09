@@ -537,22 +537,32 @@ async function editWorklist(worklistId) {
 }
 
 // 删除 Worklist
-async function deleteWorklist(id) {
+async function deleteWorklist(id, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+
+    if (!await showConfirmDialog('确认删除', '确定要删除这个预约吗？此操作不可恢复。')) {
+        return;
+    }
+
     try {
-        if (!await showConfirmDialog('确认删除', '确定要删除这条检查记录吗？')) {
-            return;
+        await axios.delete(`/api/worklist/${id}`);
+        window.showToast('删除成功', 'success');
+
+        // 获取当前页的数据数量
+        const tbody = document.getElementById('worklist-table-body');
+        const currentPageItems = tbody.getElementsByTagName('tr').length;
+        
+        // 如果当前页只有一条数据，且不是第一页，则加载上一页
+        if (currentPageItems === 1 && currentPage > 1) {
+            currentPage--;
         }
-
-        const response = await axios.delete(`/api/worklist/${id}`);
-
-        if (!response.ok) {
-            throw new Error('删除失败');
-        }
-
-        window.showToast('预约已删除', 'success');
+        
+        // 重新加载数据
         loadWorklistData();
     } catch (error) {
-        handleError(error, '删除预约失败');
+        handleError(error, '删除失败');
     }
 }
 

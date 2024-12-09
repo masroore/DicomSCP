@@ -414,23 +414,27 @@ class PrintManager {
 
     // 删除打印任务
     async deletePrintJob(jobId) {
-        if (!await showConfirmDialog('确认删除', '确定要删除个打印任务吗？')) {
+        if (!await showConfirmDialog('确认删除', '确定要删除这个打印任务吗？')) {
             return;
         }
 
         try {
-            const response = await fetch(`/api/print/${jobId}`, {
-                method: 'DELETE'
-            });
+            await axios.delete(`/api/print/${jobId}`);
+            window.showToast('删除成功', 'success');
 
-            if (!response.ok) {
-                throw new Error('删除失败');
+            // 获取当前页的数据数量
+            const tbody = document.getElementById('print-table-body');
+            const currentPageItems = tbody.getElementsByTagName('tr').length;
+            
+            // 如果当前页只有一条数据，且不是第一页，则加载上一页
+            if (currentPageItems === 1 && this.currentPage > 1) {
+                this.currentPage--;
             }
 
-            this.showToast('打印任务已删除');
             await this.loadPrintJobs();
         } catch (error) {
-            this.showToast('删除失败');
+            console.error('删除打印任务失败:', error);
+            window.showToast('删除失败', 'error');
         }
     }
 

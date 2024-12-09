@@ -205,9 +205,18 @@ async function deleteStudy(studyInstanceUid, event) {
     }
 
     try {
-        const response = await axios.delete(`/api/images/${studyInstanceUid}`);
-
+        await axios.delete(`/api/images/${studyInstanceUid}`);
         window.showToast('操作成功', 'success');
+
+        // 获取当前页的数据数量
+        const tbody = document.getElementById('images-table-body');
+        const currentPageItems = tbody.getElementsByTagName('tr').length;
+        
+        // 如果当前页只有一条数据，且不是第一页，则加载上一页
+        if (currentPageItems === 1 && imagesCurrentPage > 1) {
+            imagesCurrentPage--;
+        }
+
         loadImages(imagesCurrentPage);
     } catch (error) {
         handleError(error, '删除失败');
