@@ -6,6 +6,7 @@ using DicomSCP.Models;
 using DicomSCP.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
+using TinyPinyin;
 
 namespace DicomSCP.Services;
 
@@ -245,42 +246,93 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
         {
             var dataset = new DicomDataset();
             
-            // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
-            var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+            // 从请求中获取字符集
+            var requestedCharacterSet = "ISO_IR 100";  // 默认值
+            if (request.Dataset.Contains(DicomTag.SpecificCharacterSet))
+            {
+                var charsets = request.Dataset.GetValues<string>(DicomTag.SpecificCharacterSet);
+                if (charsets != null && charsets.Length > 0)
+                {
+                    requestedCharacterSet = charsets[0];
+                }
+            }
+
             DicomLogger.Debug("WorklistSCP", "请求的字符集: {CharacterSet}", requestedCharacterSet);
             
+            // 判断是否需要转换中文名
+            bool needConvertName = true;
+            string patientName = item.PatientName;
+
             // 根据请求的字符集设置响应的字符集
             switch (requestedCharacterSet.ToUpperInvariant())
             {
                 case "ISO_IR 100":  // Latin1
                     dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
+                    needConvertName = true;  // Latin1 不支持中文，需要转换
                     break;
                 case "GB18030":     // 中文简体
+                case "GBK":         // 中文简体
+                case "GB2312":      // 中文简体
                     dataset.Add(DicomTag.SpecificCharacterSet, "GB18030");
+                    needConvertName = false;  // GB18030 支持中文，不需要转换
                     break;
                 case "ISO_IR 192":  // UTF-8
-                default:
                     dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+                    needConvertName = false;  // UTF-8 支持中文，不需要转换
+                    break;
+                default:            // 其他未知字符集，使用 Latin1 作为安全选项
+                    dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
+                    needConvertName = true;  // 使用拼音
+                    DicomLogger.Warning("WorklistSCP", "未知的字符集: {CharacterSet}, 使用 Latin1", requestedCharacterSet);
                     break;
             }
 
+            // 根据字符集决定是否需要转换中文名
+            if (needConvertName)
+            {
+                patientName = ConvertToDeviceName(item.PatientName);
+                DicomLogger.Debug("WorklistSCP", 
+                    "转换患者姓名 - 原始名: {OriginalName}, 转换后: {ConvertedName}, 字符集: {CharacterSet}", 
+                    item.PatientName, 
+                    patientName,
+                    requestedCharacterSet);
+            }
+            else
+            {
+                DicomLogger.Debug("WorklistSCP", 
+                    "使用原始中文名 - 患者姓名: {PatientName}, 字符集: {CharacterSet}",
+                    patientName,
+                    requestedCharacterSet);
+            }
+            
             // 患者信息
-            dataset.Add(DicomTag.PatientID, item.PatientId);
-            dataset.Add(DicomTag.PatientName, item.PatientName);
+            dataset.Add(DicomTag.PatientID, ProcessDicomValue(item.PatientId, DicomTag.PatientID, needConvertName));
+            dataset.Add(DicomTag.PatientName, ProcessDicomValue(patientName, DicomTag.PatientName, needConvertName));
+            dataset.Add(DicomTag.PatientSex, ProcessDicomValue(item.PatientSex ?? "", DicomTag.PatientSex, needConvertName));
+
             // 确保出生日期格式正确
             try
             {
-                var birthDate = DateTime.ParseExact(item.PatientBirthDate, "yyyyMMdd", null);
-                dataset.Add(DicomTag.PatientBirthDate, birthDate.ToString("yyyyMMdd"));
+                if (!string.IsNullOrEmpty(item.PatientBirthDate))
+                {
+                    var birthDate = DateTime.ParseExact(item.PatientBirthDate, "yyyyMMdd", null);
+                    dataset.Add(DicomTag.PatientBirthDate, birthDate.ToString("yyyyMMdd"));
+                }
+                else
+                {
+                    dataset.Add(DicomTag.PatientBirthDate, "19000101");  // 使用默认值
+                }
             }
             catch (Exception ex)
             {
-                DicomLogger.Warning("WorklistSCP", "处理出生日期失败 - PatientId: {PatientId}, BirthDate: {BirthDate}, Error: {Error}", 
-                    item.PatientId, item.PatientBirthDate, ex.Message);
+                DicomLogger.Warning("WorklistSCP", 
+                    "处理出生日期失败 - PatientId: {PatientId}, BirthDate: {BirthDate}, Error: {Error}", 
+                    item.PatientId ?? "", 
+                    item.PatientBirthDate ?? "", 
+                    ex.Message);
                 dataset.Add(DicomTag.PatientBirthDate, "19000101");  // 使用默认值
             }
-            dataset.Add(DicomTag.PatientSex, item.PatientSex);
-            
+
             // 添加年龄信息
             if (!string.IsNullOrEmpty(item.PatientBirthDate))
             {
@@ -296,50 +348,113 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
                 }
                 catch (Exception ex)
                 {
-                    DicomLogger.Warning("WorklistSCP", "计算年龄失败 - PatientId: {PatientId}, BirthDate: {BirthDate}, Error: {Error}", 
-                        item.PatientId, item.PatientBirthDate, ex.Message);
+                    DicomLogger.Warning("WorklistSCP", 
+                        "计算年龄失败 - PatientId: {PatientId}, BirthDate: {BirthDate}, Error: {Error}", 
+                        item.PatientId ?? "", 
+                        item.PatientBirthDate ?? "", 
+                        ex.Message);
                 }
             }
 
             // 研究信息
-            dataset.Add(DicomTag.StudyInstanceUID, item.StudyInstanceUid);
-            dataset.Add(DicomTag.AccessionNumber, item.AccessionNumber);
-            dataset.Add(DicomTag.ReferringPhysicianName, item.ReferringPhysicianName);
-            dataset.Add(DicomTag.StudyDescription, item.StudyDescription);
+            dataset.Add(DicomTag.StudyInstanceUID, ProcessDicomValue(item.StudyInstanceUid, DicomTag.StudyInstanceUID, needConvertName));
+            dataset.Add(DicomTag.AccessionNumber, ProcessDicomValue(item.AccessionNumber, DicomTag.AccessionNumber, needConvertName));
+            // 医生姓名也需要根据字符集处理
+            var physicianName = needConvertName ? 
+                ConvertToDeviceName(item.ReferringPhysicianName) : 
+                item.ReferringPhysicianName;
+            dataset.Add(DicomTag.ReferringPhysicianName, ProcessDicomValue(physicianName, DicomTag.ReferringPhysicianName, needConvertName));
 
-            // 检查部位信息
-            dataset.Add(DicomTag.BodyPartExamined, item.BodyPartExamined ?? "");
-            dataset.Add(DicomTag.RequestedProcedureDescription, item.RequestedProcedureDescription);
-            dataset.Add(DicomTag.ScheduledProcedureStepDescription, item.ScheduledProcedureStepDescription);
-            dataset.Add(DicomTag.ReasonForTheRequestedProcedure, item.ReasonForRequest ?? "");
+            // 处理检查描述：如果有检查描述就用检查描述，没有才使用检查部位
+            var studyDesc = !string.IsNullOrEmpty(item.StudyDescription) ? 
+                item.StudyDescription : 
+                item.BodyPartExamined ?? "";
+
+            if (!string.IsNullOrEmpty(item.BodyPartExamined))
+            {
+                // 如果是中文，需要转换为拼音并大写
+                var bodyPart = needConvertName ? 
+                    ConvertToDeviceName(item.BodyPartExamined).ToUpperInvariant().Replace("^", "_") : 
+                    item.BodyPartExamined.ToUpperInvariant();
+                
+                // 确保只包含合法字符
+                bodyPart = new string(bodyPart
+                    .Where(c => char.IsUpper(c) || char.IsDigit(c) || c == ' ' || c == '_')
+                    .ToArray());
+                
+                if (!string.IsNullOrEmpty(bodyPart))
+                {
+                    dataset.Add(DicomTag.BodyPartExamined, ProcessDicomValue(bodyPart, DicomTag.BodyPartExamined, needConvertName));
+                }
+
+                // 将检查部位添加到检查描述中
+                studyDesc = string.IsNullOrEmpty(studyDesc) ? 
+                    item.BodyPartExamined : 
+                    $"{studyDesc} - {item.BodyPartExamined}";
+            }
+
+            // 添加最终的检查描述
+            dataset.Add(DicomTag.StudyDescription, 
+                ProcessDicomValue(needConvertName ? ConvertToDeviceName(studyDesc) : studyDesc, 
+                DicomTag.StudyDescription, needConvertName));
+
+            // 检查描述也需要根据字符集处理，同时包含检查部位
+            // 申请检查描述：如果有就用原值，没有才使用检查部位
+            var procedureDesc = !string.IsNullOrEmpty(item.RequestedProcedureDescription) ? 
+                item.RequestedProcedureDescription : 
+                item.BodyPartExamined ?? "";
+
+            dataset.Add(DicomTag.RequestedProcedureDescription, 
+                ProcessDicomValue(needConvertName ? ConvertToDeviceName(procedureDesc) : procedureDesc, 
+                DicomTag.RequestedProcedureDescription, needConvertName));
+            
+            var stepDesc = needConvertName ? 
+                ConvertToDeviceName(item.ScheduledProcedureStepDescription) : 
+                item.ScheduledProcedureStepDescription;
+            dataset.Add(DicomTag.ScheduledProcedureStepDescription, 
+                ProcessDicomValue(stepDesc, DicomTag.ScheduledProcedureStepDescription, needConvertName));
+            dataset.Add(DicomTag.ReasonForTheRequestedProcedure, ProcessDicomValue(item.ReasonForRequest ?? "", DicomTag.ReasonForTheRequestedProcedure, needConvertName));
 
             // 预约信息
-            dataset.Add(DicomTag.Modality, item.Modality);
-            dataset.Add(DicomTag.ScheduledStationAETitle, item.ScheduledAET);
+            dataset.Add(DicomTag.Modality, ProcessDicomValue(item.Modality, DicomTag.Modality, needConvertName));
+            dataset.Add(DicomTag.ScheduledStationAETitle, ProcessDicomValue(item.ScheduledAET, DicomTag.ScheduledStationAETitle, needConvertName));
 
             // 处理预约日期时间
             try
             {
-                var scheduledDateTime = DateTime.Parse(item.ScheduledDateTime);
-                dataset.Add(DicomTag.ScheduledProcedureStepStartDate, scheduledDateTime.ToString("yyyyMMdd"));
-                dataset.Add(DicomTag.ScheduledProcedureStepStartTime, scheduledDateTime.ToString("HHmmss"));
+                if (!string.IsNullOrEmpty(item.ScheduledDateTime))
+                {
+                    var scheduledDateTime = DateTime.Parse(item.ScheduledDateTime);
+                    dataset.Add(DicomTag.ScheduledProcedureStepStartDate, ProcessDicomValue(scheduledDateTime.ToString("yyyyMMdd"), DicomTag.ScheduledProcedureStepStartDate, needConvertName));
+                    dataset.Add(DicomTag.ScheduledProcedureStepStartTime, ProcessDicomValue(scheduledDateTime.ToString("HHmmss"), DicomTag.ScheduledProcedureStepStartTime, needConvertName));
+                }
+                else
+                {
+                    dataset.Add(DicomTag.ScheduledProcedureStepStartDate, "19000101");
+                    dataset.Add(DicomTag.ScheduledProcedureStepStartTime, "000000");
+                }
             }
             catch (Exception ex)
             {
-                DicomLogger.Warning("WorklistSCP", "处理预约时间失败 - PatientId: {PatientId}, DateTime: {DateTime}, Error: {Error}", 
-                    item.PatientId, item.ScheduledDateTime, ex.Message);
+                DicomLogger.Warning("WorklistSCP", 
+                    "处理预约时间失败 - PatientId: {PatientId}, DateTime: {DateTime}, Error: {Error}", 
+                    item.PatientId ?? "", 
+                    item.ScheduledDateTime ?? "", 
+                    ex.Message);
                 // 使用默认值或跳过
                 dataset.Add(DicomTag.ScheduledProcedureStepStartDate, "19000101");
                 dataset.Add(DicomTag.ScheduledProcedureStepStartTime, "000000");
             }
 
-            dataset.Add(DicomTag.ScheduledStationName, item.ScheduledStationName);
-            dataset.Add(DicomTag.ScheduledProcedureStepID, item.ScheduledProcedureStepID);
-            dataset.Add(DicomTag.RequestedProcedureID, item.RequestedProcedureID);
+            dataset.Add(DicomTag.ScheduledStationName, ProcessDicomValue(item.ScheduledStationName, DicomTag.ScheduledStationName, needConvertName));
+            dataset.Add(DicomTag.ScheduledProcedureStepID, ProcessDicomValue(item.ScheduledProcedureStepID, DicomTag.ScheduledProcedureStepID, needConvertName));
+            dataset.Add(DicomTag.RequestedProcedureID, ProcessDicomValue(item.RequestedProcedureID, DicomTag.RequestedProcedureID, needConvertName));
 
             var response = new DicomCFindResponse(request, DicomStatus.Pending) { Dataset = dataset };
-            DicomLogger.Debug("WorklistSCP", "成功创建响应 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}", 
-                item.PatientId, item.AccessionNumber);
+            DicomLogger.Debug("WorklistSCP", 
+                "成功创建响应 - PatientId: {PatientId}, AccessionNumber: {AccessionNumber}", 
+                item.PatientId ?? "", 
+                item.AccessionNumber ?? "");
             return response;
         }
         catch (Exception ex)
@@ -462,5 +577,88 @@ public class WorklistSCP : DicomService, IDicomServiceProvider, IDicomCFindProvi
     {
         DicomLogger.Debug("WorklistSCP", "收到 C-ECHO 请求");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
+    }
+
+    private string ConvertToDeviceName(string chineseName)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(chineseName))
+                return "";
+
+            var result = new StringBuilder();
+            var isFirst = true;
+
+            foreach (var c in chineseName)
+            {
+                if (PinyinHelper.IsChinese(c))
+                {
+                    var pinyin = PinyinHelper.GetPinyin(c);
+                    
+                    // 首字大写
+                    if (isFirst)
+                    {
+                        result.Append(char.ToUpper(pinyin[0]) + pinyin.Substring(1).ToLower());
+                        isFirst = false;
+                    }
+                    else
+                    {
+                        result.Append(pinyin.ToLower());
+                    }
+                    result.Append('^'); // DICOM中姓名分隔符
+                }
+                else
+                {
+                    // 如果是非文字符，直接添加
+                    result.Append(c);
+                }
+            }
+
+            // 移除最后一个分隔符（如果存在）
+            if (result.Length > 0 && result[result.Length - 1] == '^')
+            {
+                result.Length--;
+            }
+
+            return result.ToString();
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("WorklistSCP", ex, "转换患者姓名失败: {Name}", chineseName);
+            return chineseName; // 转换失败时返回原始名字
+        }
+    }
+
+    // 处理 DICOM 值
+    private string ProcessDicomValue(string value, DicomTag tag, bool needConvertName)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+
+        var vr = tag.DictionaryEntry.ValueRepresentations.First();
+        string processedValue = value;
+
+        // 1. 先处理 CS 类型的特殊要求
+        if (vr.Name == "CS")
+        {
+            // CS 类型的字符限制
+            processedValue = new string(
+                processedValue.ToUpperInvariant()
+                    .Where(c => char.IsUpper(c) || char.IsDigit(c) || c == ' ' || c == '_')
+                    .ToArray()
+            ).Trim();
+        }
+
+        // 3. 最后根据字符集进行转换（如果需要）
+        if (needConvertName && ContainsChineseCharacters(processedValue))
+        {
+            processedValue = ConvertToDeviceName(processedValue);
+        }
+
+        return processedValue;
+    }
+
+    private bool ContainsChineseCharacters(string text)
+    {
+        return text.Any(c => PinyinHelper.IsChinese(c));
     }
 } 

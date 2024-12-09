@@ -123,6 +123,15 @@ public class WorklistController : ControllerBase
             // 生成新的 WorklistId
             item.WorklistId = Guid.NewGuid().ToString("N");
 
+            // 生成 StudyInstanceUID
+            if (string.IsNullOrEmpty(item.StudyInstanceUid))
+            {
+                // 使用时间戳（精确到毫秒）作为基础，加上4位随机数
+                var timestamp = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+                var random = new Random().Next(1000, 9999);
+                item.StudyInstanceUid = $"2.25.{timestamp}{random}";
+            }
+
             // 根据年龄计算出生日期
             var today = DateTime.Today;
             var birthYear = today.Year - item.Age.Value;
@@ -151,6 +160,16 @@ public class WorklistController : ControllerBase
                 return BadRequest();
             }
 
+            // 获取原有记录，保留 StudyInstanceUID
+            var existingItem = await _repository.GetByIdAsync(id);
+            if (existingItem == null)
+            {
+                return NotFound();
+            }
+            
+            // 保持原有的 StudyInstanceUID
+            item.StudyInstanceUid = existingItem.StudyInstanceUid;
+
             // 验证年龄
             if (!item.Age.HasValue || item.Age < 0 || item.Age > 150)
                 return BadRequest("年龄必须在0-150岁之间");
@@ -165,12 +184,14 @@ public class WorklistController : ControllerBase
             {
                 return NotFound();
             }
+
+            DicomLogger.Information("Api", "[API] 成功更新Worklist项目 - ID: {WorklistId}", id);
             return NoContent();
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 更新Worklist项目失败 - ID: {Id}", id);
-            return StatusCode(500, "更新失败");
+            DicomLogger.Error("Api", ex, "[API] 更新Worklist项目失败 - ID: {WorklistId}", id);
+            return StatusCode(500, $"更新失败: {ex.Message}");
         }
     }
 

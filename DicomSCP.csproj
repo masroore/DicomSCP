@@ -36,6 +36,7 @@
     <PackageReference Include="Dapper" Version="2.1.28" />
     <PackageReference Include="System.Management" Version="7.0.2" />
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="7.0.0" />
+    <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
   </ItemGroup>
 
   <ItemGroup>

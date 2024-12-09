@@ -162,17 +162,9 @@ public class WorklistRepository : BaseRepository
         {
             using var connection = new SqliteConnection(_connectionString);
             
-            // WorklistId 应该由控制器生成并传入
-            if (string.IsNullOrEmpty(item.WorklistId))
-            {
-                throw new ArgumentException("WorklistId不能为空");
-            }
-
             // 设置创建和更新时间
             item.CreateTime = DateTime.Now;
             item.UpdateTime = item.CreateTime;
-
-            LogInformation("正在创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
 
             var sql = @"
                 INSERT INTO Worklist (
@@ -194,7 +186,6 @@ public class WorklistRepository : BaseRepository
                 )";
 
             await connection.ExecuteAsync(sql, item);
-            LogInformation("成功创建Worklist项目 - WorklistId: {WorklistId}", item.WorklistId);
             return item.WorklistId;
         }
         catch (Exception ex)
