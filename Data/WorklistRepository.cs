@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using DicomSCP.Data;
 using Microsoft.Extensions.Configuration;
+using System.Text;
 
 namespace DicomSCP.Data;
 
@@ -72,67 +73,83 @@ public class WorklistRepository : BaseRepository
         string? patientName = null,
         string? accessionNumber = null,
         string? modality = null,
-        string? scheduledDate = null)
+        string? scheduledDate = null,
+        string? status = null)
     {
-        LogDebug("正在查询Worklist分页数据 - 页码: {Page}, 每页数量: {PageSize}", page, pageSize);
-        
-        using var connection = new SqliteConnection(_connectionString);
-        var whereClause = new List<string>();
-        var parameters = new DynamicParameters();
-
-        // 构建查询条件
-        if (!string.IsNullOrEmpty(patientId))
+        try
         {
-            whereClause.Add("PatientId LIKE @PatientId");
-            parameters.Add("@PatientId", $"%{patientId}%");
+            using var connection = CreateConnection();
+            var whereClause = new StringBuilder(" WHERE 1=1");
+            var parameters = new DynamicParameters();
+
+            if (!string.IsNullOrEmpty(patientId))
+            {
+                whereClause.Append(" AND PatientId LIKE @PatientId");
+                parameters.Add("@PatientId", $"%{patientId}%");
+            }
+
+            if (!string.IsNullOrEmpty(patientName))
+            {
+                whereClause.Append(" AND PatientName LIKE @PatientName");
+                parameters.Add("@PatientName", $"%{patientName}%");
+            }
+
+            if (!string.IsNullOrEmpty(accessionNumber))
+            {
+                whereClause.Append(" AND AccessionNumber LIKE @AccessionNumber");
+                parameters.Add("@AccessionNumber", $"%{accessionNumber}%");
+            }
+
+            if (!string.IsNullOrEmpty(modality))
+            {
+                whereClause.Append(" AND Modality = @Modality");
+                parameters.Add("@Modality", modality);
+            }
+
+            if (!string.IsNullOrEmpty(scheduledDate))
+            {
+                whereClause.Append(" AND substr(ScheduledDateTime, 1, 8) = @ScheduledDate");
+                parameters.Add("@ScheduledDate", scheduledDate);
+            }
+
+            if (!string.IsNullOrEmpty(status))
+            {
+                whereClause.Append(" AND Status = @Status");
+                parameters.Add("@Status", status);
+            }
+
+            // 查询总记录数
+            var countSql = $"SELECT COUNT(*) FROM Worklist{whereClause}";
+            var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
+
+            // 查询分页数据
+            var offset = (page - 1) * pageSize;
+            var sql = $@"
+                SELECT * FROM Worklist{whereClause}
+                ORDER BY ScheduledDateTime DESC
+                LIMIT @PageSize OFFSET @Offset";
+
+            parameters.Add("@PageSize", pageSize);
+            parameters.Add("@Offset", offset);
+
+            // 添加日志
+            LogDebug("执行工作列表查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
+
+            var items = await connection.QueryAsync<WorklistItem>(sql, parameters);
+
+            return new PagedResult<WorklistItem>
+            {
+                Items = items.ToList(),
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
         }
-        if (!string.IsNullOrEmpty(patientName))
+        catch (Exception ex)
         {
-            whereClause.Add("PatientName LIKE @PatientName");
-            parameters.Add("@PatientName", $"%{patientName}%");
+            LogError(ex, "工作列表查询失败");
+            throw;
         }
-        if (!string.IsNullOrEmpty(accessionNumber))
-        {
-            whereClause.Add("AccessionNumber LIKE @AccessionNumber");
-            parameters.Add("@AccessionNumber", $"%{accessionNumber}%");
-        }
-        if (!string.IsNullOrEmpty(modality))
-        {
-            whereClause.Add("Modality = @Modality");
-            parameters.Add("@Modality", modality);
-        }
-        if (!string.IsNullOrEmpty(scheduledDate))
-        {
-            whereClause.Add("date(ScheduledDateTime) = date(@ScheduledDate)");
-            parameters.Add("@ScheduledDate", scheduledDate);
-        }
-
-        var where = whereClause.Count > 0 ? $"WHERE {string.Join(" AND ", whereClause)}" : "";
-
-        // 查询总记录数
-        var countSql = $"SELECT COUNT(*) FROM Worklist {where}";
-        var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
-
-        // 查询分页数据
-        var offset = (page - 1) * pageSize;
-        var sql = $@"
-            SELECT * FROM Worklist 
-            {where}
-            ORDER BY ScheduledDateTime DESC
-            LIMIT @PageSize OFFSET @Offset";
-
-        parameters.Add("@PageSize", pageSize);
-        parameters.Add("@Offset", offset);
-
-        var items = await connection.QueryAsync<WorklistItem>(sql, parameters);
-
-        return new PagedResult<WorklistItem>
-        {
-            Items = items.ToList(),
-            TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize
-        };
     }
 
     public async Task<WorklistItem?> GetByIdAsync(string worklistId)

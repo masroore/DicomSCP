@@ -80,24 +80,6 @@ window.showToast = function(message, type = 'success') {
 // ================ 初始化函数 ================
 // 初始化 axios 拦截器
 function initAxiosInterceptors() {
-    // 标记是否正在重定向
-    let isRedirecting = false;
-
-    // 请求拦截器
-    axios.interceptors.request.use(
-        config => {
-            // 检查 cookie 是否存在
-            if (!document.cookie.includes('auth=')) {
-                // 如果没有认证 cookie，且不是登录请求，直接跳转
-                if (!config.url.includes('/api/auth/login')) {
-                    handleUnauthorized();
-                }
-            }
-            return config;
-        },
-        error => Promise.reject(error)
-    );
-
     // 响应拦截器
     axios.interceptors.response.use(
         response => response,
@@ -108,36 +90,12 @@ function initAxiosInterceptors() {
             return Promise.reject(error);
         }
     );
-
-    // 处理未授权的情况
-    function handleUnauthorized() {
-        if (!isRedirecting) {
-            isRedirecting = true;
-            console.log("[Auth] 检测到未授权访问，重定向到登录页");
-            
-            // 清理 cookies
-            document.cookie = 'auth=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-            document.cookie = 'username=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-            
-            // 延迟重定向，避免并发请求问题
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 100);
-        }
-    }
 }
 
 // 页面加载完成后执行
 $(document).ready(function() {
     // 初始化 axios 拦截器
     initAxiosInterceptors();
-    
-    // 定期检查认证状态
-    setInterval(() => {
-        if (!document.cookie.includes('auth=')) {
-            handleUnauthorized();
-        }
-    }, 60000);  // 每分钟检查一次
     
     // 根据URL hash切换到对应页面
     const currentTab = window.location.hash.slice(1) || defaultRoute;

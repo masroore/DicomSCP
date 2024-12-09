@@ -16,7 +16,16 @@ document.addEventListener('DOMContentLoaded', () => {
 // 统一错误处理
 function handleError(error, message) {
     console.error(message, error);
-    window.showToast(error.response?.data || error.message || message, 'error');
+    let errorMessage = message;
+    
+    if (error.response) {
+        // axios 错误响应
+        errorMessage = error.response.data || error.message || message;
+    } else if (error.message) {
+        errorMessage = error.message;
+    }
+    
+    window.showToast(errorMessage, 'error');
 }
 
 // 成功提示
@@ -138,6 +147,35 @@ function bindWorklistEvents() {
     }
 }
 
+// 发送到后端时的日期时间格式化
+function formatDateTimeForServer(dateTimeStr) {
+    try {
+        if (!dateTimeStr) return '';
+        
+        // 如果已经是 ISO 格式，直接返回
+        if (dateTimeStr.includes('T')) {
+            return dateTimeStr;
+        }
+        
+        // 处理其他格式
+        const date = new Date(dateTimeStr);
+        if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            const minute = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${year}-${month}-${day}T${hour}:${minute}`;
+        }
+        
+        return dateTimeStr;
+    } catch (error) {
+        console.error('格式化日期时间失败:', error);
+        return dateTimeStr;
+    }
+}
+
 // 加载 Worklist 数据
 async function loadWorklistData() {
     if (isLoading) return;
@@ -166,7 +204,22 @@ async function loadWorklistData() {
         if (patientName) params.append('patientName', patientName);
         if (accessionNumber) params.append('accessionNumber', accessionNumber);
         if (modality) params.append('modality', modality);
-        if (scheduledDate) params.append('scheduledDate', scheduledDate);
+        
+        if (scheduledDate) {
+            // 添加调试日志
+            console.log('查询日期 - 原始值:', scheduledDate);
+            
+            // 确保使用带 T 的 ISO 格式
+            const date = new Date(scheduledDate);
+            if (!isNaN(date.getTime())) {
+                const formattedDate = formatDateTimeForServer(scheduledDate);
+                params.append('scheduledDate', formattedDate);
+                console.log('查询日期 - 格式化后:', formattedDate);
+            }
+        }
+
+        // 添加调试日志
+        console.log('查询参数:', Object.fromEntries(params.entries()));
 
         const response = await axios.get(`/api/worklist`, { params });
         const result = response.data;
@@ -237,7 +290,7 @@ function displayWorklistData(items) {
                 <td>${safeItem.age ? safeItem.age + '岁' : ''}</td>
                 <td title="${safeItem.accessionNumber}">${safeItem.accessionNumber}</td>
                 <td>${safeItem.modality}</td>
-                <td>${formatDateTime(safeItem.scheduledDateTime)}</td>
+                <td>${formatDisplayDateTime(safeItem.scheduledDateTime)}</td>
                 <td><span class="status-${safeItem.status.toLowerCase()}">${formatStatus(safeItem.status)}</span></td>
                 <td>
                     <button type="button" class="btn btn-sm btn-primary edit-btn" data-id="${safeItem.worklistId}">
@@ -317,43 +370,34 @@ function updatePagination(totalCount, currentPage, totalPages) {
 // 打开添加预约模态框
 function openAddWorklistModal() {
     try {
-        // 获取当前时间并生成默认值
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const seconds = String(now.getSeconds()).padStart(2, '0');
-        
-        const defaultValues = {
-            patientId: `P${year}${month}${day}${hours}${minutes}${seconds}`,
-            accessionNumber: `A${year}${month}${day}${hours}${minutes}${seconds}`,
-            scheduledDateTime: `${year}-${month}-${day}T${hours}:${minutes}`,
-            status: 'SCHEDULED'  // 添加默认状态
-        };
-
         return showDialog({
             title: '添加预约',
             content: document.getElementById('worklistForm').outerHTML,
             size: 'lg',
             onShow: () => {
-                // 使用 setTimeout 确保 DOM 已更新
                 setTimeout(() => {
                     const form = document.querySelector('.modal.show form');
                     if (form) {
                         // 重置表单
                         form.reset();
 
+                        // 获取当前时间并格式化
+                        const now = new Date();
+                        const year = now.getFullYear();
+                        const month = String(now.getMonth() + 1).padStart(2, '0');
+                        const day = String(now.getDate()).padStart(2, '0');
+                        const hours = String(now.getHours()).padStart(2, '0');
+                        const minutes = String(now.getMinutes()).padStart(2, '0');
+                        const seconds = String(now.getSeconds()).padStart(2, '0');
+
                         // 填充默认值
                         const fields = {
-                            '#patientId': defaultValues.patientId,
-                            '#accessionNumber': defaultValues.accessionNumber,
-                            '#scheduledDateTime': defaultValues.scheduledDateTime,
-                            '#status': defaultValues.status,
-                            // 可以在这里添加其他默认值
-                            '#modality': 'CT',  // 默认检查类型
-                            '#patientSex': 'M'  // 默认性别
+                            '#patientId': `P${year}${month}${day}${hours}${minutes}${seconds}`,
+                            '#accessionNumber': `A${year}${month}${day}${hours}${minutes}${seconds}`,
+                            '#scheduledDateTime': `${year}-${month}-${day}T${hours}:${minutes}`,
+                            '#status': 'SCHEDULED',  // 添加默认状态
+                            '#modality': 'CT',       // 默认检查类型
+                            '#patientSex': 'M'       // 默认性别
                         };
 
                         // 遍历填充字段
@@ -378,39 +422,38 @@ function openAddWorklistModal() {
                     return false;
                 }
 
-                const data = {
-                    worklistId: '',  // 新增时为空
-                    patientId: form.querySelector('#patientId').value.trim(),
-                    patientName: form.querySelector('#patientName').value.trim(),
-                    patientSex: form.querySelector('#patientSex').value,
-                    age: parseInt(form.querySelector('#patientAge').value),
-                    accessionNumber: form.querySelector('#accessionNumber').value.trim(),
-                    modality: form.querySelector('#modality').value,
-                    scheduledDateTime: form.querySelector('#scheduledDateTime').value,
-                    scheduledAET: form.querySelector('#scheduledAET').value.trim(),
-                    scheduledStationName: form.querySelector('#scheduledStationName').value.trim(),
-                    bodyPartExamined: form.querySelector('#bodyPartExamined').value.trim(),
-                    status: form.querySelector('#status').value
-                };
-
                 try {
+                    const data = {
+                        worklistId: '',  // 新增时为空
+                        patientId: form.querySelector('#patientId').value.trim(),
+                        patientName: form.querySelector('#patientName').value.trim(),
+                        patientSex: form.querySelector('#patientSex').value,
+                        age: parseInt(form.querySelector('#patientAge').value),
+                        accessionNumber: form.querySelector('#accessionNumber').value.trim(),
+                        modality: form.querySelector('#modality').value,
+                        scheduledDateTime: formatDateTimeForServer(form.querySelector('#scheduledDateTime').value),
+                        scheduledAET: form.querySelector('#scheduledAET').value.trim(),
+                        scheduledStationName: form.querySelector('#scheduledStationName').value.trim(),
+                        bodyPartExamined: form.querySelector('#bodyPartExamined').value.trim(),
+                        status: form.querySelector('#status').value
+                    };
+
                     const response = await axios.post('/api/worklist', data);
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(errorText || '保存失败');
+                    
+                    // axios 的响应直接包含数据，不需要调用 text()
+                    if (response.status === 200 || response.status === 201) {
+                        window.showToast('预约已添加', 'success');
+                        loadWorklistData();
+                        return true;
+                    } else {
+                        throw new Error(response.data || '保存失败');
                     }
-
-                    window.showToast('预约已添加', 'success');
-                    loadWorklistData();
-                    return true;
                 } catch (error) {
                     handleError(error, '保存预约数据失败');
                     return false;
                 }
             }
         });
-        
     } catch (error) {
         handleError(error, '打开添加预约窗口失败');
     }
@@ -431,9 +474,7 @@ async function editWorklist(worklistId) {
             content: document.getElementById('worklistForm').outerHTML,
             size: 'lg',
             onShow: () => {
-                // 使用 setTimeout 确保 DOM 已更新
                 setTimeout(() => {
-                    // 填充表单数据
                     const form = document.querySelector('.modal.show form');
                     if (form) {
                         // 填充基本信息
@@ -441,7 +482,7 @@ async function editWorklist(worklistId) {
                             '#patientId': data.patientId,
                             '#patientName': data.patientName,
                             '#patientSex': data.patientSex,
-                            '#patientAge': data.age,
+                            '#patientAge': data.age || '',  // 确保即使是 null 也显示为字符串
                             '#accessionNumber': data.accessionNumber,
                             '#modality': data.modality,
                             '#scheduledAET': data.scheduledAET,
@@ -454,46 +495,34 @@ async function editWorklist(worklistId) {
                         Object.entries(fields).forEach(([selector, value]) => {
                             const element = form.querySelector(selector);
                             if (element) {
-                                element.value = value || '';
+                                // 对于数字类型的输入，确保不显示 'null' 或 'undefined'
+                                element.value = (value === null || value === undefined) ? '' : value;
                             }
                         });
 
-                        // 格式化预约时间
+                        // 处理预约时间
                         if (data.scheduledDateTime) {
-                            try {
-                                const date = new Date(data.scheduledDateTime);
-                                if (!isNaN(date)) {
-                                    const dateInput = form.querySelector('#scheduledDateTime');
-                                    if (dateInput) {
-                                        dateInput.value = date.toISOString().slice(0, 16);
-                                    }
-                                }
-                            } catch (error) {
-                                console.warn('日期格式化失败:', error);
+                            const dateInput = form.querySelector('#scheduledDateTime');
+                            if (dateInput) {
+                                dateInput.value = formatDateTime(data.scheduledDateTime);
                             }
                         }
                     } else {
                         console.error('找不到表单元素');
                     }
-                }, 100);  // 给一个小延时确保 DOM 已更新
+                }, 100);
             },
             onConfirm: async () => {
-                const submitBtn = document.querySelector('.modal.show .submit-btn');
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+                const form = document.querySelector('.modal.show form');
+                if (!form) {
+                    throw new Error('找不到表单');
                 }
-                
+
+                if (!validateWorklistForm(form)) {
+                    return false;
+                }
+
                 try {
-                    const form = document.querySelector('.modal.show form');
-                    if (!form) {
-                        throw new Error('找不到表单');
-                    }
-
-                    if (!validateWorklistForm(form)) {
-                        return false;
-                    }
-
                     const data = {
                         worklistId: currentWorklistId,
                         patientId: form.querySelector('#patientId').value.trim(),
@@ -502,7 +531,7 @@ async function editWorklist(worklistId) {
                         age: parseInt(form.querySelector('#patientAge').value),
                         accessionNumber: form.querySelector('#accessionNumber').value.trim(),
                         modality: form.querySelector('#modality').value,
-                        scheduledDateTime: form.querySelector('#scheduledDateTime').value,
+                        scheduledDateTime: formatDateTimeForServer(form.querySelector('#scheduledDateTime').value),
                         scheduledAET: form.querySelector('#scheduledAET').value.trim(),
                         scheduledStationName: form.querySelector('#scheduledStationName').value.trim(),
                         bodyPartExamined: form.querySelector('#bodyPartExamined').value.trim(),
@@ -510,27 +539,20 @@ async function editWorklist(worklistId) {
                     };
 
                     const response = await axios.put(`/api/worklist/${currentWorklistId}`, data);
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(errorText || '保存失败');
+                    
+                    if (response.status === 200 || response.status === 204) {
+                        window.showToast('预约已更新', 'success');
+                        loadWorklistData();
+                        return true;
+                    } else {
+                        throw new Error(response.data || '保存失败');
                     }
-
-                    window.showToast('预约已更新', 'success');
-                    loadWorklistData();
-                    return true;
                 } catch (error) {
                     handleError(error, '保存预约数据失败');
                     return false;
-                } finally {
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = '确定';
-                    }
                 }
             }
         });
-        
     } catch (error) {
         handleError(error, '获取预约数据失败');
     }
@@ -550,7 +572,7 @@ async function deleteWorklist(id, event) {
         await axios.delete(`/api/worklist/${id}`);
         window.showToast('删除成功', 'success');
 
-        // 获取当前页的数据数量
+        // 获取当前的数据数量
         const tbody = document.getElementById('worklist-table-body');
         const currentPageItems = tbody.getElementsByTagName('tr').length;
         
@@ -566,35 +588,92 @@ async function deleteWorklist(id, event) {
     }
 }
 
-// 工具函数
+// 格式化显示时间（仅用于列表显示）
+function formatDisplayDateTime(dateTimeStr) {
+    try {
+        if (!dateTimeStr) {
+            return '';
+        }
+        
+        let date;
+        // 处理 DICOM 格式 (yyyyMMddHHmm)
+        if (dateTimeStr.length >= 8 && !isNaN(dateTimeStr)) {
+            const year = dateTimeStr.substring(0, 4);
+            const month = dateTimeStr.substring(4, 6);
+            const day = dateTimeStr.substring(6, 8);
+            let hour = '00';
+            let minute = '00';
+            let second = '00';
+            
+            if (dateTimeStr.length >= 12) {
+                hour = dateTimeStr.substring(8, 10);
+                minute = dateTimeStr.substring(10, 12);
+            }
+            
+            date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+        } else {
+            date = new Date(dateTimeStr);
+        }
+        
+        if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            const minute = String(date.getMinutes()).padStart(2, '0');
+            const second = String(date.getSeconds()).padStart(2, '0');
+            
+            return `${year}/${month}/${day} ${hour}:${minute}:${second}`;
+        }
+        
+        return dateTimeStr;
+    } catch (error) {
+        console.error('格式化显示日期时间失败:', error);
+        return dateTimeStr;
+    }
+}
+
+// 保持原有的 formatDateTime 函数用于后端交互
 function formatDateTime(dateTimeStr) {
     try {
         if (!dateTimeStr) {
             return '';
         }
         
-        // 处理 YYYYMMDD 格式
-        if (dateTimeStr.length === 8 && !isNaN(dateTimeStr)) {
-            const year = dateTimeStr.substring(0, 4);
-            const month = dateTimeStr.substring(4, 6);
-            const day = dateTimeStr.substring(6, 8);
-            return `${year}-${month}-${day}`;
-        }
-        
-        // 处理其他格式的日期
-        const date = new Date(dateTimeStr);
-        if (isNaN(date.getTime())) {
-            console.warn('无法解析的日期时间:', dateTimeStr);
+        // 如果已经是 ISO 格式，直接返回
+        if (dateTimeStr.includes('T')) {
             return dateTimeStr;
         }
         
-        return date.toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        // 处理 DICOM 格式 (yyyyMMddHHmm)
+        if (dateTimeStr.length >= 8 && !isNaN(dateTimeStr)) {
+            const year = dateTimeStr.substring(0, 4);
+            const month = dateTimeStr.substring(4, 6);
+            const day = dateTimeStr.substring(6, 8);
+            let hour = '00';
+            let minute = '00';
+            
+            if (dateTimeStr.length >= 12) {
+                hour = dateTimeStr.substring(8, 10);
+                minute = dateTimeStr.substring(10, 12);
+            }
+            
+            return `${year}-${month}-${day}T${hour}:${minute}`;
+        }
+        
+        // 处理其他格式，确保返回 ISO 格式
+        const date = new Date(dateTimeStr);
+        if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            const minute = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${year}-${month}-${day}T${hour}:${minute}`;
+        }
+        
+        return dateTimeStr;
     } catch (error) {
         console.error('格式化日期时间失败:', error);
         return dateTimeStr;
