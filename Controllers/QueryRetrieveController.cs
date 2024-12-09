@@ -677,17 +677,32 @@ public class QueryRetrieveController : ControllerBase
         dataset.Add(DicomTag.AccessionNumber, "");
 
         // 处理查询条件
-        if (queryParams.TryGetValue("studyInstanceUid", out var studyUid) && !string.IsNullOrWhiteSpace(studyUid))
+        if (queryParams.TryGetValue("patientId", out var patientId) && !string.IsNullOrWhiteSpace(patientId))
         {
-            dataset.AddOrUpdate(DicomTag.StudyInstanceUID, studyUid);
+            dataset.AddOrUpdate(DicomTag.PatientID, $"*{patientId}*");
+        }
+
+        if (queryParams.TryGetValue("patientName", out var patientName) && !string.IsNullOrWhiteSpace(patientName))
+        {
+            dataset.AddOrUpdate(DicomTag.PatientName, $"*{patientName}*");
+        }
+
+        if (queryParams.TryGetValue("accessionNumber", out var accessionNumber) && !string.IsNullOrWhiteSpace(accessionNumber))
+        {
+            dataset.AddOrUpdate(DicomTag.AccessionNumber, $"*{accessionNumber}*");
+        }
+
+        if (queryParams.TryGetValue("modality", out var modality) && !string.IsNullOrWhiteSpace(modality))
+        {
+            dataset.AddOrUpdate(DicomTag.ModalitiesInStudy, modality);
         }
 
         if (queryParams.TryGetValue("studyDate", out var studyDate) && !string.IsNullOrWhiteSpace(studyDate))
         {
-            dataset.AddOrUpdate(DicomTag.StudyDate, studyDate);  // 格式：YYYYMMDD
+            // 转换为 DICOM 日期格式 YYYYMMDD
+            var dicomDate = studyDate.Replace("-", "");
+            dataset.AddOrUpdate(DicomTag.StudyDate, dicomDate);
         }
-
-        // ... 其他查询条件处理
     }
 
     // 添加序列级别查询字段
