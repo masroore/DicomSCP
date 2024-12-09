@@ -37,15 +37,17 @@ public class AuthController : ControllerBase
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.Name, request.Username),
-                new Claim("LoginTime", DateTime.UtcNow.ToString())
+                new Claim("LoginTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
+                new Claim("LastActivity", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
             };
 
             var claimsIdentity = new ClaimsIdentity(claims, "CustomAuth");
             var authProperties = new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30),
-                AllowRefresh = true
+                ExpiresUtc = DateTimeOffset.Now.AddMinutes(30),
+                AllowRefresh = true,
+                IssuedUtc = DateTimeOffset.Now,
             };
 
             await HttpContext.SignInAsync(
@@ -134,9 +136,51 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("check-session")]
-    public IActionResult CheckSession()
+    public async Task<IActionResult> CheckSession()
     {
-        return Ok(new { username = User.Identity?.Name });
+        try
+        {
+            // 更新最后活动时间
+            var identity = User.Identity as ClaimsIdentity;
+            var lastActivityClaim = identity?.FindFirst("LastActivity");
+            if (lastActivityClaim != null)
+            {
+                var claims = new List<Claim>(User.Claims);
+                claims.Remove(lastActivityClaim);
+                claims.Add(new Claim("LastActivity", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")));
+
+                var newIdentity = new ClaimsIdentity(claims, "CustomAuth");
+                var authProperties = new AuthenticationProperties
+                {
+                    IsPersistent = true,
+                    ExpiresUtc = DateTimeOffset.Now.AddMinutes(30),
+                    AllowRefresh = true,
+                    IssuedUtc = DateTimeOffset.Now,
+                };
+
+                // 重新签发认证票据
+                await HttpContext.SignInAsync("CustomAuth", 
+                    new ClaimsPrincipal(newIdentity), 
+                    authProperties);
+
+                // 更新 username cookie
+                Response.Cookies.Append("username", User.Identity?.Name ?? "", new CookieOptions
+                {
+                    HttpOnly = false,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/",
+                    Secure = Request.IsHttps,
+                    Expires = DateTimeOffset.Now.AddMinutes(30)
+                });
+            }
+
+            return Ok(new { username = User.Identity?.Name });
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("Api", ex, "[API] 检查会话状态失败");
+            return StatusCode(500, "检查会话状态失败");
+        }
     }
 }
 

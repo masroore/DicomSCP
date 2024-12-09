@@ -516,29 +516,14 @@ class PrintManager {
     // 确认打印
     async confirmPrint(jobId, printerName) {
         try {
-            const response = await fetch('/api/PrintScu/print-by-job', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    jobId: jobId,
-                    printerName: printerName
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('打印失败');
-            }
-
-            await response.json();
+            await axios.post('/api/PrintScu/print-by-job', { jobId, printerName });
             window.showToast('打印任务已发送', 'success');
-            this.loadPrintJobs(); // 刷新任务列表
-            return true;  // 返回 true 让对话框关闭
+            this.loadPrintJobs();
+            return true;
         } catch (error) {
             console.error('打印失败:', error);
             window.showToast(error.message || '打印失败', 'error');
-            return false;  // 返回 false 让对话框保持打开
+            return false;
         }
     }
 

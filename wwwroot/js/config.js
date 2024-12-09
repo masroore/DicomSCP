@@ -101,8 +101,8 @@ class ConfigManager {
 
     async showHelp() {
         try {
-            const response = await fetch('help.html');
-            const html = await response.text();
+            const response = await axios.get('help.html');
+            const html = response.data;
 
             const modalDiv = document.createElement('div');
             modalDiv.className = 'modal';

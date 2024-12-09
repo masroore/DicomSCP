@@ -6,12 +6,6 @@ let isLoading = false;
 
 // 修改 DOMContentLoaded 事件监听
 document.addEventListener('DOMContentLoaded', () => {
-    // 初始化日期选择器默认值为今天
-    const dateInput = document.getElementById('worklist-searchScheduledDate');
-    if (dateInput) {
-        dateInput.value = new Date().toISOString().slice(0, 10);
-    }
-
     // 绑定事件
     bindWorklistEvents();
 
@@ -22,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // 统一错误处理
 function handleError(error, message) {
     console.error(message, error);
-    window.showToast(error.response?.data || error.message, 'error');
+    window.showToast(error.response?.data || error.message || message, 'error');
 }
 
 // 成功提示
@@ -174,12 +168,9 @@ async function loadWorklistData() {
         if (modality) params.append('modality', modality);
         if (scheduledDate) params.append('scheduledDate', scheduledDate);
 
-        const response = await fetch(`/api/worklist?${params}`);
-        if (!response.ok) {
-            throw new Error('获取数据失败');
-        }
+        const response = await axios.get(`/api/worklist`, { params });
+        const result = response.data;
         
-        const result = await response.json();
         if (!result) return;
 
         // 验证返回数据格式
@@ -403,13 +394,7 @@ function openAddWorklistModal() {
                 };
 
                 try {
-                    const response = await fetch('/api/worklist', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    });
+                    const response = await axios.post('/api/worklist', data);
 
                     if (!response.ok) {
                         const errorText = await response.text();
@@ -524,13 +509,7 @@ async function editWorklist(worklistId) {
                         status: form.querySelector('#status').value
                     };
 
-                    const response = await fetch(`/api/worklist/${currentWorklistId}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    });
+                    const response = await axios.put(`/api/worklist/${currentWorklistId}`, data);
 
                     if (!response.ok) {
                         const errorText = await response.text();
@@ -564,9 +543,7 @@ async function deleteWorklist(id) {
             return;
         }
 
-        const response = await fetch(`/api/worklist/${id}`, {
-            method: 'DELETE'
-        });
+        const response = await axios.delete(`/api/worklist/${id}`);
 
         if (!response.ok) {
             throw new Error('删除失败');

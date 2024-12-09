@@ -15,12 +15,8 @@ class LogManager {
 
     async loadLogTypes() {
         try {
-            const response = await fetch('/api/logs/types');
-            if (!response.ok) {
-                throw new Error('获取日志类型失败');
-            }
-            
-            const types = await response.json();
+            const response = await axios.get('/api/logs/types');
+            const types = response.data;
             this.renderLogTypes(types);
             if (types.length > 0) {
                 await this.loadLogFiles(types[0]);
@@ -40,12 +36,8 @@ class LogManager {
         try {
             this.isLoading = true;
             this.currentType = type;
-            const response = await fetch(`/api/logs/files/${type}`);
-            if (!response.ok) {
-                throw new Error('获取日志文件失败');
-            }
-            
-            this.allFiles = await response.json();
+            const response = await axios.get(`/api/logs/files/${type}`);
+            this.allFiles = response.data;
             this.renderLogFiles();
             this.updateActiveType();
             this.updatePagination();

@@ -28,7 +28,7 @@ async function loadImages(page = 1) {
         const modality = document.getElementById('images-searchModality')?.value || '';
         const studyDate = document.getElementById('images-searchStudyDate')?.value || '';
         
-        const params = new URLSearchParams({
+        const params = {
             page,
             pageSize: imagesPageSize,
             patientId,
@@ -36,14 +36,11 @@ async function loadImages(page = 1) {
             accessionNumber,
             modality,
             studyDate
-        });
+        };
 
-        const response = await fetch(`/api/images?${params}`);
-        if (!response.ok) {
-            throw new Error('获取数据失败');
-        }
+        const response = await axios.get('/api/images', { params });
+        const result = response.data;
 
-        const result = await response.json();
         if (result.items.length === 0) {
             showEmptyTable(tbody, '暂无影像数据', 8);
             return;
@@ -56,7 +53,7 @@ async function loadImages(page = 1) {
         imagesCurrentPage = page;
         
     } catch (error) {
-        console.error('加载影像失败:', error);
+        handleError(error, '加载影像失败');
         showEmptyTable(tbody, '加载失败，请重试', 8);
     }
 }
@@ -208,19 +205,12 @@ async function deleteStudy(studyInstanceUid, event) {
     }
 
     try {
-        const response = await fetch(`/api/images/${studyInstanceUid}`, {
-            method: 'DELETE'
-        });
-
-        if (!response.ok) {
-            throw new Error('删除失败');
-        }
+        const response = await axios.delete(`/api/images/${studyInstanceUid}`);
 
         window.showToast('操作成功', 'success');
         loadImages(imagesCurrentPage);
     } catch (error) {
-        console.error('删除失败:', error);
-        window.showToast(error.message || '删除失败', 'error');
+        handleError(error, '删除失败');
     }
 }
 
@@ -247,12 +237,8 @@ async function toggleSeriesInfo(row) {
         `);
         $(row).after(loadingRow);
 
-        const response = await fetch(`/api/images/${studyUid}/series`);
-        if (!response.ok) {
-            throw new Error('获取序列数据失败');
-        }
-        
-        const data = await response.json();
+        const response = await axios.get(`/api/images/${studyUid}/series`);
+        const data = response.data;
         
         // 创建序列信息行
         const seriesInfoRow = $(`

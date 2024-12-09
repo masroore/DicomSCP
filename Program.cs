@@ -128,11 +128,11 @@ builder.Services.AddAuthentication("CustomAuth")
         options.Cookie.Name = "auth";
         options.LoginPath = "/login.html";
         options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
-        options.SlidingExpiration = true;  // 启用滑动过期
+        options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.Path = "/";
         options.Events = new CookieAuthenticationEvents
         {
             OnRedirectToLogin = context =>
@@ -143,12 +143,6 @@ builder.Services.AddAuthentication("CustomAuth")
                     return Task.CompletedTask;
                 }
                 context.Response.Redirect(context.RedirectUri);
-                return Task.CompletedTask;
-            },
-            OnValidatePrincipal = context =>
-            {
-                DicomLogger.Debug("Api", "[Auth] Validating principal for path: {0}", 
-                    context.Request.Path.Value ?? "(null)");
                 return Task.CompletedTask;
             }
         };
@@ -199,49 +193,56 @@ if (app.Environment.IsDevelopment() && swaggerSettings.Enabled)
     });
 }
 
-// 配置静态文件
+// 正确的中间件顺序
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// 认证中间件
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.ToLower();
+    
+    // 定义公共资源路径
+    var publicPaths = new[]
+    {
+        "/login.html",
+        "/api/auth/login",
+        "/lib/",
+        "/css/",
+        "/js/login.js",  // 只允许登录相关的js
+        "/favicon.ico"
+    };
+
+    // 是否是公共资源
+    var isPublicResource = publicPaths.Any(p => path?.StartsWith(p) == true);
+    
+    // 如果不是公共资源，需要验证
+    if (!isPublicResource)
+    {
+        if (!context.User.Identity?.IsAuthenticated == true)
+        {
+            // API 请求返回 401
+            if (path?.StartsWith("/api/") == true)
+            {
+                context.Response.StatusCode = 401;
+                return;
+            }
+            // 其他请求重定向到登录页
+            context.Response.Redirect("/login.html");
+            return;
+        }
+    }
+    
+    await next();
+});
+
+// 静态文件中间件
 app.UseDefaultFiles(new DefaultFilesOptions
 {
     DefaultFileNames = new List<string> { "index.html", "login.html" }
 });
 app.UseStaticFiles();
-
-// 先处理路由
-app.UseRouting();
-
-// 白名单中间件移到认证之前
-app.Use(async (context, next) =>
-{
-    var path = context.Request.Path.Value?.ToLower();
-    var allowedPaths = new[] 
-    {
-        "/login.html",
-        "/api/auth/login",
-        "/lib",
-        "/css",
-        "/js",
-        "/images",
-        "/favicon.ico"
-    };
-
-    // 记录请求路径和认证信息
-    DicomLogger.Debug("Api", "[Auth] Request Path: {0}", path ?? "(null)");
-    DicomLogger.Debug("Api", "[Auth] Has Auth Cookie: {0}", context.Request.Cookies.ContainsKey("auth").ToString());
-
-    if (allowedPaths.Any(p => path?.StartsWith(p) == true))
-    {
-        DicomLogger.Debug("Api", "[Auth] Allowed path: {0}", path ?? "(null)");
-        // 对于白名单路径，标记为已处理认证
-        context.Items["SkipAuthentication"] = true;
-        await next();
-        return;
-    }
-
-    await next();
-});
-
-app.UseAuthentication();
-app.UseAuthorization();
 
 // 确保控制器路由在认证后
 app.MapControllers();

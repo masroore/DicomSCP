@@ -596,4 +596,16 @@ function updateFileStatus(fileId, status, message = '') {
         }
     }
 }
+
+// 加载打印机列表
+async function loadPrinters() {
+    try {
+        const response = await axios.get('/api/PrintScu/printers');
+        this.printers = response.data;
+    } catch (error) {
+        console.error('加载打印机列表失败:', error);
+        window.showToast('加载打印机列表失败', 'error');
+        throw error;
+    }
+}
  
