@@ -203,38 +203,31 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value?.ToLower();
     
-    // 定义公共资源路径
-    var publicPaths = new[]
+    // 公共路径
+    if (path?.StartsWith("/login.html") == true || 
+        path?.StartsWith("/api/auth/login") == true ||
+        path?.StartsWith("/lib/") == true ||
+        path?.StartsWith("/css/") == true ||
+        path?.StartsWith("/js/login.js") == true ||
+        path?.StartsWith("/images/") == true ||
+        path?.StartsWith("/favicon.ico") == true)
     {
-        "/login.html",
-        "/api/auth/login",
-        "/lib/",
-        "/css/",
-        "/js/login.js",  // 只允许登录相关的js
-        "/favicon.ico",
-        "/images/"       // 添加 images 路径
-    };
-    
-    // 是否是公共资源
-    var isPublicResource = publicPaths.Any(p => path?.StartsWith(p) == true);
-    
-    // 如果不是公共资源，需要验证
-    if (!isPublicResource)
+        await next();
+        return;
+    }
+
+    // 需要认证的路径
+    if (!context.User.Identity?.IsAuthenticated == true)
     {
-        if (!context.User.Identity?.IsAuthenticated == true)
+        if (path?.StartsWith("/api/") == true)
         {
-            // API 请求返回 401
-            if (path?.StartsWith("/api/") == true)
-            {
-                context.Response.StatusCode = 401;
-                return;
-            }
-            // 其他请求重定向到登录页
-            context.Response.Redirect("/login.html");
+            context.Response.StatusCode = 401;
             return;
         }
+        context.Response.Redirect("/login.html");
+        return;
     }
-    
+
     await next();
 });
 

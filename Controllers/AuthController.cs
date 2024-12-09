@@ -22,57 +22,27 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        try
+        var isValid = await _repository.ValidateUserAsync(request.Username, request.Password);
+        if (!isValid)
         {
-            DicomLogger.Debug("Api", "[API] 尝试登录 - 用户名: {Username}", request.Username);
+            return Unauthorized("用户名或密码错误");
+        }
 
-            var isValid = await _repository.ValidateUserAsync(request.Username, request.Password);
-            if (!isValid)
-            {
-                DicomLogger.Warning("Api", "[API] 登录失败 - 用户名: {Username}, 原因: 用户名或密码错误", request.Username);
-                return Unauthorized("用户名或密码错误");
-            }
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.Name, request.Username)
+        };
 
-            // 创建身份认证票据
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, request.Username),
-                new Claim("LoginTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
-                new Claim("LastActivity", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
-            };
-
-            var claimsIdentity = new ClaimsIdentity(claims, "CustomAuth");
-            var authProperties = new AuthenticationProperties
+        await HttpContext.SignInAsync(
+            "CustomAuth",
+            new ClaimsPrincipal(new ClaimsIdentity(claims, "CustomAuth")),
+            new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.Now.AddMinutes(30),
-                AllowRefresh = true,
-                IssuedUtc = DateTimeOffset.Now,
-            };
-
-            await HttpContext.SignInAsync(
-                "CustomAuth",
-                new ClaimsPrincipal(claimsIdentity),
-                authProperties);
-
-            // 设置用户名 cookie 供前端使用
-            Response.Cookies.Append("username", request.Username, new CookieOptions
-            {
-                HttpOnly = false,
-                SameSite = SameSiteMode.Lax,
-                Path = "/",
-                Secure = Request.IsHttps,
-                Expires = DateTimeOffset.Now.AddMinutes(30)
+                ExpiresUtc = DateTimeOffset.Now.AddMinutes(30)
             });
 
-            DicomLogger.Information("Api", "[API] 登录成功 - 用户名: {Username}", request.Username);
-            return Ok();
-        }
-        catch (Exception ex)
-        {
-            DicomLogger.Error("Api", ex, "[API] 登录异常 - 用户名: {Username}", request.Username);
-            return StatusCode(500, "登录失败");
-        }
+        return Ok();
     }
 
     [Authorize]

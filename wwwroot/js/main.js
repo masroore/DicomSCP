@@ -102,9 +102,8 @@ function initAxiosInterceptors() {
     axios.interceptors.response.use(
         response => response,
         error => {
-            if (error.response && error.response.status === 401) {
-                handleUnauthorized();
-                return new Promise(() => {});  // 阻止错误继续传播
+            if (error.response?.status === 401) {
+                window.location.href = '/login.html';
             }
             return Promise.reject(error);
         }
