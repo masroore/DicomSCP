@@ -1,15 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DICOM 查看器</title>
+    <!-- 样式 -->
     <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        /* 基础样式 */
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
         }
+
+        /* 视图容器 */
         .viewport {
             width: 100%;
             height: 100vh;
@@ -18,45 +24,190 @@
             display: inline-block;
             background-color: black;
         }
+
+        /* 角落信息 */
         .corner-info {
             position: absolute;
-            padding: 5px;
+            padding: 8px;
             font-size: 12px;
             color: white;
             z-index: 100;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            text-shadow: 
+                1px 1px 2px rgba(0,0,0,0.8),
+                -1px -1px 2px rgba(0,0,0,0.8),
+                1px -1px 2px rgba(0,0,0,0.8),
+                -1px 1px 2px rgba(0,0,0,0.8);
+            line-height: 1.5;
         }
-        .top-left {
-            top: 5px;
-            left: 5px;
+        .top-left { top: 10px; left: 10px; }
+        .top-right { top: 10px; right: 10px; text-align: right; }
+        .bottom-left { bottom: 10px; left: 10px; }
+        .bottom-right { bottom: 10px; right: 10px; text-align: right; }
+
+        /* 工具组 */
+        .tool-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
-        .top-right {
-            top: 5px;
-            right: 5px;
-            text-align: right;
+
+        /* 工具栏 */
+        .toolbar {
+            position: absolute;
+            top: 50%;
+            left: 10px;
+            transform: translateY(-50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-        .bottom-left {
-            bottom: 5px;
-            left: 5px;
+
+        /* 工具按钮 */
+        .tool-button {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 6px;
+            background: #444;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            padding: 0;
         }
-        .bottom-right {
-            bottom: 5px;
-            right: 5px;
-            text-align: right;
+        .tool-button:hover {
+            background: #555;
+            transform: translateY(-1px);
+        }
+        .tool-button.active {
+            background: #007bff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .tool-button img {
+            width: 24px;
+            height: 24px;
+            filter: invert(1);
+            transition: transform 0.2s ease;
+        }
+        .tool-button:hover img {
+            transform: scale(1.1);
+        }
+
+        /* 分隔线 */
+        .divider {
+            height: 1px;
+            background: #666;
+            margin: 4px 0;
+        }
+
+        /* 加载指示器样式 */
+        #loadingIndicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            color: white;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 10px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: white;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <!-- 基础工具组 -->
+        <div class="tool-group">
+            <button class="tool-button active" data-tool="wwwc" title="窗宽窗位">
+                <img src="images/tools/window.svg" alt="窗宽窗位">
+            </button>
+            <button class="tool-button" data-tool="pan" title="平移">
+                <img src="images/tools/pan.svg" alt="平移">
+            </button>
+            <button class="tool-button" data-tool="zoom" title="缩放">
+                <img src="images/tools/zoom.svg" alt="缩放">
+            </button>
+        </div>
+        <div class="divider"></div>
+
+        <!-- 测量工具组 -->
+        <div class="tool-group">
+            <button class="tool-button" data-tool="length" title="测距">
+                <img src="images/tools/length.svg" alt="测距">
+            </button>
+            <button class="tool-button" data-tool="angle" title="角度">
+                <img src="images/tools/angle.svg" alt="角度">
+            </button>
+            <button class="tool-button" data-tool="rectangle" title="矩形">
+                <img src="images/tools/rectangle.svg" alt="矩形">
+            </button>
+            <button class="tool-button" data-tool="ellipse" title="椭圆">
+                <img src="images/tools/ellipse.svg" alt="椭圆">
+            </button>
+        </div>
+        <div class="divider"></div>
+
+        <!-- 功能按钮组 -->
+        <div class="tool-group">
+            <button class="tool-button" id="resetView" title="重置">
+                <img src="images/tools/reset.svg" alt="重置">
+            </button>
+            <button class="tool-button" id="clearAnnotations" title="清除标注">
+                <img src="images/tools/clear.svg" alt="清除标注">
+            </button>
+        </div>
+
+        <!-- 播放控制按钮组 -->
+        <div class="tool-group">
+            <button id="playButton" class="tool-button" title="播放/暂停">
+                <img src="images/tools/play.svg" alt="播放" width="20" height="20">
+            </button>
+        </div>
+    </div>
+
+    <!-- 主视图 -->
     <div class="viewport" id="viewer">
+        <!-- 角落信息 -->
         <div class="corner-info top-left" id="patientInfo"></div>
         <div class="corner-info top-right" id="studyInfo"></div>
         <div class="corner-info bottom-left" id="imageInfo"></div>
         <div class="corner-info bottom-right" id="windowInfo"></div>
     </div>
 
-    <!-- 只保留必要的库 -->
+    <!-- 核心库 -->
     <script src="lib/cornerstone/dicomParser.min.js"></script>
     <script src="lib/cornerstone/cornerstone.min.js"></script>
+    <script src="lib/cornerstone/cornerstoneMath.min.js"></script>
+    <script src="lib/cornerstone/hammer.min.js"></script>
+    <script src="lib/cornerstone/cornerstoneTools.min.js"></script>
     <script src="lib/cornerstone/cornerstoneWADOImageLoader.bundle.min.js"></script>
     <script src="lib/axios/axios.min.js"></script>
     
