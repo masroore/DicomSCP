@@ -447,6 +447,22 @@ function initializeViewer() {
         cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
         cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
         
+        // 先启用 element
+        cornerstone.enable(element);
+        
+        // 获取 canvas 并设置属性
+        const canvas = element.querySelector('canvas');
+        if (canvas) {
+            // 重新创建带有 willReadFrequently 的 context
+            canvas.width = canvas.width;  // 重置 canvas
+            const ctx = canvas.getContext('2d', { 
+                willReadFrequently: true,
+                preserveDrawingBuffer: true
+            });
+            // 保存 context 引用
+            canvas._cornerstone_context = ctx;
+        }
+        
         // 配置 WADO 图像加载器选项
         cornerstoneWADOImageLoader.configure({
             useWebWorkers: false,
@@ -459,9 +475,6 @@ function initializeViewer() {
         // 注册图像加载器
         cornerstone.registerImageLoader('wadouri', cornerstoneWADOImageLoader.wadouri.loadImage);
         cornerstone.registerImageLoader('wadors', cornerstoneWADOImageLoader.wadors.loadImage);
-
-        // 启用 element
-        cornerstone.enable(element);
 
         // 初始化工具
         initializeTools();
@@ -669,8 +682,20 @@ function handleZoomWheel(e) {
 
 // 分离图像切换逻辑
 function handleImageScroll(e) {
+    // 如果没有图像或只有一张图像，直接返回
+    if (!imageIds.length || imageIds.length === 1) return;
+
     const direction = e.deltaY < 0 ? -1 : 1;
-    displayImage(currentImageIndex + direction);
+    let nextIndex = currentImageIndex + direction;
+    
+    // 循环滚动
+    if (nextIndex < 0) {
+        nextIndex = imageIds.length - 1;
+    } else if (nextIndex >= imageIds.length) {
+        nextIndex = 0;
+    }
+    
+    displayImage(nextIndex);
 }
 
 // 激活工具
@@ -1052,7 +1077,7 @@ function handleImageLoaded(image, imageId) {
 // 优化显示图像函数
 async function displayImage(index) {
     if (index < 0 || index >= imageIds.length) {
-        Logger.log(Logger.levels.WARN, 'Invalid image index', { index });
+        // 不记录警告，因为已经在 handleImageScroll 中处理了边界情况
         return;
     }
     
