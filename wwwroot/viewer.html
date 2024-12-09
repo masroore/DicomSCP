@@ -45,6 +45,7 @@
             align-items: center;
             flex-shrink: 0;
             backdrop-filter: blur(8px);
+            z-index: 1000;
         }
 
         /* 视图容器 - 采用 flex 布局自动填充剩余空间 */
@@ -94,6 +95,37 @@
             gap: 6px;
             padding: 0 4px;
             position: relative;
+        }
+
+        /* 窗位预设按钮组 */
+        .presets-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .window-presets-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 5px;
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 1001;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            min-width: 120px;
+            white-space: nowrap;
+            backdrop-filter: blur(8px);
+            transform: translateX(-50%);
+            left: 50%;
+        }
+
+        .window-presets-menu.show {
+            display: flex;
         }
 
         /* 工具按钮 */
@@ -395,8 +427,8 @@
         }
 
         /* 工具提示 */
-        .tool-button::after {
-            content: attr(title);
+        .tool-button[data-tooltip]::after {
+            content: attr(data-tooltip);
             position: absolute;
             bottom: -30px;
             left: 50%;
@@ -410,12 +442,49 @@
             opacity: 0;
             visibility: hidden;
             transition: all 0.3s ease;
+            z-index: 10000;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
         }
 
-        .tool-button:hover::after {
+        .tool-button[data-tooltip]:hover::after {
             opacity: 1;
             visibility: visible;
             bottom: -35px;
+        }
+
+        /* 设按钮样式 */
+        .preset-button {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            border: none;
+            background: none;
+            color: white;
+            width: 100%;
+            text-align: left;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        .preset-button:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 预设分组样式 */
+        .preset-group {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 4px;
+            margin-bottom: 4px;
+        }
+
+        .preset-group:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+            margin-bottom: 0;
         }
     </style>
 </head>
@@ -425,30 +494,58 @@
         <div class="toolbar">
             <!-- 功能按钮组 -->
             <div class="tool-group">
-                <button class="tool-button" id="showDicomTags" title="DICOM Tags">
+                <button class="tool-button" id="showDicomTags" data-tooltip="DICOM Tags">
                     <img src="images/tools/tags.svg" alt="DICOM Tags">
                 </button>
-                <button class="tool-button" id="resetView" title="重置">
+                <button class="tool-button" id="resetView" data-tooltip="重置">
                     <img src="images/tools/reset.svg" alt="重置">
                 </button>
-                <button class="tool-button" id="clearAnnotations" title="清除标注">
+                <button class="tool-button" id="clearAnnotations" data-tooltip="清除标注">
                     <img src="images/tools/clear.svg" alt="清除标注">
-                </button>
-                <button class="tool-button" id="saveImage" title="保存图像">
-                    <img src="images/tools/save.svg" alt="保存图像">
                 </button>
             </div>
             <div class="divider"></div>
             
             <!-- 基础工具组 -->
             <div class="tool-group">
-                <button class="tool-button active" data-tool="Wwwc" title="窗宽窗位">
+                <button class="tool-button active" data-tool="Wwwc" data-tooltip="窗宽窗位">
                     <img src="images/tools/window.svg" alt="窗宽窗位">
                 </button>
-                <button class="tool-button" data-tool="Pan" title="平移">
+                <div class="presets-container">
+                    <button class="tool-button" id="windowPresets" data-tooltip="窗位预设">
+                        <img src="images/tools/presets.svg" alt="窗位预设">
+                    </button>
+                    <div class="window-presets-menu" id="windowPresetsMenu">
+                        <div class="preset-group">
+                            <button class="preset-button" data-preset="default">默认窗位</button>
+                            <button class="preset-button" data-preset="softTissue">软组织窗</button>
+                        </div>
+                        <div class="preset-group">
+                            <button class="preset-button" data-preset="brain">脑窗</button>
+                            <button class="preset-button" data-preset="brainSoft">脑软组织窗</button>
+                            <button class="preset-button" data-preset="stroke">卒中窗</button>
+                            <button class="preset-button" data-preset="subdural">硬膜下窗</button>
+                        </div>
+                        <div class="preset-group">
+                            <button class="preset-button" data-preset="lung">肺窗</button>
+                            <button class="preset-button" data-preset="mediastinum">纵隔窗</button>
+                            <button class="preset-button" data-preset="chest">胸窗</button>
+                        </div>
+                        <div class="preset-group">
+                            <button class="preset-button" data-preset="bone">骨窗</button>
+                            <button class="preset-button" data-preset="spine">脊柱窗</button>
+                            <button class="preset-button" data-preset="temporal">颞骨窗</button>
+                        </div>
+                        <div class="preset-group">
+                            <button class="preset-button" data-preset="liver">肝窗</button>
+                            <button class="preset-button" data-preset="angio">血管窗</button>
+                        </div>
+                    </div>
+                </div>
+                <button class="tool-button" data-tool="Pan" data-tooltip="平移">
                     <img src="images/tools/pan.svg" alt="平移">
                 </button>
-                <button class="tool-button" data-tool="Zoom" title="缩放">
+                <button class="tool-button" data-tool="Zoom" data-tooltip="缩放">
                     <img src="images/tools/zoom.svg" alt="缩放">
                 </button>
             </div>

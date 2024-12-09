@@ -3,6 +3,10 @@ console.log('viewer.js loaded');
 let currentImageIndex = 0;
 let imageIds = [];
 let currentTool = 'Wwwc';
+let isPlaying = false;
+let playInterval = null;
+let playbackSpeed = 200;
+
 const element = document.getElementById('viewer');
 console.log('viewer element:', element);
 
@@ -11,17 +15,7 @@ const studyUid = urlParams.get('studyUid');
 const seriesUid = urlParams.get('seriesUid');
 const baseUrl = window.location.origin;
 
-// 在文件开头添加播放控制相关变量
-let isPlaying = false;
-let playInterval = null;
-let playbackSpeed = 200; // 设置一个固定的合适速度（200ms 每帧）
-
-// 在文件开头添加加载状态变量
-let isLoading = false;
-
-// 添加常量配置
 const CONFIG = {
-    PLAYBACK_SPEED: 200,  // 播放速度(ms)
     ZOOM: {
         MIN_SCALE: 0.3,
         MAX_SCALE: 10,
@@ -397,6 +391,51 @@ const DicomTagsViewer = {
     }
 };
 
+// 窗位预设配置
+const WINDOW_PRESETS = {
+    default: { description: '默认', ww: null, wc: null },  // null 表示使用图像默认值
+    // CT 脑部窗位
+    brain: { description: '脑窗', ww: 80, wc: 40 },
+    brainSoft: { description: '脑软组织', ww: 120, wc: 35 },
+    subdural: { description: '硬膜下', ww: 350, wc: 90 },
+    stroke: { description: '卒中窗', ww: 40, wc: 40 },
+    
+    // CT 胸部窗位
+    lung: { description: '肺窗', ww: 1500, wc: -600 },
+    mediastinum: { description: '纵隔窗', ww: 350, wc: 50 },
+    chest: { description: '胸窗', ww: 400, wc: 40 },
+    
+    // CT 骨骼和软组织
+    bone: { description: '骨窗', ww: 2500, wc: 480 },
+    softTissue: { description: '软组织', ww: 400, wc: 40 },
+    liver: { description: '肝窗', ww: 150, wc: 30 },
+    
+    // 特殊窗位
+    angio: { description: '血管窗', ww: 600, wc: 300 },
+    spine: { description: '脊柱窗', ww: 300, wc: 40 },
+    temporal: { description: '颞骨窗', ww: 4000, wc: 700 }
+};
+
+// 添加传输语法名称转换函数
+function getTransferSyntaxName(transferSyntax) {
+    const syntaxMap = {
+        '1.2.840.10008.1.2': 'Implicit VR LE',
+        '1.2.840.10008.1.2.1': 'Explicit VR LE',
+        '1.2.840.10008.1.2.2': 'Explicit VR BE',
+        '1.2.840.10008.1.2.4.50': 'JPEG Baseline',
+        '1.2.840.10008.1.2.4.51': 'JPEG Extended',
+        '1.2.840.10008.1.2.4.57': 'JPEG Lossless',
+        '1.2.840.10008.1.2.4.70': 'JPEG Lossless First Order',
+        '1.2.840.10008.1.2.4.80': 'JPEG-LS Lossless',
+        '1.2.840.10008.1.2.4.81': 'JPEG-LS Near Lossless',
+        '1.2.840.10008.1.2.4.90': 'JPEG 2000 Lossless',
+        '1.2.840.10008.1.2.4.91': 'JPEG 2000',
+        '1.2.840.10008.1.2.5': 'RLE Lossless'
+    };
+    
+    return syntaxMap[transferSyntax] || transferSyntax;
+}
+
 // 初始化 Cornerstone
 function initializeViewer() {
     try {
@@ -433,6 +472,20 @@ function initializeViewer() {
         // 添加图像渲染事件监听
         cornerstone.events.addEventListener('cornerstoneimagerendered', onImageRendered);
 
+        // 添加窗宽窗位实时更新事件
+        element.addEventListener('cornerstoneimagerendered', function(e) {
+            const viewport = cornerstone.getViewport(element);
+            const image = cornerstone.getImage(element);
+            const transferSyntax = image.data.string('x00020010') || 'N/A';
+            const transferSyntaxName = getTransferSyntaxName(transferSyntax);
+            
+            document.getElementById('windowInfo').innerHTML = `
+                窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
+                窗位: ${Math.round(viewport.voi.windowCenter)}<br>
+                ${transferSyntaxName}
+            `;
+        });
+
         // 添加滚轮事件
         element.addEventListener('wheel', function(event) {
             if (!isPlaying) {
@@ -445,20 +498,21 @@ function initializeViewer() {
             }
         });
 
-        // 修改窗宽窗位事件监听
-        element.addEventListener('cornerstoneimagerendered', function(e) {
-            const viewport = cornerstone.getViewport(element);
-            const image = cornerstone.getImage(element);
-            
-            document.getElementById('windowInfo').innerHTML = `
-                窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
-                窗位: ${Math.round(viewport.voi.windowCenter)}
-            `;
-        });
-
         // 修改播放控制事件监听
         const playButton = document.getElementById('playButton');
-        playButton.addEventListener('click', togglePlay);
+        if (playButton) {
+            // 移除可能存在的旧事件监听器
+            const newPlayButton = playButton.cloneNode(true);
+            playButton.parentNode.replaceChild(newPlayButton, playButton);
+            
+            // 添加新的事件监听器
+            newPlayButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Play button clicked');
+                togglePlay();
+            });
+        }
 
         console.log('[Init] Viewer initialized successfully');
         
@@ -477,7 +531,7 @@ function initializeViewer() {
     }
 }
 
-// 修改初始化调用
+// 修始化
 document.addEventListener('DOMContentLoaded', () => {
     initializeViewer();
     loadImages();
@@ -486,6 +540,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // 优化初始化工具函数
 function initializeTools() {
     cornerstoneTools.init();
+
+    // 先停用所有工具
+    disableAllTools();
 
     // 注册所有工具
     Object.values(TOOL_MAP).forEach(tool => {
@@ -499,14 +556,30 @@ function initializeTools() {
         }
     });
 
-    // 配置缩放工具
-    cornerstoneTools.addTool(cornerstoneTools.ZoomTool, {
-        configuration: {
-            minScale: CONFIG.ZOOM.MIN_SCALE,
-            maxScale: CONFIG.ZOOM.MAX_SCALE,
-            preventZoomOutside: true
-        }
-    });
+    // 设置默认工具为调窗
+    currentTool = 'Wwwc';
+
+    // 初始化探针工具
+    try {
+        // 重新添加探针工具
+        cornerstoneTools.addTool(cornerstoneTools.ProbeTool, {
+            configuration: {
+                shadow: true,
+                drawHandles: true,
+                handleRadius: 2,
+                fontSize: 14,
+                textBox: true,
+                formatCallbackText: (data) => {
+                    if (!data || !data.currentPoints || !data.currentPoints.image) {
+                        return '';
+                    }
+                    return `HU: ${data.currentPoints.image.value}`;
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Failed to initialize probe tool:', error);
+    }
 
     // 配置工具样式
     cornerstoneTools.toolStyle.setToolWidth(2);
@@ -518,49 +591,42 @@ function initializeTools() {
     cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
     cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
 
+    // 确保调窗按钮被激活
+    const wwwcButton = document.querySelector('[data-tool="Wwwc"]');
+    if (wwwcButton) {
+        wwwcButton.classList.add('active');
+        // 移除其他按钮的激活状态
+        document.querySelectorAll('.tool-button').forEach(btn => {
+            if (btn !== wwwcButton) {
+                btn.classList.remove('active');
+            }
+        });
+    }
+
     // 初始化翻层工具
     cornerstoneTools.addTool(cornerstoneTools.StackScrollTool);
     cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 });
-
-    // 初始化探针工具
-    cornerstoneTools.addTool(cornerstoneTools.ProbeTool);
-    
-    // 工具按钮点击事件处理
-    const toolButtons = document.querySelectorAll('.tool-button[data-tool]');
-    toolButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            // 移除所有工具按钮的 active 类
-            toolButtons.forEach(btn => btn.classList.remove('active'));
-            // 为当前点击的按钮添加 active 类
-            button.classList.add('active');
-
-            // 获取工具名称
-            const tool = button.getAttribute('data-tool');
-
-            // 停用所有工具
-            disableAllTools();
-
-            // 根据工具类型激活相应的工具
-            switch (tool) {
-                case 'Stack':
-                    cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 });
-                    break;
-                case 'Probe':
-                    cornerstoneTools.setToolActive('Probe', { mouseButtonMask: 1 });
-                    break;
-                // ... 其他工具的 case
-            }
-        });
-    });
 
     setupToolEvents();
 }
 
 // 禁用所有工具
 function disableAllTools() {
-    cornerstoneTools.setToolDisabled('StackScroll');
-    cornerstoneTools.setToolDisabled('Probe');
-    // ... 禁用其他工具
+    const toolsToDisable = [
+        'StackScroll',
+        'Probe',
+        'Wwwc',
+        'Pan',
+        'Zoom',
+        'Length',
+        'Angle',
+        'RectangleRoi',
+        'EllipticalRoi'
+    ];
+
+    toolsToDisable.forEach(toolName => {
+        cornerstoneTools.setToolDisabled(toolName);
+    });
 }
 
 // 优化工具事件设置
@@ -595,7 +661,7 @@ function handleZoomWheel(e) {
     viewport.scale = Math.max(CONFIG.ZOOM.MIN_SCALE, 
                             Math.min(CONFIG.ZOOM.MAX_SCALE, viewport.scale));
     
-    // 添加平滑动
+    // 添加平滑
     requestAnimationFrame(() => {
         cornerstone.setViewport(element, viewport);
     });
@@ -614,62 +680,137 @@ function activateTool(toolName) {
 
     try {
         // 停用所有工具
-        Object.values(TOOL_MAP).forEach(t => {
-            cornerstoneTools.setToolPassive(t.name);
+        disableAllTools();
+
+        // 更新当前工具
+        currentTool = toolName;
+
+        // 更新按钮状态
+        document.querySelectorAll('.tool-button').forEach(btn => {
+            const btnToolName = btn.dataset.tool;
+            if (btnToolName === toolName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
         });
+
+        // 特殊处理调窗工具
+        if (toolName === 'Wwwc') {
+            cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+            return;
+        }
 
         // 激活选中的工具
         if (toolName === 'Zoom') {
-            // 缩放工具使用左键
             cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 1 });
-            // 保持平移可用（右键）
             cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
         } else if (toolName === 'Pan') {
-            // 平移工具使用左键
             cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 1 });
-            // 保持缩放可用（右键）
             cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 2 });
         } else {
-            // 其他工具使用左键
             cornerstoneTools.setToolActive(tool.name, { mouseButtonMask: 1 });
-            // 保持平移（右键）和缩放（中键）可用
             cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
             cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
         }
 
-        currentTool = tool.name;
         Logger.log(Logger.levels.INFO, `工具已激活: ${tool.label}`);
     } catch (error) {
         Logger.log(Logger.levels.ERROR, '激活工具失败:', error);
     }
 }
 
-// 设置工具栏
+// 修改工具栏设置函数
 function setupToolbar() {
+    // 先移除所有已有的件监听器
+    const toolButtons = document.querySelectorAll('.tool-button');
+    toolButtons.forEach(button => {
+        const newButton = button.cloneNode(true);
+        button.parentNode.replaceChild(newButton, button);
+    });
+
+    // 重新添加工按钮的点击事件
     document.querySelectorAll('.tool-button').forEach(button => {
         button.addEventListener('click', handleToolButtonClick);
     });
+
+    // 添加窗位预设菜单事件
+    const presetsButton = document.getElementById('windowPresets');
+    const presetsMenu = document.getElementById('windowPresetsMenu');
+    
+    if (presetsButton && presetsMenu) {
+        presetsButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // 关闭其他可能打开的菜单
+            document.querySelectorAll('.window-presets-menu').forEach(menu => {
+                if (menu !== presetsMenu) {
+                    menu.classList.remove('show');
+                }
+            });
+            
+            presetsMenu.classList.toggle('show');
+            
+            // 更新其他按钮状态
+            document.querySelectorAll('.tool-button').forEach(btn => {
+                if (btn !== presetsButton) {
+                    btn.classList.remove('active');
+                }
+            });
+            presetsButton.classList.toggle('active');
+        });
+        
+        // 击预设按钮
+        document.querySelectorAll('.preset-button').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleWindowPreset(e);
+                presetsMenu.classList.remove('show');
+                presetsButton.classList.remove('active');
+            });
+        });
+        
+        // 点击其他地方关闭菜单
+        document.addEventListener('click', function(e) {
+            if (!presetsMenu.contains(e.target) && !presetsButton.contains(e.target)) {
+                presetsMenu.classList.remove('show');
+                presetsButton.classList.remove('active');
+            }
+        });
+    }
 }
 
-// 工具按钮点击处理
+// 修改工具按钮点击处理函数
 function handleToolButtonClick(e) {
     e.preventDefault();
     e.stopPropagation();
 
+    // 处理特殊按钮
+    if (this.id) {
+        switch (this.id) {
+            case 'resetView':
+                resetView();
+                return;
+            case 'clearAnnotations':
+                clearAnnotations();
+                return;
+            case 'showDicomTags':
+                DicomTagsViewer.show();
+                return;
+            case 'playButton':
+                togglePlay();
+                return;
+        }
+    }
+
     const toolName = this.dataset.tool;
     if (!toolName) {
-        // 处理特殊按钮
-        if (this.id === 'resetView') {
-            resetView();
-        } else if (this.id === 'clearAnnotations') {
-            clearAnnotations();
-        } else if (this.id === 'showDicomTags') {
-            DicomTagsViewer.show();
-        }
         return;
     }
 
-    // 处理特殊工具
+    // 理特殊工具
     switch(toolName) {
         case 'flip-horizontal':
             flipImage('horizontal');
@@ -686,23 +827,55 @@ function handleToolButtonClick(e) {
         case 'invert':
             invertImage();
             return;
+        case 'Stack':
+            cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 });
+            activateToolButton(this);
+            return;
+        case 'Probe':
+            try {
+                // 先清除现有的探针标注
+                cornerstoneTools.clearToolState(element, 'Probe');
+                // 激活探针工具
+                cornerstoneTools.setToolActive('Probe', { mouseButtonMask: 1 });
+                // 保持平移和缩放可用
+                cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
+                cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
+                activateToolButton(this);
+                // 设置当前工具
+                currentTool = 'Probe';
+            } catch (error) {
+                console.error('Failed to activate probe tool:', error);
+            }
+            return;
     }
 
     // 处理常规工具
+    activateToolButton(this);
+    activateTool(toolName);
+}
+
+// 添加工具按钮激活函数
+function activateToolButton(button) {
     document.querySelectorAll('.tool-button').forEach(btn => {
         btn.classList.remove('active');
     });
-    this.classList.add('active');
-    activateTool(toolName);
+    button.classList.add('active');
 }
 
 // 清除标注
 function clearAnnotations() {
-    const toolList = ['Length', 'Angle', 'RectangleRoi', 'EllipticalRoi'];
+    const toolList = ['Length', 'Angle', 'RectangleRoi', 'EllipticalRoi', 'Probe'];
     toolList.forEach(toolType => {
         cornerstoneTools.clearToolState(element, toolType);
     });
     cornerstone.updateImage(element);
+    
+    // 如果当前工具是探针，重新初始化它
+    if (currentTool === 'Probe') {
+        cornerstoneTools.addTool(cornerstoneTools.ProbeTool);
+        cornerstoneTools.setToolActive('Probe', { mouseButtonMask: 1 });
+    }
+
     Logger.log(Logger.levels.INFO, '标注已清除');
 }
 
@@ -710,6 +883,7 @@ function clearAnnotations() {
 function onImageRendered(event) {
     const viewport = cornerstone.getViewport(event.target);
     const image = cornerstone.getImage(event.target);
+    
     updateCornerInfo(image, viewport);
 }
 
@@ -726,6 +900,10 @@ function updateCornerInfo(image, viewport) {
         modality: image.data.string('x00080060') || 'N/A',
         studyDate: formatDate(image.data.string('x00080020'))
     };
+
+    // 获取输语法并转换为可读格式
+    const transferSyntax = image.data.string('x00020010') || 'N/A';
+    const transferSyntaxName = getTransferSyntaxName(transferSyntax);
 
     // 更新界面显示
     document.getElementById('patientInfo').innerHTML = `
@@ -752,7 +930,7 @@ function updateCornerInfo(image, viewport) {
         currentFrame = parseInt(imageId.split('?frame=')[1]);
     }
 
-    // 如果是多帧图像，显示帧信息否则显示图像号
+    // 如果是多帧图像，显示帧信息否显示图像号
     document.getElementById('imageInfo').innerHTML = `
         序列号: ${seriesNumber}<br>
         ${numberOfFrames > 1 ? '帧号' : '图像号'}: ${numberOfFrames > 1 ? (currentFrame + 1) : instanceNumber}<br>
@@ -761,7 +939,8 @@ function updateCornerInfo(image, viewport) {
 
     document.getElementById('windowInfo').innerHTML = `
         窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
-        窗位: ${Math.round(viewport.voi.windowCenter)}
+        窗位: ${Math.round(viewport.voi.windowCenter)}<br>
+        ${transferSyntaxName}
     `;
 }
 
@@ -791,7 +970,7 @@ async function loadImages() {
         await loadAndDisplayFirstImage();
         LoadingManager.hideMainLoading();
         
-        // 后台载其他图像
+        // 后台载其图像
         loadRemainingImages();
         
     } catch (error) {
@@ -833,7 +1012,7 @@ async function loadRemainingImages() {
             }
         }
         
-        // 并行加载，但限制并发数
+        // 并行加载，限制并发数
         const CONCURRENT_LOADS = 3;
         for (let i = 0; i < loadPromises.length; i += CONCURRENT_LOADS) {
             await Promise.all(loadPromises.slice(i, i + CONCURRENT_LOADS));
@@ -858,16 +1037,7 @@ function handleImageLoaded(image, imageId) {
         imageIds.push(imageId);
     }
 
-    // 为探针工具添加事件监听
-    element.addEventListener('cornerstonetoolsmeasurementcompleted', function(e) {
-        if (e.detail.toolType === 'Probe') {
-            const data = e.detail.measurementData;
-            // 在这里可以处理探针测量的数据
-            console.log('探针值:', data.currentPoints.image);
-        }
-    });
-
-    // 如果是多帧图像，设置堆栈状态
+    // 如果是多帧图像，置堆栈状态
     if (imageIds.length > 1) {
         const stack = {
             currentImageIdIndex: 0,
@@ -920,6 +1090,7 @@ async function getOptimizedViewport(image) {
 
 // 修改播放控制函数
 function togglePlay() {
+    console.log('Toggle play clicked, current state:', isPlaying);
     if (isPlaying) {
         pausePlay();
     } else {
@@ -928,41 +1099,43 @@ function togglePlay() {
 }
 
 function startPlay() {
+    console.log('Starting play, imageIds length:', imageIds.length);
     if (!isPlaying && imageIds.length > 1) {
         isPlaying = true;
         const playButton = document.getElementById('playButton');
-        playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停" width="20" height="20">';
+        if (playButton) {
+            playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停" width="20" height="20">';
+        }
         
+        // 清除可能存在的旧定时器
+        if (playInterval) {
+            clearInterval(playInterval);
+        }
+
         playInterval = setInterval(() => {
             let nextIndex = currentImageIndex + 1;
             if (nextIndex >= imageIds.length) {
                 nextIndex = 0; // 循环播放
             }
+            console.log('Playing next image:', nextIndex);
             displayImage(nextIndex);
         }, playbackSpeed);
     }
 }
 
 function pausePlay() {
+    console.log('Pausing play');
     if (isPlaying) {
         isPlaying = false;
         const playButton = document.getElementById('playButton');
-        playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放" width="20" height="20">';
+        if (playButton) {
+            playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放" width="20" height="20">';
+        }
         
         if (playInterval) {
             clearInterval(playInterval);
             playInterval = null;
         }
-    }
-}
-
-// 修改播放功能相关的代码
-function playImages() {
-    if (isPlaying) {
-        currentImageIndex = (currentImageIndex + 1) % imageIds.length;
-        displayImage(currentImageIndex);
-        // 使用 CONFIG.PLAYBACK_SPEED 替代 playbackSpeed
-        setTimeout(playImages, CONFIG.PLAYBACK_SPEED);
     }
 }
 
@@ -989,7 +1162,7 @@ async function loadAndDisplayFirstImage() {
         imageIds = [];
         
         if (numberOfFrames > 1) {
-            // 如果是多帧图像，添加所有帧
+            // 如果是多帧图像，添加所有
             imageIds = Array.from(
                 { length: numberOfFrames }, 
                 (_, i) => `${imageId}?frame=${i}`
@@ -1004,6 +1177,13 @@ async function loadAndDisplayFirstImage() {
         // 立即显示第一张图像
         await displayImage(0);
         
+        // 确保调窗工具是激活状态
+        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+        const wwwcButton = document.querySelector('[data-tool="Wwwc"]');
+        if (wwwcButton) {
+            wwwcButton.classList.add('active');
+        }
+
         Logger.log(Logger.levels.INFO, 'First image loaded and displayed', {
             numberOfFrames,
             totalImages: imageIds.length
@@ -1065,22 +1245,46 @@ function invertImage() {
 // 重置视图
 function resetView() {
     try {
+        const element = document.getElementById('viewer');
+        const image = cornerstone.getImage(element);
+        // 获取图像的视口设置
+        const defaultViewport = cornerstone.getDefaultViewportForImage(element, image);
+        
+        // 获取当前视口并重置所有变换
         const viewport = cornerstone.getViewport(element);
-        viewport.scale = 1;
-        viewport.translation = { x: 0, y: 0 };
-        viewport.voi = cornerstone.getDefaultViewportForImage(element, cornerstone.getImage(element)).voi;
+        viewport.scale = defaultViewport.scale;
+        viewport.translation = defaultViewport.translation;
+        viewport.voi = defaultViewport.voi;
         viewport.rotation = 0;
         viewport.hflip = false;
         viewport.vflip = false;
         viewport.invert = false;
+        
+        // 应用重置后的视口
         cornerstone.setViewport(element, viewport);
+        
+        // 重置工具状态
+        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+        
+        // 更新所有按钮状态
+        document.querySelectorAll('.tool-button').forEach(btn => {
+            if (btn.dataset.tool === 'Wwwc') {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // 更新当前工具
+        currentTool = 'Wwwc';
+        
         Logger.log(Logger.levels.INFO, '视图已重置');
     } catch (error) {
         Logger.log(Logger.levels.ERROR, '重置视图失败', error);
     }
 }
 
-// 处理测量完成事件
+// 处理测量完成件
 function handleMeasurementCompleted(event) {
     if (event.detail.toolName === 'ZoomRegion') {
         const measurementData = event.detail.measurementData;
@@ -1108,7 +1312,7 @@ function handleMeasurementCompleted(event) {
         viewport.translation.x = (viewportWidth / 2 - imagePoint.x * scale);
         viewport.translation.y = (viewportHeight / 2 - imagePoint.y * scale);
         
-        // 应用新的视口设置
+        // 应用的视口设置
         cornerstone.setViewport(element, viewport);
         
         // 清除区域选择框
@@ -1158,76 +1362,60 @@ function updateImageInfo(image) {
     // ... 其他图像信息更新
 }
 
-// 添加保存功能
-function initializeSaveFunction() {
-    const saveButton = document.getElementById('saveImage');
-    saveButton.addEventListener('click', saveCurrentImage);
-}
-
-// 保存当前图像
-async function saveCurrentImage() {
-    try {
-        // 获取当前图像
-        const element = document.getElementById('viewer');
-        const enabledElement = cornerstone.getEnabledElement(element);
-        
-        if (!enabledElement || !enabledElement.image) {
-            throw new Error('No image to save');
-        }
-
-        // 创建一个新的 canvas
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-
-        // 设置 canvas 尺寸为当前视图的尺寸
-        canvas.width = element.offsetWidth;
-        canvas.height = element.offsetHeight;
-
-        // 将 cornerstone 元素渲染到 canvas
-        cornerstone.draw(canvas, enabledElement.image);
-
-        // 获取图像信息用于文件名
-        const image = cornerstone.getImage(element);
-        const imageId = image.imageId;
-        const instanceNumber = image.data.string('x00200013') || '';
-        const seriesNumber = image.data.string('x00200011') || '';
-        const studyDate = image.data.string('x00080020') || '';
-        
-        // 生成文件名
-        const fileName = `Image_S${seriesNumber}_I${instanceNumber}_${studyDate}.png`;
-
-        // 将 canvas 转换为 blob
-        canvas.toBlob((blob) => {
-            // 创建下载链接
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            
-            // 触发下载
-            document.body.appendChild(a);
-            a.click();
-            
-            // 清理
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 'image/png');
-
-        Logger.log(Logger.levels.INFO, '图像已保存', { fileName });
-    } catch (error) {
-        Logger.log(Logger.levels.ERROR, '保存图像失败', error);
-        alert('保存图像失败: ' + error.message);
-    }
-}
-
 // 在初始化函数中添加保存功能的初始化
 function initialize() {
-    // ... 其他初始化代码 ...
+    // ... 其他初始化码 ...
     initializeTools();
     initializeKeyboardControls();
-    initializeSaveFunction();
 }
 
 // 初始化并加载图像
 initializeViewer();
 loadImages();
+
+// 处理窗位预设
+function handleWindowPreset(e) {
+    const presetName = e.currentTarget.dataset.preset;
+    const preset = WINDOW_PRESETS[presetName];
+    
+    if (!preset) return;
+
+    const element = document.getElementById('viewer');
+    const viewport = cornerstone.getViewport(element);
+    const image = cornerstone.getImage(element);
+
+    if (preset.ww === null || preset.wc === null) {
+        // 使用图像默认值
+        viewport.voi.windowWidth = image.windowWidth || 400;
+        viewport.voi.windowCenter = image.windowCenter || 40;
+    } else {
+        viewport.voi.windowWidth = preset.ww;
+        viewport.voi.windowCenter = preset.wc;
+    }
+
+    cornerstone.setViewport(element, viewport);
+    
+    // 更新窗位信息显示
+    document.getElementById('windowInfo').innerHTML = `
+        窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
+        窗位: ${Math.round(viewport.voi.windowCenter)}<br>
+        预设: ${preset.description}
+    `;
+
+    // 激活调窗工具
+    cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+    document.querySelector('[data-tool="Wwwc"]').classList.add('active');
+}
+
+// 获取当前窗位对应的预设名称
+function getCurrentPresetName(viewport) {
+    const ww = Math.round(viewport.voi.windowWidth);
+    const wc = Math.round(viewport.voi.windowCenter);
+    
+    for (const [name, preset] of Object.entries(WINDOW_PRESETS)) {
+        if (preset.ww === ww && preset.wc === wc) {
+            return `<br>预设: ${preset.description}`;
+        }
+    }
+    return '';
+}
