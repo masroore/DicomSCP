@@ -85,7 +85,10 @@ function initAxiosInterceptors() {
         response => response,
         error => {
             if (error.response?.status === 401) {
-                window.location.href = '/login.html';
+                window.showToast('会话已过期，请重新登录', 'error');
+                setTimeout(() => {
+                    window.location.href = '/login.html';
+                }, 2000); // 2秒后重定向
             }
             return Promise.reject(error);
         }

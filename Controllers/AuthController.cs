@@ -13,6 +13,12 @@ public class AuthController : ControllerBase
 {
     private readonly DicomRepository _repository;
 
+    private static readonly HashSet<string> ExcludedPaths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "/api/dicom/status",  // 排除状态检查接口
+        // 可以添加其他需要排除的接口路径
+    };
+
     public AuthController(DicomRepository repository)
     {
         _repository = repository;
@@ -110,6 +116,13 @@ public class AuthController : ControllerBase
     {
         try
         {
+            // 检查当前请求路径是否在排除列表中
+            var requestPath = HttpContext.Request.Path.Value ?? "";
+            if (ExcludedPaths.Contains(requestPath))
+            {
+                return Ok(new { username = User.Identity?.Name });
+            }
+
             // 更新最后活动时间
             var identity = User.Identity as ClaimsIdentity;
             var lastActivityClaim = identity?.FindFirst("LastActivity");
@@ -143,7 +156,7 @@ public class AuthController : ControllerBase
                     Expires = DateTimeOffset.Now.AddMinutes(30)
                 });
             }
-
+            
             return Ok(new { username = User.Identity?.Name });
         }
         catch (Exception ex)
