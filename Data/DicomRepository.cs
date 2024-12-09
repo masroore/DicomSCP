@@ -660,6 +660,7 @@ public class DicomRepository : BaseRepository, IDisposable
 
     public List<WorklistItem> GetWorklistItems(
         string patientId,
+        string patientName,
         string accessionNumber,
         (string StartDate, string EndDate) dateRange,
         string modality,
@@ -672,6 +673,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 SELECT * FROM Worklist 
                 WHERE 1=1
                 AND (@PatientId = '' OR PatientId LIKE @PatientId)
+                AND (@PatientName = '' OR PatientName LIKE @PatientName)
                 AND (@AccessionNumber = '' OR AccessionNumber LIKE @AccessionNumber)
                 AND (@StartDate = '' OR @EndDate = '' OR 
                      substr(ScheduledDateTime, 1, 8) >= @StartDate AND 
@@ -684,6 +686,7 @@ public class DicomRepository : BaseRepository, IDisposable
             var parameters = new
             {
                 PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
+                PatientName = string.IsNullOrEmpty(patientName) ? "" : $"%{patientName}%",
                 AccessionNumber = string.IsNullOrEmpty(accessionNumber) ? "" : $"%{accessionNumber}%",
                 StartDate = dateRange.StartDate,
                 EndDate = dateRange.EndDate,
