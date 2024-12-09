@@ -161,13 +161,31 @@ public class PrintSCU : IPrintSCU
             return false;
         }
 
-        // 验证打印参数
-        if (!PrintConstants.PrintPriorities.Contains(request.PrintPriority))
+        // 标准化并验证打印优先级
+        switch (request.PrintPriority?.ToUpper()?.Trim() ?? "")
         {
-            DicomLogger.Error("PrintSCU", "无效的打印优先级: {Priority}", request.PrintPriority);
-            return false;
+            case "HIGH":
+            case "HI":
+            case "H":
+                request.PrintPriority = "HIGH";
+                break;
+            case "MEDIUM":
+            case "MED":
+            case "M":
+                request.PrintPriority = "MEDIUM";
+                break;
+            case "LOW":
+            case "LO":
+            case "L":
+                request.PrintPriority = "LOW";
+                break;
+            default:
+                DicomLogger.Error("PrintSCU", "无效的打印优先级: {Priority}", 
+                    request.PrintPriority ?? "NULL");
+                return false;
         }
 
+        // 验证打印参数
         if (!PrintConstants.MediumTypes.Contains(request.MediumType))
         {
             DicomLogger.Error("PrintSCU", "无效的类型: {MediumType}", request.MediumType);
@@ -201,7 +219,7 @@ public class PrintSCU : IPrintSCU
 
         if (!PrintConstants.Densities.Contains(request.BorderDensity))
         {
-            DicomLogger.Error("PrintSCU", "无效��边密度: {Density}", request.BorderDensity);
+            DicomLogger.Error("PrintSCU", "无效的边密度: {Density}", request.BorderDensity);
             return false;
         }
 
