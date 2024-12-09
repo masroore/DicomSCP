@@ -211,9 +211,10 @@ app.Use(async (context, next) =>
         "/lib/",
         "/css/",
         "/js/login.js",  // 只允许登录相关的js
-        "/favicon.ico"
+        "/favicon.ico",
+        "/images/"       // 添加 images 路径
     };
-
+    
     // 是否是公共资源
     var isPublicResource = publicPaths.Any(p => path?.StartsWith(p) == true);
     
