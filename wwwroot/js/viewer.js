@@ -19,6 +19,138 @@ let playbackSpeed = 200; // 设置一个固定的合适速度（200ms 每帧）
 // 在文件开头添加加载状态变量
 let isLoading = false;
 
+// 添加常量配置
+const CONFIG = {
+    PLAYBACK_SPEED: 200,  // 播放速度(ms)
+    ZOOM: {
+        MIN_SCALE: 0.3,
+        MAX_SCALE: 10,
+        STEP: 0.1
+    },
+    TOOL_COLORS: {
+        DEFAULT: 'rgb(255, 255, 0)',
+        ACTIVE: 'rgb(0, 255, 0)' 
+    }
+};
+
+// 优化工具映射
+const TOOL_MAP = {
+    wwwc: {
+        name: 'Wwwc',
+        label: '窗宽窗位'
+    },
+    pan: {
+        name: 'Pan',
+        label: '平移'
+    },
+    zoom: {
+        name: 'Zoom',
+        label: '缩放'
+    },
+    length: {
+        name: 'Length',
+        label: '测距'
+    },
+    angle: {
+        name: 'Angle',
+        label: '角度'
+    },
+    rectangle: {
+        name: 'RectangleRoi',
+        label: '矩形'
+    },
+    ellipse: {
+        name: 'EllipticalRoi',
+        label: '椭圆'
+    }
+};
+
+// 添加缓存和加载状态管理
+const imageCache = {
+    loaded: new Set(),  // 已加载的图像
+    loading: new Set(), // 正在加载的图像
+    instances: [],      // 所有实例信息
+    totalCount: 0       // 总图像数
+};
+
+// 优化错误处理和日志系统
+const Logger = {
+    levels: {
+        INFO: 'INFO',
+        WARN: 'WARN',
+        ERROR: 'ERROR'
+    },
+    
+    log(level, message, data = null) {
+        const timestamp = new Date().toISOString();
+        const logMessage = `[${timestamp}] [${level}] ${message}`;
+        
+        switch(level) {
+            case this.levels.ERROR:
+                console.error(logMessage, data);
+                break;
+            case this.levels.WARN:
+                console.warn(logMessage, data);
+                break;
+            default:
+                console.log(logMessage, data);
+        }
+    }
+};
+
+// 优化加载状态管理
+const LoadingManager = {
+    mainIndicator: null,
+    statusIndicator: null,
+    
+    showMainLoading() {
+        if (this.mainIndicator) return;
+        
+        this.mainIndicator = document.createElement('div');
+        this.mainIndicator.id = 'loadingIndicator';
+        this.mainIndicator.innerHTML = `
+            <div class="loading-spinner"></div>
+            <div class="loading-text">加载中...</div>
+        `;
+        document.getElementById('viewer').appendChild(this.mainIndicator);
+    },
+    
+    hideMainLoading() {
+        if (this.mainIndicator) {
+            this.mainIndicator.remove();
+            this.mainIndicator = null;
+        }
+    },
+    
+    showStatus(message) {
+        if (!this.statusIndicator) {
+            this.statusIndicator = document.createElement('div');
+            this.statusIndicator.id = 'loadingStatus';
+            this.statusIndicator.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: rgba(0, 0, 0, 0.7);
+                color: white;
+                padding: 5px 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                z-index: 1000;
+                transition: opacity 0.3s ease;
+            `;
+            document.getElementById('viewer').appendChild(this.statusIndicator);
+        }
+        this.statusIndicator.textContent = message;
+    },
+    
+    hideStatus() {
+        if (this.statusIndicator) {
+            this.statusIndicator.remove();
+            this.statusIndicator = null;
+        }
+    }
+};
+
 // 初始化 Cornerstone
 function initializeViewer() {
     try {
@@ -96,61 +228,78 @@ if (document.readyState === 'loading') {
     initializeViewer();
 }
 
-// 初始化工具
+// 优化初始化工具函数
 function initializeTools() {
     cornerstoneTools.init();
 
-    // 添加工具
-    cornerstoneTools.addTool(cornerstoneTools.WwwcTool);
-    cornerstoneTools.addTool(cornerstoneTools.PanTool);
+    // 注册所有工具
+    Object.values(TOOL_MAP).forEach(tool => {
+        const toolClass = cornerstoneTools[`${tool.name}Tool`];
+        if (toolClass) {
+            cornerstoneTools.addTool(toolClass);
+        }
+    });
+
+    // 配置缩放工具
     cornerstoneTools.addTool(cornerstoneTools.ZoomTool, {
         configuration: {
-            minScale: 0.3,
-            maxScale: 10,
+            minScale: CONFIG.ZOOM.MIN_SCALE,
+            maxScale: CONFIG.ZOOM.MAX_SCALE,
             preventZoomOutside: true
         }
     });
-    cornerstoneTools.addTool(cornerstoneTools.LengthTool);
-    cornerstoneTools.addTool(cornerstoneTools.AngleTool);
-    cornerstoneTools.addTool(cornerstoneTools.RectangleRoiTool);
-    cornerstoneTools.addTool(cornerstoneTools.EllipticalRoiTool);
 
-    // 设置默认工具
+    // 设置默认工具状态
     cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
     cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
     cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
 
     // 配置工具样式
     cornerstoneTools.toolStyle.setToolWidth(2);
-    cornerstoneTools.toolColors.setToolColor('rgb(255, 255, 0)');
-    cornerstoneTools.toolColors.setActiveColor('rgb(0, 255, 0)');
+    cornerstoneTools.toolColors.setToolColor(CONFIG.TOOL_COLORS.DEFAULT);
+    cornerstoneTools.toolColors.setActiveColor(CONFIG.TOOL_COLORS.ACTIVE);
 
+    setupToolEvents();
+}
+
+// 优化工具事件设置
+function setupToolEvents() {
     // 禁用右键菜单
-    element.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-    });
+    element.addEventListener('contextmenu', e => e.preventDefault());
 
-    // 添加滚轮事件
-    element.addEventListener('wheel', function(e) {
-        if (e.shiftKey) {  // Shift + 滚轮进行缩放
-            e.preventDefault();
-            const viewport = cornerstone.getViewport(element);
-            if (e.deltaY < 0) {
-                viewport.scale *= 1.1;
-            } else {
-                viewport.scale *= 0.9;
-            }
-            viewport.scale = Math.max(0.3, Math.min(10, viewport.scale));
-            cornerstone.setViewport(element, viewport);
-        } else {  // 普通滚轮切换图像
-            if (e.deltaY < 0) {
-                displayImage(currentImageIndex - 1);
-            } else {
-                displayImage(currentImageIndex + 1);
-            }
-            e.preventDefault();
-        }
-    });
+    // 优化滚轮事件
+    element.addEventListener('wheel', handleMouseWheel);
+}
+
+// 优化滚轮事件处理
+function handleMouseWheel(e) {
+    e.preventDefault();
+    
+    if (isPlaying) return; // 播放时不响应滚轮
+
+    if (e.shiftKey) {
+        handleZoomWheel(e);
+    } else {
+        handleImageScroll(e);
+    }
+}
+
+// 分离缩放逻辑
+function handleZoomWheel(e) {
+    const viewport = cornerstone.getViewport(element);
+    const zoomStep = e.deltaY < 0 ? (1 + CONFIG.ZOOM.STEP) : (1 - CONFIG.ZOOM.STEP);
+    
+    viewport.scale *= zoomStep;
+    viewport.scale = Math.max(CONFIG.ZOOM.MIN_SCALE, 
+                            Math.min(CONFIG.ZOOM.MAX_SCALE, viewport.scale));
+    
+    cornerstone.setViewport(element, viewport);
+}
+
+// 分离图像切换逻辑
+function handleImageScroll(e) {
+    const direction = e.deltaY < 0 ? -1 : 1;
+    displayImage(currentImageIndex + direction);
 }
 
 // 激活工具
@@ -250,16 +399,29 @@ function onImageRendered(event) {
 
 // 更新角落信息
 function updateCornerInfo(image, viewport) {
+    const patientInfo = {
+        name: image.data.string('x00100010') || 'N/A',
+        id: image.data.string('x00100020') || 'N/A',
+        gender: image.data.string('x00100040') || 'N/A'
+    };
+
+    const studyInfo = {
+        accessionNumber: image.data.string('x00080050') || 'N/A',
+        modality: image.data.string('x00080060') || 'N/A',
+        studyDate: formatDate(image.data.string('x00080020'))
+    };
+
+    // 更新界面显示
     document.getElementById('patientInfo').innerHTML = `
-        ${image.data.string('x00100010') || 'N/A'}<br>
-        ID: ${image.data.string('x00100020') || 'N/A'}<br>
-        性别: ${image.data.string('x00100040') || 'N/A'}
+        ${patientInfo.name}<br>
+        ID: ${patientInfo.id}<br>
+        性别: ${patientInfo.gender}
     `;
 
     document.getElementById('studyInfo').innerHTML = `
-        检查号: ${image.data.string('x00080050') || 'N/A'}<br>
-        检查类型: ${image.data.string('x00080060') || 'N/A'}<br>
-        检查时间: ${formatDate(image.data.string('x00080020'))}
+        检查号: ${studyInfo.accessionNumber}<br>
+        检查类型: ${studyInfo.modality}<br>
+        检查时间: ${studyInfo.studyDate}
     `;
 
     // 获取总帧数
@@ -293,103 +455,128 @@ function formatDate(dateStr) {
     return `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
 }
 
-// 修改加载图像的函数
+// 优化图像加载函数
 async function loadImages() {
     try {
-        showLoadingIndicator();
+        LoadingManager.showMainLoading();
         
+        // 获取实例列表
+        Logger.log(Logger.levels.INFO, 'Fetching instances', { studyUid, seriesUid });
         const response = await axios.get(`/api/images/${studyUid}/series/${seriesUid}/instances`);
-        const instances = response.data;
-
-        console.log('[Loading] Instances received:', instances);
         
-        imageIds = [];
-        for (const instance of instances) {
-            // 确保 imageId 格式正确
+        if (!response.data?.length) {
+            throw new Error('No instances found');
+        }
+
+        imageCache.instances = response.data;
+        imageCache.totalCount = response.data.length;
+        
+        // 加载第一张图像
+        await loadAndDisplayFirstImage();
+        LoadingManager.hideMainLoading();
+        
+        // 后台加载其他图像
+        loadRemainingImages();
+        
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, 'Failed to load images', error);
+        alert(error.response?.data?.message || error.message || '加载图像失败');
+        LoadingManager.hideMainLoading();
+    }
+}
+
+// 优化后台加载函数
+async function loadRemainingImages() {
+    try {
+        const loadPromises = [];
+        
+        for (let i = 1; i < imageCache.instances.length; i++) {
+            const instance = imageCache.instances[i];
             const imageId = `wadouri:${baseUrl}/api/images/download/${instance.sopInstanceUid}`;
-            console.log('[Loading] Loading image:', imageId); // 添加日志
             
-            try {
-                // 预加载图像以获取帧信息
-                const image = await cornerstone.loadAndCacheImage(imageId);
-                const numberOfFrames = image.data.intString('x00280008') || 1;
+            if (!imageCache.loaded.has(imageId) && !imageCache.loading.has(imageId)) {
+                imageCache.loading.add(imageId);
                 
-                if (numberOfFrames > 1) {
-                    for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
-                        imageIds.push(`${imageId}?frame=${frameIndex}`);
+                const loadPromise = (async () => {
+                    try {
+                        LoadingManager.showStatus(`加载中: ${i + 1}/${imageCache.totalCount}`);
+                        const image = await cornerstone.loadAndCacheImage(imageId);
+                        
+                        handleImageLoaded(image, imageId);
+                        imageCache.loaded.add(imageId);
+                        
+                    } catch (error) {
+                        Logger.log(Logger.levels.ERROR, `Failed to load image ${i + 1}`, error);
+                    } finally {
+                        imageCache.loading.delete(imageId);
                     }
-                } else {
-                    imageIds.push(imageId);
-                }
-            } catch (loadError) {
-                console.error('[Error] Failed to load image:', imageId, loadError);
+                })();
+                
+                loadPromises.push(loadPromise);
             }
         }
-
-        console.log('[Loading] Total frames:', imageIds.length);
-
-        if (imageIds.length > 0) {
-            await displayImage(0);
-        } else {
-            throw new Error('No valid images loaded');
+        
+        // 并行加载，但限制并发数
+        const CONCURRENT_LOADS = 3;
+        for (let i = 0; i < loadPromises.length; i += CONCURRENT_LOADS) {
+            await Promise.all(loadPromises.slice(i, i + CONCURRENT_LOADS));
         }
-    } catch (error) {
-        console.error('[Error] Failed to load images:', error);
-        console.error('加载图像失败');
+        
     } finally {
-        hideLoadingIndicator();
+        LoadingManager.hideStatus();
     }
 }
 
-// 添加显示/隐藏加载指示器的函数
-function showLoadingIndicator() {
-    isLoading = true;
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.id = 'loadingIndicator';
-    loadingIndicator.innerHTML = `
-        <div class="loading-spinner"></div>
-        <div class="loading-text">加载中...</div>
-    `;
-    document.getElementById('viewer').appendChild(loadingIndicator);
-}
-
-function hideLoadingIndicator() {
-    isLoading = false;
-    const loadingIndicator = document.getElementById('loadingIndicator');
-    if (loadingIndicator) {
-        loadingIndicator.remove();
+// 优化图像处理函数
+function handleImageLoaded(image, imageId) {
+    const numberOfFrames = image.data.intString('x00280008') || 1;
+    
+    if (numberOfFrames > 1) {
+        for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+            imageIds.push(`${imageId}?frame=${frameIndex}`);
+        }
+    } else {
+        imageIds.push(imageId);
     }
 }
 
-// 修改显示图像的函数
+// 优化显示图像函数
 async function displayImage(index) {
-    if (index < 0 || index >= imageIds.length) return;
+    if (index < 0 || index >= imageIds.length) {
+        Logger.log(Logger.levels.WARN, 'Invalid image index', { index });
+        return;
+    }
     
     try {
         const imageId = imageIds[index];
         const image = await cornerstone.loadAndCacheImage(imageId);
-        const viewport = cornerstone.getDefaultViewportForImage(element, image);
+        const viewport = await getOptimizedViewport(image);
         
-        // 保持当前的缩放和平移状态
-        const currentViewport = cornerstone.getViewport(element);
-        if (currentViewport) {
-            viewport.scale = currentViewport.scale;
-            viewport.translation = currentViewport.translation;
-            if (currentTool === 'Wwwc' && !isPlaying) {
-                viewport.voi.windowWidth = currentViewport.voi.windowWidth;
-                viewport.voi.windowCenter = currentViewport.voi.windowCenter;
-            }
-        }
-        
-        cornerstone.displayImage(element, image, viewport);
+        await cornerstone.displayImage(element, image, viewport);
         currentImageIndex = index;
-        
-        // 更新角落信息
         updateCornerInfo(image, viewport);
-
+        
     } catch (error) {
-        console.error('显示图像失败:', error);
+        Logger.log(Logger.levels.ERROR, 'Failed to display image', { error, index });
     }
+}
+
+// 优化视口获取
+async function getOptimizedViewport(image) {
+    const viewport = cornerstone.getDefaultViewportForImage(element, image);
+    const currentViewport = cornerstone.getViewport(element);
+    
+    if (currentViewport) {
+        Object.assign(viewport, {
+            scale: currentViewport.scale,
+            translation: currentViewport.translation,
+            voi: currentTool === 'Wwwc' && !isPlaying 
+                ? currentViewport.voi 
+                : viewport.voi
+        });
+    }
+    
+    return viewport;
 }
 
 // 修改播放控制函数
@@ -433,10 +620,63 @@ function pausePlay() {
 // 修改播放功能相关的代码
 function playImages() {
     if (isPlaying) {
-        currentImageIndex = (currentImageIndex + 1) % totalImages;
+        currentImageIndex = (currentImageIndex + 1) % imageIds.length;
         displayImage(currentImageIndex);
-        // 使用playbackSpeed控制播放速度
-        setTimeout(playImages, playbackSpeed);
+        // 使用 CONFIG.PLAYBACK_SPEED 替代 playbackSpeed
+        setTimeout(playImages, CONFIG.PLAYBACK_SPEED);
+    }
+}
+
+// 添加加载并显示第一张图像的函数
+async function loadAndDisplayFirstImage() {
+    try {
+        const firstInstance = imageCache.instances[0];
+        Logger.log(Logger.levels.INFO, 'Loading first instance', firstInstance);
+        
+        if (!firstInstance?.sopInstanceUid) {
+            throw new Error('Invalid first instance data');
+        }
+
+        const imageId = `wadouri:${baseUrl}/api/images/download/${firstInstance.sopInstanceUid}`;
+        Logger.log(Logger.levels.INFO, 'Loading first image', { imageId });
+        
+        // 加载第一张图像
+        const image = await cornerstone.loadAndCacheImage(imageId);
+        
+        // 处理多帧图像
+        const numberOfFrames = image.data.intString('x00280008') || 1;
+        
+        // 重置 imageIds 数组
+        imageIds = [];
+        
+        if (numberOfFrames > 1) {
+            // 如果是多帧图像，添加所有帧
+            imageIds = Array.from(
+                { length: numberOfFrames }, 
+                (_, i) => `${imageId}?frame=${i}`
+            );
+        } else {
+            imageIds = [imageId];
+        }
+        
+        // 标记为已加载
+        imageCache.loaded.add(imageId);
+        
+        // ��即显示第一张图像
+        await displayImage(0);
+        
+        Logger.log(Logger.levels.INFO, 'First image loaded and displayed', {
+            numberOfFrames,
+            totalImages: imageIds.length
+        });
+        
+        return true;
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, 'Failed to load first image', {
+            error,
+            stack: error.stack
+        });
+        throw error;
     }
 }
 
