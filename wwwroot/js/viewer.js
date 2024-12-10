@@ -1007,23 +1007,23 @@ function updateCornerInfo(image, viewport) {
         检查时间: ${studyInfo.studyDate}
     `;
 
-    // 获取总帧数
+    // 获取总帧数和实例号
     const numberOfFrames = image.data.intString('x00280008') || 1;
     const instanceNumber = image.data.string('x00200013') || 'N/A';
     const seriesNumber = image.data.string('x00200011') || 'N/A';
 
-    // 从 imageId 中获取当前帧号
-    let currentFrame = 0;
-    const imageId = image.imageId;
-    if (imageId.includes('?frame=')) {
-        currentFrame = parseInt(imageId.split('?frame=')[1]);
-    }
+    // 计算总图像数
+    const totalImages = imageCache.instances.reduce((total, instance) => {
+        // 获取每个实例的帧数
+        const frames = instance.numberOfFrames || 1;
+        return total + frames;
+    }, 0);
 
-    // 如果是多帧图像，显示帧信息否显示图像号
+    // 更新图像信息显示
     document.getElementById('imageInfo').innerHTML = `
         序列号: ${seriesNumber}<br>
-        ${numberOfFrames > 1 ? '帧号' : '图像号'}: ${numberOfFrames > 1 ? (currentFrame + 1) : instanceNumber}<br>
-        ${currentImageIndex + 1}/${imageIds.length}
+        ${numberOfFrames > 1 ? '帧号' : '图像号'}: ${numberOfFrames > 1 ? (currentImageIndex + 1) : instanceNumber}<br>
+        ${currentImageIndex + 1}/${totalImages}
     `;
 
     document.getElementById('windowInfo').innerHTML = `
@@ -1084,15 +1084,28 @@ async function loadRemainingImages() {
                 
                 const loadPromise = (async () => {
                     try {
-                        await cornerstone.loadAndCacheImage(imageId);
-                        loadedCount++;
+                        const image = await cornerstone.loadAndCacheImage(imageId);
                         
-                        // 实时更新加载进度
+                        // 获取并存储帧数信息
+                        const numberOfFrames = image.data.intString('x00280008') || 1;
+                        instance.numberOfFrames = numberOfFrames;
+
+                        // 处理多帧图像
+                        if (numberOfFrames > 1) {
+                            for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+                                imageIds.push(`${imageId}?frame=${frameIndex}`);
+                            }
+                        } else {
+                            imageIds.push(imageId);
+                        }
+
+                        loadedCount += numberOfFrames;
+                        
+                        // 更新加载进度
                         const percentage = Math.round((loadedCount / imageCache.totalCount) * 100);
                         LoadingManager.showStatus(`加载中: ${loadedCount}/${imageCache.totalCount} (${percentage}%)`);
                         
                         imageCache.loaded.add(imageId);
-                        handleImageLoaded(await cornerstone.loadImage(imageId), imageId);
                         
                     } catch (error) {
                         Logger.log(Logger.levels.ERROR, `Failed to load image ${i + 1}`, error);
@@ -1110,6 +1123,9 @@ async function loadRemainingImages() {
         for (let i = 0; i < loadPromises.length; i += CONCURRENT_LOADS) {
             await Promise.all(loadPromises.slice(i, i + CONCURRENT_LOADS));
         }
+        
+        // 更新播放按钮状态
+        updatePlayButtonState();
         
     } catch (error) {
         Logger.log(Logger.levels.ERROR, 'Failed to load remaining images', error);
@@ -1188,8 +1204,14 @@ async function getOptimizedViewport(image) {
 function togglePlay() {
     console.log('Toggle play clicked, current state:', isPlaying);
     
+    // 获取总图像数
+    const totalImages = imageCache.instances.reduce((total, instance) => {
+        const frames = instance.numberOfFrames || 1;
+        return total + frames;
+    }, 0);
+
     // 如果只有一张图片，直接返回
-    if (imageIds.length <= 1) {
+    if (totalImages <= 1) {
         Logger.log(Logger.levels.INFO, '只有一张图片，无法播放');
         return;
     }
@@ -1212,6 +1234,9 @@ function togglePlay() {
         startPlay();
         disableAllTools(); // 播放时禁用其他工具
     }
+    
+    // 更新播放按钮状态
+    updatePlayButtonState();
 }
 
 // 添加禁用工具函数
@@ -1320,14 +1345,26 @@ function pausePlay() {
 function updatePlayButtonState() {
     const playButton = document.getElementById('playButton');
     if (playButton) {
-        if (imageIds.length <= 1) {
+        // 计算总图像数
+        const totalImages = imageCache.instances.reduce((total, instance) => {
+            const frames = instance.numberOfFrames || 1;
+            return total + frames;
+        }, 0);
+
+        // 只有当总图像数大于1时才启用播放按钮
+        if (totalImages <= 1) {
             playButton.disabled = true;
             playButton.style.opacity = '0.5';
             playButton.style.cursor = 'not-allowed';
+            playButton.classList.remove('active');
         } else {
             playButton.disabled = false;
             playButton.style.opacity = '';
             playButton.style.cursor = 'pointer';
+            // 根据播放状态设置active类
+            if (isPlaying) {
+                playButton.classList.add('active');
+            }
         }
     }
 }
@@ -1341,6 +1378,12 @@ async function loadAndDisplayFirstImage() {
         if (!firstInstance?.sopInstanceUid) {
             throw new Error('Invalid first instance data');
         }
+
+        // 计算总图像数并更新缓存
+        imageCache.totalCount = imageCache.instances.reduce((total, instance) => {
+            const frames = instance.numberOfFrames || 1;
+            return total + frames;
+        }, 0);
 
         // 添加 transferSyntax=jpeg 参数到 URL
         const imageId = `wadouri:${baseUrl}/api/images/download/${firstInstance.sopInstanceUid}?transferSyntax=jpeg`;
@@ -1356,13 +1399,15 @@ async function loadAndDisplayFirstImage() {
         imageIds = [];
         
         if (numberOfFrames > 1) {
-            // 如果是多帧图像，添加所有
-            imageIds = Array.from(
-                { length: numberOfFrames }, 
-                (_, i) => `${imageId}?frame=${i}`
-            );
+            // 如果是多帧图像，添加所有帧
+            for (let i = 0; i < numberOfFrames; i++) {
+                imageIds.push(`${imageId}?frame=${i}`);
+            }
+            // 更新实例的帧数信息
+            firstInstance.numberOfFrames = numberOfFrames;
         } else {
             imageIds = [imageId];
+            firstInstance.numberOfFrames = 1;
         }
         
         // 标记为已加载
@@ -1370,7 +1415,9 @@ async function loadAndDisplayFirstImage() {
         
         // 立即显示第一张图像
         await displayImage(0);
-        updatePlayButtonState(); // 添加这行
+        
+        // 更新播放按钮状态 - 确保在计算完总图像数后调用
+        updatePlayButtonState();
         
         // 确保调窗工具是激活状态
         cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
