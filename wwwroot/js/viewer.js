@@ -248,11 +248,12 @@ const DicomTagsViewer = {
         for (let tag in dataset.elements) {
             const element = dataset.elements[tag];
             const tagInfo = this.getTagInfo(tag, element, dataset);
-            if (tagInfo) {
+            if (tagInfo && tagInfo.description) {
                 tags.push(tagInfo);
             }
         }
-        return tags.sort((a, b) => a.tag.localeCompare(b.tag));
+        
+        return this.sortTagsByGroup(tags);
     },
 
     getTagInfo(tag, element, dataset) {
@@ -298,100 +299,95 @@ const DicomTagsViewer = {
     getTagDescription(group, element) {
         // Common DICOM tag descriptions
         const commonTags = {
-            // Patient Information
-            '0010,0010': 'Patient Name',
-            '0010,0020': 'Patient ID',
-            '0010,0030': 'Patient Birth Date',
-            '0010,0040': 'Patient Sex',
-            '0010,1010': 'Patient Age',
-            '0010,1020': 'Patient Size',
-            '0010,1030': 'Patient Weight',
+            // Transfer Syntax (传输语法)
+            '0002,0010': 'Transfer Syntax UID (传输语法)',
+            
+            // Character Set (字符集)
+            '0008,0005': 'Specific Character Set (字符集)',
+            
+            // SOP Class (对象类型)
+            '0008,0016': 'SOP Class UID (对象类型)',
+            '0008,0018': 'SOP Instance UID (对象实例UID)',
+            
+            // UIDs (唯一标识)
+            '0020,000D': 'Study Instance UID (检查实例UID)',
+            '0020,000E': 'Series Instance UID (序列实例UID)',
+            '0020,0052': 'Frame of Reference UID (参考坐标系UID)',
 
-            // Study Information
-            '0008,0020': 'Study Date',
-            '0008,0021': 'Series Date',
-            '0008,0022': 'Acquisition Date',
-            '0008,0023': 'Image Date',
-            '0008,0030': 'Study Time',
-            '0008,0031': 'Series Time',
-            '0008,0032': 'Acquisition Time',
-            '0008,0033': 'Image Time',
-            '0008,0050': 'Accession Number',
-            '0008,0060': 'Modality',
-            '0008,0070': 'Manufacturer',
-            '0008,0080': 'Institution Name',
-            '0008,1030': 'Study Description',
-            '0008,103E': 'Series Description',
-            '0008,1090': 'Manufacturer Model',
+            // Patient Information (患者信息)
+            '0010,0010': 'Patient Name (患者姓名)',
+            '0010,0020': 'Patient ID (患者编号)',
+            '0010,0030': 'Patient Birth Date (出生日期)',
+            '0010,0040': 'Patient Sex (性别)',
+            '0010,1010': 'Patient Age (年龄)',
+            '0010,1020': 'Patient Size (身高)',
+            '0010,1030': 'Patient Weight (体重)',
 
-            // Series Information
-            '0020,0010': 'Study ID',
-            '0020,0011': 'Series Number',
-            '0020,0012': 'Acquisition Number',
-            '0020,0013': 'Instance Number',
-            '0020,0032': 'Image Position',
-            '0020,0037': 'Image Orientation',
-            '0020,1041': 'Slice Location',
+            // Study Information (检查信息)
+            '0008,0020': 'Study Date (检查日期)',
+            '0008,0030': 'Study Time (检查时间)',
+            '0008,0050': 'Accession Number (检查号)',
+            '0008,0060': 'Modality (检查类型)',
+            '0008,0070': 'Manufacturer (设备厂商)',
+            '0008,0080': 'Institution Name (机构名称)',
+            '0008,1030': 'Study Description (检查描述)',
+            '0008,103E': 'Series Description (序列描述)',
+            '0008,1090': 'Manufacturer Model (设备型号)',
 
-            // Image Information
-            '0028,0002': 'Samples per Pixel',
-            '0028,0004': 'Photometric Interpretation',
-            '0028,0008': 'Number of Frames',
-            '0028,0010': 'Rows',
-            '0028,0011': 'Columns',
-            '0028,0030': 'Pixel Spacing',
-            '0028,0100': 'Bits Allocated',
-            '0028,0101': 'Bits Stored',
-            '0028,1050': 'Window Center',
-            '0028,1051': 'Window Width',
+            // Series Information (序列信息)
+            '0020,0011': 'Series Number (序列号)',
+            '0020,0013': 'Instance Number (图像号)',
+            '0020,0032': 'Image Position (图像位置)',
+            '0020,0037': 'Image Orientation (图像方向)',
+            '0020,1041': 'Slice Location (层面位置)',
 
-            // CT Specific
-            '0018,0022': 'Scan Options',
-            '0018,0050': 'Slice Thickness',
-            '0018,0060': 'KVP',
-            '0018,1100': 'Reconstruction Diameter',
-            '0018,1120': 'Gantry/Detector Tilt',
-            '0018,1130': 'Table Height',
-            '0018,1150': 'Exposure Time',
-            '0018,1151': 'X-ray Tube Current',
-            '0018,1152': 'Exposure',
-            '0018,1160': 'Filter Type',
-            '0018,1210': 'Convolution Kernel',
+            // Image Information (图像信息)
+            '0028,0010': 'Rows (图像行数)',
+            '0028,0011': 'Columns (图像列数)',
+            '0028,0030': 'Pixel Spacing (像素间距)',
+            '0028,1050': 'Window Center (窗位)',
+            '0028,1051': 'Window Width (窗宽)',
 
-            // MR Specific
-            '0018,0020': 'Scanning Sequence',
-            '0018,0021': 'Sequence Variant',
-            '0018,0023': 'Acquisition Type',
-            '0018,0024': 'Sequence Name',
-            '0018,0080': 'Repetition Time',
-            '0018,0081': 'Echo Time',
-            '0018,0082': 'Inversion Time',
-            '0018,0083': 'Number of Averages',
-            '0018,0087': 'Magnetic Field Strength',
-            '0018,0088': 'Spacing Between Slices',
-            '0018,0089': 'Number of Phase Encoding Steps',
-            '0018,0091': 'Echo Train Length',
-            '0018,0095': 'Pixel Bandwidth',
+            // CT Specific (CT特有信息)
+            '0018,0050': 'Slice Thickness (层厚)',
+            '0018,0060': 'KVP (管电压)',
+            '0018,1210': 'Convolution Kernel (重建算法)',
 
-            // General Parameters
-            '0018,1000': 'Device Serial Number',
-            '0018,1020': 'Software Version',
-            '0018,1030': 'Protocol Name',
-            '0018,1040': 'Contrast/Bolus Agent',
-            '0018,1041': 'Contrast/Bolus Volume',
-            '0018,1046': 'Contrast Flow Rate',
-
-            // Other Important Information
-            '0032,1032': 'Requesting Physician',
-            '0032,1033': 'Requesting Service',
-            '0040,0002': 'Scheduled Procedure Step Start Date',
-            '0040,0003': 'Scheduled Procedure Step Start Time',
-            '0040,0009': 'Scheduled Procedure Step ID',
-            '0040,0010': 'Scheduled Station Name'
+            // MR Specific (MR特有信息)
+            '0018,0080': 'Repetition Time (重复时间)',
+            '0018,0081': 'Echo Time (回波时间)',
+            '0018,0087': 'Magnetic Field Strength (磁场强度)',
+            '0018,0088': 'Spacing Between Slices (层间距)',
+            '0018,1030': 'Protocol Name (扫描方案)'
         };
         
         const key = `${group},${element}`;
         return commonTags[key] || '';
+    },
+
+    // 修改标签分组排序方法
+    sortTagsByGroup(tags) {
+        const groupOrder = {
+            '传输语法和字符集': ['0002,0010', '0008,0005'],
+            '对象标识': ['0008,0016', '0008,0018', '0020,000D', '0020,000E', '0020,0052'],
+            '患者信息': ['0010,0010', '0010,0020', '0010,0030', '0010,0040', '0010,1010', '0010,1020', '0010,1030'],
+            '检查信息': ['0008,0020', '0008,0030', '0008,0050', '0008,0060', '0008,0070', '0008,0080', '0008,1030', '0008,103E', '0008,1090'],
+            '序列信息': ['0020,0011', '0020,0013', '0020,0032', '0020,0037', '0020,1041'],
+            '图像信息': ['0028,0010', '0028,0011', '0028,0030', '0028,1050', '0028,1051']
+        };
+
+        // 创建结果数组
+        const result = [];
+        
+        // 遍历每个组的标签，直接添加标签而不添加组标题
+        Object.values(groupOrder).flat().forEach(tagId => {
+            const tag = tags.find(t => t.tag === `(${tagId})`);
+            if (tag) {
+                result.push(tag);
+            }
+        });
+
+        return result;
     }
 };
 
