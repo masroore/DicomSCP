@@ -159,8 +159,12 @@ const LoadingManager = {
             `;
             document.getElementById('viewer').appendChild(this.statusIndicator);
         }
-        this.statusIndicator.textContent = message;
-        this.statusIndicator.style.opacity = '1';
+        
+        // 使用 requestAnimationFrame 确保状态更新更流畅
+        requestAnimationFrame(() => {
+            this.statusIndicator.textContent = message;
+            this.statusIndicator.style.opacity = '1';
+        });
     },
     
     hideStatus() {
@@ -1060,6 +1064,7 @@ async function loadImages() {
 async function loadRemainingImages() {
     try {
         const loadPromises = [];
+        let loadedCount = 1; // 从1开始，因为第一张已经加载
         
         for (let i = 1; i < imageCache.instances.length; i++) {
             const instance = imageCache.instances[i];
@@ -1070,12 +1075,15 @@ async function loadRemainingImages() {
                 
                 const loadPromise = (async () => {
                     try {
-                        const percentage = Math.round((i + 1) / imageCache.totalCount * 100);
-                        LoadingManager.showStatus(`加载中: ${i + 1}/${imageCache.totalCount} (${percentage}%)`);
-                        const image = await cornerstone.loadAndCacheImage(imageId);
+                        await cornerstone.loadAndCacheImage(imageId);
+                        loadedCount++;
                         
-                        handleImageLoaded(image, imageId);
+                        // 实时更新加载进度
+                        const percentage = Math.round((loadedCount / imageCache.totalCount) * 100);
+                        LoadingManager.showStatus(`加载中: ${loadedCount}/${imageCache.totalCount} (${percentage}%)`);
+                        
                         imageCache.loaded.add(imageId);
+                        handleImageLoaded(await cornerstone.loadImage(imageId), imageId);
                         
                     } catch (error) {
                         Logger.log(Logger.levels.ERROR, `Failed to load image ${i + 1}`, error);
@@ -1088,13 +1096,16 @@ async function loadRemainingImages() {
             }
         }
         
-        // 并行加载，限制并发数
+        // 并行加载，但限制并发数
         const CONCURRENT_LOADS = 3;
         for (let i = 0; i < loadPromises.length; i += CONCURRENT_LOADS) {
             await Promise.all(loadPromises.slice(i, i + CONCURRENT_LOADS));
         }
         
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, 'Failed to load remaining images', error);
     } finally {
+        // 确保在所有图像加载完成后隐藏状态
         if (imageCache.loaded.size === imageCache.totalCount) {
             LoadingManager.hideStatus();
         }
@@ -1167,6 +1178,12 @@ async function getOptimizedViewport(image) {
 // 修改播放控制函数
 function togglePlay() {
     console.log('Toggle play clicked, current state:', isPlaying);
+    
+    // 如果只有一张图片，直接返回
+    if (imageIds.length <= 1) {
+        Logger.log(Logger.levels.INFO, '只有一张图片，无法播放');
+        return;
+    }
     
     // 先处理所有工具按钮的状态
     document.querySelectorAll('.tool-button').forEach(btn => {
@@ -1244,13 +1261,17 @@ function enableAllTools() {
 }
 
 function startPlay() {
+    // 如果只有一张图片，直接返回
+    if (imageIds.length <= 1) {
+        return;
+    }
+    
     console.log('Starting play, imageIds length:', imageIds.length);
-    if (!isPlaying && imageIds.length > 1) {
+    if (!isPlaying) {
         isPlaying = true;
         const playButton = document.getElementById('playButton');
         if (playButton) {
             playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停" width="20" height="20">';
-            // 确保播放按钮保持激活状态
             playButton.classList.add('active');
         }
         
@@ -1276,8 +1297,7 @@ function pausePlay() {
         const playButton = document.getElementById('playButton');
         if (playButton) {
             playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放" width="20" height="20">';
-            // 暂停时也保持按钮激活状态
-            playButton.classList.add('active');
+            playButton.classList.remove('active'); // 暂停时移除激活状态
         }
         
         if (playInterval) {
@@ -1287,7 +1307,23 @@ function pausePlay() {
     }
 }
 
-// 添加加载并显示第一张图像的函数
+// 在图像加载完成后，如果只有一张图片，禁用播放按钮
+function updatePlayButtonState() {
+    const playButton = document.getElementById('playButton');
+    if (playButton) {
+        if (imageIds.length <= 1) {
+            playButton.disabled = true;
+            playButton.style.opacity = '0.5';
+            playButton.style.cursor = 'not-allowed';
+        } else {
+            playButton.disabled = false;
+            playButton.style.opacity = '';
+            playButton.style.cursor = 'pointer';
+        }
+    }
+}
+
+// 在加载图像后调用更新播放按钮状态
 async function loadAndDisplayFirstImage() {
     try {
         const firstInstance = imageCache.instances[0];
@@ -1324,6 +1360,7 @@ async function loadAndDisplayFirstImage() {
         
         // 立即显示第一张图像
         await displayImage(0);
+        updatePlayButtonState(); // 添加这行
         
         // 确保调窗工具是激活状态
         cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });

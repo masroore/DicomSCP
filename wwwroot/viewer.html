@@ -34,7 +34,6 @@
             padding: 6px 10px;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             min-height: 52px;
             position: relative;
             z-index: 1000;
@@ -131,9 +130,24 @@
             display: flex;
             gap: 4px;
             padding: 0 8px;
-            border-right: 1px solid rgba(255, 255, 255, 0.2);
             align-items: center;
             height: 40px;
+        }
+
+        /* 工具组之间的分隔线 */
+        .tool-group:not(:last-child)::after {
+            content: '';
+            height: 24px;
+            width: 1px;
+            margin: 0 4px;
+            background: linear-gradient(
+                to bottom,
+                transparent,
+                rgba(255, 255, 255, 0.15) 20%,
+                rgba(255, 255, 255, 0.15) 80%,
+                transparent
+            );
+            align-self: center;
         }
 
         /* 最后一个工具组不需要右边框 */
