@@ -442,6 +442,194 @@ function getTransferSyntaxName(transferSyntax) {
     return syntaxMap[transferSyntax] || transferSyntax;
 }
 
+// 修改计算最佳视口的函数
+function calculateOptimalViewport(element, image, defaultViewport) {
+    try {
+        // 获取图像的原始尺寸
+        const imageWidth = image.width;
+        const imageHeight = image.height;
+        
+        // 获取显示区域的尺寸
+        const viewportWidth = element.offsetWidth;
+        const viewportHeight = element.offsetHeight;
+        
+        // 计算合适的缩放比例
+        let fitScale;
+        if (image.rowPixelSpacing && image.columnPixelSpacing) {
+            // 如果有像素间距信息，使用它来计算实际的缩放比例
+            const widthScale = viewportWidth / (imageWidth * image.columnPixelSpacing);
+            const heightScale = viewportHeight / (imageHeight * image.rowPixelSpacing);
+            fitScale = Math.min(widthScale, heightScale);
+        } else {
+            // 如果没有像素间距信息，使用默认计算方式
+            const widthRatio = viewportWidth / imageWidth;
+            const heightRatio = viewportHeight / imageHeight;
+            fitScale = Math.min(widthRatio, heightRatio);
+        }
+
+        // 使用默认视口作为基础
+        const viewport = {
+            ...defaultViewport,
+            scale: fitScale * 0.95, // 留出5%的边距
+            pixelReplication: false
+        };
+
+        Logger.log(Logger.levels.INFO, 'Viewport calculated', {
+            imageSize: `${imageWidth}x${imageHeight}`,
+            viewportSize: `${viewportWidth}x${viewportHeight}`,
+            scale: viewport.scale
+        });
+
+        return viewport;
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, 'Failed to calculate optimal viewport', error);
+        return defaultViewport;
+    }
+}
+
+// 修改 displayImage 函数
+async function displayImage(index) {
+    if (index < 0 || index >= imageIds.length) {
+        return;
+    }
+    
+    try {
+        const imageId = imageIds[index];
+        const image = await cornerstone.loadAndCacheImage(imageId);
+        if (!image) {
+            throw new Error('Failed to load image');
+        }
+
+        // 获取视口设置
+        let viewport;
+        const currentViewport = cornerstone.getViewport(element);
+        const defaultViewport = cornerstone.getDefaultViewportForImage(element, image);
+
+        if (currentImageIndex === index && currentViewport) {
+            // 如果是同一张图片，保持当前视口设置，但更新VOI
+            viewport = {
+                ...currentViewport,
+                voi: defaultViewport.voi
+            };
+        } else {
+            // 如果是新图片或没有当前视口，计算新的视口设置
+            viewport = calculateOptimalViewport(element, image, defaultViewport);
+        }
+
+        // 确保视口设置有效
+        if (!viewport.scale) {
+            viewport.scale = 1.0;
+        }
+        if (!viewport.translation) {
+            viewport.translation = { x: 0, y: 0 };
+        }
+
+        // 应用视口设置并显示图像
+        await cornerstone.displayImage(element, image, viewport);
+        currentImageIndex = index;
+        
+        // 更新堆栈状态
+        const stack = {
+            currentImageIdIndex: index,
+            imageIds: imageIds
+        };
+        cornerstoneTools.clearToolState(element, 'stack');
+        cornerstoneTools.addToolState(element, 'stack', stack);
+        
+        // 更新角落信息
+        updateCornerInfo(image, viewport);
+
+        Logger.log(Logger.levels.INFO, 'Image displayed successfully', {
+            index,
+            imageId,
+            viewport: {
+                scale: viewport.scale,
+                translation: viewport.translation
+            }
+        });
+        
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, 'Failed to display image', {
+            error: error.message,
+            index,
+            stack: error.stack
+        });
+    }
+}
+
+// 修改 loadAndDisplayFirstImage 函数中的相部分
+async function loadAndDisplayFirstImage() {
+    try {
+        // ... 其他代码保持不变 ...
+        
+        // 显示第一张图像
+        const defaultViewport = cornerstone.getDefaultViewportForImage(element, image);
+        const viewport = calculateOptimalViewport(element, image, defaultViewport);
+        
+        await cornerstone.displayImage(element, image, viewport);
+        currentImageIndex = 0;
+        
+        // 更新堆栈状态
+        updateStackState();
+        
+        // 更新界面信息
+        updateCornerInfo(image, viewport);
+        
+        // ... 其他代码保持不变 ...
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, 'Failed to load first image', error);
+        throw error;
+    }
+}
+
+// 修改 resetView 函数
+function resetView() {
+    try {
+        const element = document.getElementById('viewer');
+        const image = cornerstone.getImage(element);
+        if (!image) {
+            Logger.log(Logger.levels.WARN, '重置视图失败: 未找到图像');
+            return;
+        }
+
+        // 获取默认视口设置并计算最佳视口
+        const defaultViewport = cornerstone.getDefaultViewportForImage(element, image);
+        const viewport = calculateOptimalViewport(element, image, defaultViewport);
+        
+        // 应用视口设置
+        cornerstone.setViewport(element, viewport);
+        cornerstone.updateImage(element);
+        
+        // 重置工具状态
+        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+        
+        // 更新按钮状态
+        document.querySelectorAll('.tool-button').forEach(btn => {
+            if (btn.dataset.tool === 'Wwwc') {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // 更新当前工具
+        currentTool = 'Wwwc';
+        
+        // 更新堆栈状态
+        updateStackState();
+        
+        Logger.log(Logger.levels.INFO, '视图已重置', {
+            scale: viewport.scale,
+            translation: viewport.translation,
+            imageSize: `${image.width}x${image.height}`,
+            viewportSize: `${element.offsetWidth}x${element.offsetHeight}`,
+            pixelSpacing: `${image.rowPixelSpacing}x${image.columnPixelSpacing}`
+        });
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, '重置视图失败', error);
+    }
+}
+
 // 初始化 Cornerstone
 function initializeViewer() {
     try {
@@ -1242,38 +1430,65 @@ async function displayImage(index) {
     try {
         const imageId = imageIds[index];
         const image = await cornerstone.loadAndCacheImage(imageId);
-        const viewport = await getOptimizedViewport(image);
-        
+        if (!image) {
+            throw new Error('Failed to load image');
+        }
+
+        // 获取视口设置
+        let viewport;
+        const currentViewport = cornerstone.getViewport(element);
+        const defaultViewport = cornerstone.getDefaultViewportForImage(element, image);
+
+        if (currentImageIndex === index && currentViewport) {
+            // 如果是同一张图片，保持当前视口设置，但更新VOI
+            viewport = {
+                ...currentViewport,
+                voi: defaultViewport.voi
+            };
+        } else {
+            // 如果是新图片或没有当前视口，计算新的视口设置
+            viewport = calculateOptimalViewport(element, image, defaultViewport);
+        }
+
+        // 确保视口设置有效
+        if (!viewport.scale) {
+            viewport.scale = 1.0;
+        }
+        if (!viewport.translation) {
+            viewport.translation = { x: 0, y: 0 };
+        }
+
+        // 应用视口设置并显示图像
         await cornerstone.displayImage(element, image, viewport);
         currentImageIndex = index;
         
         // 更新堆栈状态
-        updateStackState();
+        const stack = {
+            currentImageIdIndex: index,
+            imageIds: imageIds
+        };
+        cornerstoneTools.clearToolState(element, 'stack');
+        cornerstoneTools.addToolState(element, 'stack', stack);
         
         // 更新角落信息
         updateCornerInfo(image, viewport);
+
+        Logger.log(Logger.levels.INFO, 'Image displayed successfully', {
+            index,
+            imageId,
+            viewport: {
+                scale: viewport.scale,
+                translation: viewport.translation
+            }
+        });
         
     } catch (error) {
-        Logger.log(Logger.levels.ERROR, 'Failed to display image', { error, index });
-    }
-}
-
-// 优化视口获取
-async function getOptimizedViewport(image) {
-    const viewport = cornerstone.getDefaultViewportForImage(element, image);
-    const currentViewport = cornerstone.getViewport(element);
-    
-    if (currentViewport) {
-        Object.assign(viewport, {
-            scale: currentViewport.scale,
-            translation: currentViewport.translation,
-            voi: currentTool === 'Wwwc' && !isPlaying 
-                ? currentViewport.voi 
-                : viewport.voi
+        Logger.log(Logger.levels.ERROR, 'Failed to display image', {
+            error: error.message,
+            index,
+            stack: error.stack
         });
     }
-    
-    return viewport;
 }
 
 // 修改播放控制函数
@@ -1560,48 +1775,6 @@ function invertImage() {
         Logger.log(Logger.levels.INFO, '图像反相');
     } catch (error) {
         Logger.log(Logger.levels.ERROR, '反相失败', error);
-    }
-}
-
-// 重置视图
-function resetView() {
-    try {
-        const element = document.getElementById('viewer');
-        const image = cornerstone.getImage(element);
-        // 获取图像的视口设置
-        const defaultViewport = cornerstone.getDefaultViewportForImage(element, image);
-        
-        // 获取当前视口并重置所有变换
-        const viewport = cornerstone.getViewport(element);
-        viewport.scale = defaultViewport.scale;
-        viewport.translation = defaultViewport.translation;
-        viewport.voi = defaultViewport.voi;
-        viewport.rotation = 0;
-        viewport.hflip = false;
-        viewport.vflip = false;
-        viewport.invert = false;
-        
-        // 应用重置后的视口
-        cornerstone.setViewport(element, viewport);
-        
-        // 重置工具状态
-        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
-        
-        // 更新所有按钮状态
-        document.querySelectorAll('.tool-button').forEach(btn => {
-            if (btn.dataset.tool === 'Wwwc') {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-        
-        // 更新当前工具
-        currentTool = 'Wwwc';
-        
-        Logger.log(Logger.levels.INFO, '视图已重置');
-    } catch (error) {
-        Logger.log(Logger.levels.ERROR, '重置视图失败', error);
     }
 }
 
