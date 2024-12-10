@@ -730,11 +730,6 @@ function handleMouseWheel(e) {
             // 使用 requestAnimationFrame 优化性能
             requestAnimationFrame(() => {
                 displayImage(nextIndex);
-                // 更新堆栈状态和图像信息
-                const updatedImage = cornerstone.getImage(element);
-                const viewport = cornerstone.getViewport(element);
-                updateStackState();
-                updateCornerInfo(updatedImage, viewport);
             });
         } else {
             handleImageScroll(e);
@@ -1236,15 +1231,6 @@ function updateStackState() {
     
     cornerstoneTools.clearToolState(element, 'stack');
     cornerstoneTools.addToolState(element, 'stack', stack);
-    
-    // 获取当前图像和视口
-    const image = cornerstone.getImage(element);
-    const viewport = cornerstone.getViewport(element);
-    
-    // 更新角落信息
-    if (image && viewport) {
-        updateCornerInfo(image, viewport);
-    }
 }
 
 // 修改 displayImage 函数，确保在切换图像时更新堆栈状态
