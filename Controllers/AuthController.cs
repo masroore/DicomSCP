@@ -13,12 +13,6 @@ public class AuthController : ControllerBase
 {
     private readonly DicomRepository _repository;
 
-    private static readonly HashSet<string> ExcludedPaths = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "/api/dicom/status",  // 排除状态检查接口
-        // 可以添加其他需要排除的接口路径
-    };
-
     public AuthController(DicomRepository repository)
     {
         _repository = repository;
@@ -45,7 +39,8 @@ public class AuthController : ControllerBase
             new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.Now.AddMinutes(30)
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3),
+                IssuedUtc = DateTimeOffset.UtcNow
             });
 
         return Ok();
@@ -116,11 +111,12 @@ public class AuthController : ControllerBase
     {
         try
         {
-            // 检查当前请求路径是否在排除列表中
-            var requestPath = HttpContext.Request.Path.Value ?? "";
-            if (ExcludedPaths.Contains(requestPath))
+            // 检查认证票据是否过期
+            var authenticateResult = await HttpContext.AuthenticateAsync("CustomAuth");
+            if (!authenticateResult.Succeeded || authenticateResult.Properties?.ExpiresUtc <= DateTimeOffset.UtcNow)
             {
-                return Ok(new { username = User.Identity?.Name });
+                await HttpContext.SignOutAsync("CustomAuth");
+                return Unauthorized("会话已过期");
             }
 
             // 更新最后活动时间
@@ -136,9 +132,9 @@ public class AuthController : ControllerBase
                 var authProperties = new AuthenticationProperties
                 {
                     IsPersistent = true,
-                    ExpiresUtc = DateTimeOffset.Now.AddMinutes(30),
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3),
                     AllowRefresh = true,
-                    IssuedUtc = DateTimeOffset.Now,
+                    IssuedUtc = DateTimeOffset.UtcNow
                 };
 
                 // 重新签发认证票据
@@ -153,7 +149,7 @@ public class AuthController : ControllerBase
                     SameSite = SameSiteMode.Lax,
                     Path = "/",
                     Secure = Request.IsHttps,
-                    Expires = DateTimeOffset.Now.AddMinutes(30)
+                    Expires = DateTimeOffset.UtcNow.AddMinutes(3)
                 });
             }
             

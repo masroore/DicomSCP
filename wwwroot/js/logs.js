@@ -5,12 +5,16 @@ class LogManager {
         this.currentPage = 1;
         this.allFiles = [];
         this.isLoading = false;
-        this.init();
     }
 
     async init() {
-        await this.loadLogTypes();
-        this.bindEvents();
+        try {
+            await this.loadLogTypes();
+            this.bindEvents();
+        } catch (error) {
+            console.error('初始化日志管理器失败:', error);
+            window.showToast('初始化失败', 'error');
+        }
     }
 
     async loadLogTypes() {
@@ -361,4 +365,9 @@ class LogManager {
             this.updatePagination();
         }
     }
-} 
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 移除这里的初始化，由 main.js 控制
+    // window.logManager = new LogManager();
+}); 

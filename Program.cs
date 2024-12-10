@@ -13,6 +13,7 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -127,12 +128,14 @@ builder.Services.AddAuthentication("CustomAuth")
     {
         options.Cookie.Name = "auth";
         options.LoginPath = "/login.html";
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(3);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.Path = "/";
+        
+        // 添加验证票据过期处理
         options.Events = new CookieAuthenticationEvents
         {
             OnRedirectToLogin = context =>
@@ -143,6 +146,41 @@ builder.Services.AddAuthentication("CustomAuth")
                     return Task.CompletedTask;
                 }
                 context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            },
+            // 修改验证处理
+            OnValidatePrincipal = async context =>
+            {
+                // 检查是否已过期
+                if (context.Properties?.ExpiresUtc <= DateTimeOffset.UtcNow)
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync("CustomAuth");
+                }
+                // 每次请求都更新过期时间
+                else if (context.Properties != null)
+                {
+                    context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3);
+                    // 重新签发认证票据
+                    await context.HttpContext.SignInAsync(
+                        "CustomAuth",
+                        context.Principal,
+                        context.Properties);
+                }
+            },
+            // 添加滑动过期处理
+            OnCheckSlidingExpiration = context =>
+            {
+                // 如果是 status 接口，不进行滑动续期
+                if (context.Request.Path.StartsWithSegments("/api/dicom/status"))
+                {
+                    context.ShouldRenew = false;
+                }
+                else
+                {
+                    // 对其他请求进行滑动续期
+                    context.ShouldRenew = true;
+                }
                 return Task.CompletedTask;
             }
         };
@@ -210,7 +248,8 @@ app.Use(async (context, next) =>
         path?.StartsWith("/css/") == true ||
         path?.StartsWith("/js/login.js") == true ||
         path?.StartsWith("/images/") == true ||
-        path?.StartsWith("/favicon.ico") == true)
+        path?.StartsWith("/favicon.ico") == true ||
+        path?.StartsWith("/api/dicom/status") == true)  // 添加 status 接口到白名单
     {
         await next();
         return;
@@ -238,7 +277,7 @@ app.UseDefaultFiles(new DefaultFilesOptions
 });
 app.UseStaticFiles();
 
-// 确保控制器路由在认证后
+// 确保控制路由在认证后
 app.MapControllers();
 
 // 处理根路径

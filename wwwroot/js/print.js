@@ -1,6 +1,5 @@
 class PrintManager {
     constructor() {
-        this.initAxiosInterceptors();
         this.currentPage = 1;
         this.pageSize = 10;
         this.totalPages = 0;
@@ -26,15 +25,6 @@ class PrintManager {
             console.error('初始化打印管理器失败:', error);
             window.showToast(error.message, 'error');
         }
-    }
-
-    initAxiosInterceptors() {
-        axios.interceptors.response.use(
-            response => response,
-            error => {
-                return Promise.reject(error);
-            }
-        );
     }
 
     initializeEvents() {
@@ -106,16 +96,7 @@ class PrintManager {
                 pageSize: this.pageSize
             };
 
-            // 构建查询参数
-            const queryParams = new URLSearchParams();
-            if (searchParams.callingAE) queryParams.append('callingAE', searchParams.callingAE);
-            if (searchParams.studyUID) queryParams.append('studyUID', searchParams.studyUID);
-            if (searchParams.status) queryParams.append('status', searchParams.status);
-            if (searchParams.date) queryParams.append('date', searchParams.date);
-            queryParams.append('page', searchParams.page);
-            queryParams.append('pageSize', searchParams.pageSize);
-
-            const response = await axios.get(`/api/print?${queryParams}`);
+            const response = await axios.get('/api/print', { params: searchParams });
             const data = response.data;
 
             if (!data.items || data.items.length === 0) {
@@ -343,38 +324,35 @@ class PrintManager {
                         <div id="imageLoading" class="spinner-border text-primary position-absolute top-50 start-50" role="status">
                             <span class="visually-hidden">加载中...</span>
                         </div>
-                        <img id="previewImage" 
-                            style="max-width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.3s;" 
-                            alt="预览图像"
-                        />
+                        <div id="previewContainer" style="height: 100%;"></div>
                     </div>
                 `,
-                onShow: () => {
-                    const img = document.getElementById('previewImage');
+                onShow: async () => {
+                    const container = document.getElementById('previewContainer');
                     const loading = document.getElementById('imageLoading');
 
-                    // 重置图像
-                    img.style.opacity = '0';
-                    loading.style.display = 'block';
-
-                    // 设置图像源
-                    img.src = `/api/print/${jobId}/image?width=1200`;  // 增加图像宽度
-
-                    // 图像加载完成后隐藏加载提示
-                    img.onload = () => {
+                    try {
+                        // 使用 axios 获取图像数据
+                        const response = await axios.get(`/api/print/${jobId}/image?width=1200`, {
+                            responseType: 'blob'
+                        });
+                        
+                        const imageUrl = URL.createObjectURL(response.data);
+                        container.innerHTML = `
+                            <img src="${imageUrl}" 
+                                style="max-width: 100%; height: 100%; object-fit: contain;" 
+                                alt="预览图像"
+                            />
+                        `;
                         loading.style.display = 'none';
-                        img.style.opacity = '1';
-                    };
-
-                    // 图像加载失败处理
-                    img.onerror = () => {
+                    } catch (error) {
                         loading.style.display = 'none';
                         window.showToast('图像加载失败', 'error');
-                    };
+                    }
                 },
-                showFooter: false,  // 不显示底部按钮
-                size: 'xl',  // 使用超大对话框
-                fullHeight: true  // 使用全高度
+                showFooter: false,
+                size: 'xl',
+                fullHeight: true
             });
         } catch (error) {
             console.error('预览图像失败:', error);
@@ -385,11 +363,8 @@ class PrintManager {
     // 显示任务详情
     async showDetails(jobId) {
         try {
-            const response = await fetch(`/api/print/${jobId}`);
-            if (!response.ok) {
-                throw new Error('获取任务详情失败');
-            }
-            const data = await response.json();
+            const response = await axios.get(`/api/print/${jobId}`);
+            const data = response.data;
 
             return showDialog({
                 title: '任务详情',
@@ -402,9 +377,9 @@ class PrintManager {
                         </table>
                     </div>
                 `,
-                showFooter: false,  // 不显示底部按钮
-                size: 'lg',  // 使用大对话框
-                fullHeight: true  // 使用全高度
+                showFooter: false,
+                size: 'lg',
+                fullHeight: true
             });
         } catch (error) {
             console.error('获取任务详情失败:', error);
@@ -534,12 +509,8 @@ class PrintManager {
     // 加载打印机列表
     async loadPrinters() {
         try {
-            const response = await fetch('/api/PrintScu/printers');
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || '获取打印机列表失败');
-            }
-            this.printers = await response.json();
+            const response = await axios.get('/api/PrintScu/printers');
+            this.printers = response.data;
         } catch (error) {
             console.error('加载打印机列表失败:', error);
             window.showToast('加载打印机列表失败', 'error');

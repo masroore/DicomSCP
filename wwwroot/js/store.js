@@ -3,19 +3,8 @@ let selectedFiles = new Map();
 // 存储选中的节点
 let selectedStoreNode = null;
 
-// 添加 axios 拦截器初始化
-function initAxiosInterceptors() {
-    axios.interceptors.response.use(
-        response => response,
-        error => {
-            return Promise.reject(error);
-        }
-    );
-}
-
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    initAxiosInterceptors();
     initDropZone();
     initFileInputs();
     loadStoreNodes();

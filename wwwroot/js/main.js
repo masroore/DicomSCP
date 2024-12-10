@@ -78,17 +78,19 @@ window.showToast = function(message, type = 'success') {
 };
 
 // ================ 初始化函数 ================
-// 初始化 axios 拦截器
+// 全局 axios 拦截器
+initAxiosInterceptors();  // 确保这个在最开始就执行
+
 function initAxiosInterceptors() {
-    // 响应拦截器
     axios.interceptors.response.use(
         response => response,
         error => {
+            console.log('Axios Error:', error.response?.status);
             if (error.response?.status === 401) {
+                console.log('Caught 401 error, redirecting to login...');
                 window.showToast('会话已过期，请重新登录', 'error');
-                setTimeout(() => {
-                    window.location.href = '/login.html';
-                }, 2000); // 2秒后重定向
+                window.location.href = '/login.html';
+                return Promise.reject(error);
             }
             return Promise.reject(error);
         }
@@ -97,9 +99,6 @@ function initAxiosInterceptors() {
 
 // 页面加载完成后执行
 $(document).ready(function() {
-    // 初始化 axios 拦截器
-    initAxiosInterceptors();
-    
     // 根据URL hash切换到对应页面
     const currentTab = window.location.hash.slice(1) || defaultRoute;
     switchPage(currentTab);
@@ -191,6 +190,21 @@ function switchPage(page) {
         } else if (page === 'logs') {
             if (!window.logManager) {
                 window.logManager = new LogManager();
+                window.logManager.init().catch(error => {
+                    console.error('初始化日志管理器失败:', error);
+                    window.showToast('初始化日志管理器失败', 'error');
+                });
+            } else {
+                window.logManager.loadLogTypes().catch(error => {
+                    console.error('加载日志类型失败:', error);
+                    window.showToast('加载日志类型失败', 'error');
+                });
+            }
+        } else if (page === 'print') {
+            if (!window.printManager) {
+                window.printManager = new PrintManager();
+            } else {
+                window.printManager.loadPrintJobs();
             }
         }
     } catch (error) {
