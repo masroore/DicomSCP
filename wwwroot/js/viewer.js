@@ -637,8 +637,18 @@ function initializeTools() {
     setupToolEvents();
 }
 
-// 禁用所有工具
+// 修改禁用工具函数
 function disableAllTools() {
+    // 禁用所有工具按钮的视觉效果，除了播放按钮
+    document.querySelectorAll('.tool-button').forEach(btn => {
+        if (btn.id !== 'playButton') {
+            btn.classList.add('disabled');
+            btn.style.opacity = '0.5';
+            btn.style.pointerEvents = 'none';
+        }
+    });
+    
+    // 禁用具体的 Cornerstone 工具
     const toolsToDisable = [
         'StackScroll',
         'Probe',
@@ -654,6 +664,9 @@ function disableAllTools() {
     toolsToDisable.forEach(toolName => {
         cornerstoneTools.setToolDisabled(toolName);
     });
+    
+    // 禁用鼠标滚轮
+    element.removeEventListener('wheel', handleMouseWheel);
 }
 
 // 优化工具事件设置
@@ -1154,10 +1167,79 @@ async function getOptimizedViewport(image) {
 // 修改播放控制函数
 function togglePlay() {
     console.log('Toggle play clicked, current state:', isPlaying);
+    
+    // 先处理所有工具按钮的状态
+    document.querySelectorAll('.tool-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // 确保播放按钮保持选中状态
+    const playButton = document.getElementById('playButton');
+    if (playButton) {
+        playButton.classList.add('active');
+    }
+    
     if (isPlaying) {
         pausePlay();
+        enableAllTools(); // 暂停时启用所有工具
     } else {
         startPlay();
+        disableAllTools(); // 播放时禁用其他工具
+    }
+}
+
+// 添加禁用工具函数
+function disableAllTools() {
+    // 禁用所有工具按钮的视觉效果，除了播放按钮
+    document.querySelectorAll('.tool-button').forEach(btn => {
+        if (btn.id !== 'playButton') {
+            btn.classList.add('disabled');
+            btn.style.opacity = '0.5';
+            btn.style.pointerEvents = 'none';
+        }
+    });
+    
+    // 禁用具体的 Cornerstone 工具
+    const toolsToDisable = [
+        'StackScroll',
+        'Probe',
+        'Wwwc',
+        'Pan',
+        'Zoom',
+        'Length',
+        'Angle',
+        'RectangleRoi',
+        'EllipticalRoi'
+    ];
+
+    toolsToDisable.forEach(toolName => {
+        cornerstoneTools.setToolDisabled(toolName);
+    });
+    
+    // 禁用鼠标滚轮
+    element.removeEventListener('wheel', handleMouseWheel);
+}
+
+// 添加启用工具函数
+function enableAllTools() {
+    // 启用所有工具按钮
+    document.querySelectorAll('.tool-button').forEach(btn => {
+        btn.classList.remove('disabled');
+        btn.style.opacity = '';
+        btn.style.pointerEvents = '';
+    });
+    
+    // 重新启用默认工具
+    cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+    cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
+    cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
+    
+    // 重新绑定鼠标滚轮事件
+    element.addEventListener('wheel', handleMouseWheel);
+    
+    // 重新激活之前的工具
+    if (currentTool && currentTool !== 'play') {
+        activateTool(currentTool);
     }
 }
 
@@ -1168,6 +1250,8 @@ function startPlay() {
         const playButton = document.getElementById('playButton');
         if (playButton) {
             playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停" width="20" height="20">';
+            // 确保播放按钮保持激活状态
+            playButton.classList.add('active');
         }
         
         // 清除可能存在的旧定时器
@@ -1180,7 +1264,6 @@ function startPlay() {
             if (nextIndex >= imageIds.length) {
                 nextIndex = 0; // 循环播放
             }
-            console.log('Playing next image:', nextIndex);
             displayImage(nextIndex);
         }, playbackSpeed);
     }
@@ -1193,6 +1276,8 @@ function pausePlay() {
         const playButton = document.getElementById('playButton');
         if (playButton) {
             playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放" width="20" height="20">';
+            // 暂停时也保持按钮激活状态
+            playButton.classList.add('active');
         }
         
         if (playInterval) {

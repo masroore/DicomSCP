@@ -17,35 +17,77 @@
 
         /* 查看器容器 */
         .viewer-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
+            position: relative;
+            width: 100%;
             height: 100vh;
-            background: #1e1e1e;
-            z-index: 1000;
+            background: #000;
             display: flex;
             flex-direction: column;
         }
 
         /* 工具栏 */
         .toolbar {
-            position: relative;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background: rgba(44, 44, 44, 0.7);
-            padding: 6px 8px;
-            border-bottom: 1px solid rgba(58, 58, 58, 0.5);
             display: flex;
-            flex-direction: row;
-            gap: 8px;
             justify-content: center;
-            height: 52px;
             align-items: center;
-            flex-shrink: 0;
-            backdrop-filter: blur(8px);
+            gap: 8px;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 52px;
+            position: relative;
             z-index: 1000;
+        }
+
+        /* 窗位预设按钮组 */
+        .presets-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .window-presets-menu {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-top: 5px;
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 1100;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            min-width: 120px;
+            white-space: nowrap;
+            backdrop-filter: blur(8px);
+            transform: translateX(-50%);
+        }
+
+        .window-presets-menu.show {
+            display: flex;
+        }
+
+        /* 预设按钮样式 */
+        .preset-button {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            border: none;
+            background: none;
+            color: white;
+            width: 100%;
+            text-align: left;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .preset-button:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
         /* 视图容器 - 采用 flex 布局自动填充剩余空间 */
@@ -53,11 +95,10 @@
             flex: 1;
             position: relative;
             width: 100%;
-            height: 100%;
-            background-color: black;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: #000;
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+            z-index: 900;
         }
 
         /* 图像显示区域 */
@@ -70,97 +111,80 @@
         /* 角落信息 */
         .corner-info {
             position: absolute;
-            padding: 8px 10px;
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.9);
-            z-index: 90;
-            text-shadow: 
-                1px 1px 2px rgba(0,0,0,0.8),
-                -1px -1px 2px rgba(0,0,0,0.8),
-                1px -1px 2px rgba(0,0,0,0.8),
-                -1px 1px 2px rgba(0,0,0,0.8);
+            padding: 10px;
+            color: #fff;
+            font-size: 12px;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            border-radius: 6px;
+            margin: 10px;
             line-height: 1.5;
-            background: none;
-            border-radius: 4px;
         }
-        .top-left { top: 12px; left: 8px; }
-        .top-right { top: 12px; right: 8px; text-align: right; }
-        .bottom-left { bottom: 8px; left: 8px; }
-        .bottom-right { bottom: 8px; right: 8px; text-align: right; }
+        .top-left { top: 0; left: 0; }
+        .top-right { top: 0; right: 0; }
+        .bottom-left { bottom: 0; left: 0; }
+        .bottom-right { bottom: 0; right: 0; }
 
         /* 工具组 */
         .tool-group {
             display: flex;
-            flex-direction: row;
-            gap: 6px;
-            padding: 0 4px;
-            position: relative;
-        }
-
-        /* 窗位预设按钮组 */
-        .presets-container {
-            position: relative;
-            display: inline-block;
-        }
-
-        .window-presets-menu {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            margin-top: 5px;
-            background: rgba(30, 30, 30, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 8px;
-            display: none;
-            flex-direction: column;
             gap: 4px;
-            z-index: 1001;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            min-width: 120px;
-            white-space: nowrap;
-            backdrop-filter: blur(8px);
-            transform: translateX(-50%);
-            left: 50%;
+            padding: 0 8px;
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            align-items: center;
+            height: 40px;
         }
 
-        .window-presets-menu.show {
-            display: flex;
+        /* 最后一个工具组不需要右边框 */
+        .tool-group:last-child {
+            border-right: none;
         }
 
         /* 工具按钮 */
         .tool-button {
             width: 36px;
             height: 36px;
-            border: none;
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.08);
-            color: white;
-            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 6px;
             transition: all 0.2s ease;
+            color: rgba(255, 255, 255, 0.8);
             position: relative;
         }
+
+        .tool-button img {
+            width: 20px;
+            height: 20px;
+            filter: brightness(0) invert(1);
+            opacity: 0.8;
+            transition: all 0.2s ease;
+        }
+
         .tool-button:hover {
-            background: rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .tool-button:hover img {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .tool-button.active {
+            background: rgba(0, 123, 255, 0.3);
+            color: #fff;
+            box-shadow: 0 0 0 1px rgba(0, 123, 255, 0.5);
             transform: translateY(-1px);
         }
-        .tool-button.active {
-            background: rgba(0, 102, 204, 0.6);
-            box-shadow: 0 2px 8px rgba(0, 102, 204, 0.3);
-        }
-        .tool-button img {
-            width: 22px;
-            height: 22px;
-            filter: invert(1);
-            opacity: 0.9;
-            transition: transform 0.2s ease;
-        }
-        .tool-button:hover img {
-            transform: scale(1.1);
-            opacity: 1;
+
+        /* 工具组之间的间距 */
+        .toolbar > .tool-group + .tool-group {
+            margin-left: 4px;
         }
 
         /* 分隔线 */
@@ -442,7 +466,7 @@
             opacity: 0;
             visibility: hidden;
             transition: all 0.3s ease;
-            z-index: 10000;
+            z-index: 10001;
             pointer-events: none;
             backdrop-filter: blur(4px);
         }
@@ -451,27 +475,6 @@
             opacity: 1;
             visibility: visible;
             bottom: -35px;
-        }
-
-        /* 设按钮样式 */
-        .preset-button {
-            display: flex;
-            align-items: center;
-            padding: 6px 12px;
-            border: none;
-            background: none;
-            color: white;
-            width: 100%;
-            text-align: left;
-            font-size: 12px;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: background-color 0.2s;
-            white-space: nowrap;
-        }
-
-        .preset-button:hover {
-            background: rgba(255, 255, 255, 0.1);
         }
 
         /* 预设分组样式 */
