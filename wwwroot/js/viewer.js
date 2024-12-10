@@ -488,7 +488,7 @@ function initializeViewer() {
 
         // 添加图像渲染事件监听
         cornerstone.events.addEventListener('cornerstoneimagerendered', onImageRendered);
-
+        
         // 添加窗宽窗位实时更新事件
         element.addEventListener('cornerstoneimagerendered', function(e) {
             const viewport = cornerstone.getViewport(element);
@@ -496,6 +496,7 @@ function initializeViewer() {
             const transferSyntax = image.data.string('x00020010') || 'N/A';
             const transferSyntaxName = getTransferSyntaxName(transferSyntax);
             
+            // 确保窗位信息显示是最新的
             document.getElementById('windowInfo').innerHTML = `
                 窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
                 窗位: ${Math.round(viewport.voi.windowCenter)}<br>
@@ -841,7 +842,7 @@ function setupToolbar() {
             });
         });
         
-        // 点击其他地方关闭菜单
+        // 击其他地方关闭菜单
         document.addEventListener('click', function(e) {
             if (!presetsMenu.contains(e.target) && !presetsButton.contains(e.target)) {
                 presetsMenu.classList.remove('show');
@@ -960,9 +961,21 @@ function clearAnnotations() {
 }
 
 // 图像渲染事件处理
-function onImageRendered(event) {
-    const viewport = cornerstone.getViewport(event.target);
-    const image = cornerstone.getImage(event.target);
+function onImageRendered(e) {
+    const viewport = cornerstone.getViewport(element);
+    const image = cornerstone.getImage(element);
+    
+    // 确保窗位值被正确应用
+    if (viewport.voi.windowWidth !== undefined && viewport.voi.windowCenter !== undefined) {
+        cornerstone.setViewport(element, viewport);
+        
+        // 立即更新窗位信息显示
+        document.getElementById('windowInfo').innerHTML = `
+            窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
+            窗位: ${Math.round(viewport.voi.windowCenter)}<br>
+            ${getCurrentPresetName(viewport)}
+        `;
+    }
     
     updateCornerInfo(image, viewport);
 }
@@ -1569,8 +1582,8 @@ function handleWindowPreset(e) {
     const viewport = cornerstone.getViewport(element);
     const image = cornerstone.getImage(element);
 
+    // 设置窗位值
     if (preset.ww === null || preset.wc === null) {
-        // 使用图像默认值
         viewport.voi.windowWidth = image.windowWidth || 400;
         viewport.voi.windowCenter = image.windowCenter || 40;
     } else {
@@ -1578,18 +1591,35 @@ function handleWindowPreset(e) {
         viewport.voi.windowCenter = preset.wc;
     }
 
+    // 强制应用新的窗位值
     cornerstone.setViewport(element, viewport);
     
-    // 更新窗位信息显示
-    document.getElementById('windowInfo').innerHTML = `
-        窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
-        窗位: ${Math.round(viewport.voi.windowCenter)}<br>
-        预设: ${preset.description}
-    `;
-
-    // 激活调窗工具
+    // 强制刷新图像显示
+    cornerstone.updateImage(element, true);
+    
+    // 确保调窗工具处于激活状态
     cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
-    document.querySelector('[data-tool="Wwwc"]').classList.add('active');
+    
+    // 更新工具按钮状态
+    document.querySelectorAll('.tool-button').forEach(btn => {
+        if (btn.dataset.tool === 'Wwwc') {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // 关闭预设菜单
+    const presetsMenu = document.getElementById('windowPresetsMenu');
+    if (presetsMenu) {
+        presetsMenu.classList.remove('show');
+    }
+    
+    // 取消预设按钮的激活状态
+    const presetsButton = document.getElementById('windowPresets');
+    if (presetsButton) {
+        presetsButton.classList.remove('active');
+    }
 }
 
 // 获取当前窗位对应的预设名称
