@@ -554,8 +554,22 @@ document.addEventListener('DOMContentLoaded', () => {
 function initializeTools() {
     cornerstoneTools.init();
 
-    // 先停用所有工具
-    disableAllTools();
+    // 初始化所有工具为被动状态
+    const toolsToInitialize = [
+        'Length',
+        'Angle',
+        'RectangleRoi',
+        'EllipticalRoi',
+        'Probe',
+        'Wwwc',
+        'Pan',
+        'Zoom',
+        'StackScroll'
+    ];
+    
+    toolsToInitialize.forEach(toolName => {
+        cornerstoneTools.setToolPassive(toolName);
+    });
 
     // 注册所有工具
     Object.values(TOOL_MAP).forEach(tool => {
@@ -569,7 +583,7 @@ function initializeTools() {
         }
     });
 
-    // 设置默认工具为调窗
+    // 设置默认工具状态
     currentTool = 'Wwwc';
 
     // 初始化探针工具
@@ -704,8 +718,21 @@ function activateTool(toolName) {
     if (!tool) return;
 
     try {
-        // 停用所有工具
-        disableAllTools();
+        // 将所有工具设置为被动状态
+        const toolsToPassive = [
+            'Length',
+            'Angle',
+            'RectangleRoi',
+            'EllipticalRoi',
+            'Probe',
+            'Wwwc',
+            'Pan',
+            'Zoom'
+        ];
+        
+        toolsToPassive.forEach(name => {
+            cornerstoneTools.setToolEnabled(name);
+        });
 
         // 更新当前工具
         currentTool = toolName;
@@ -889,19 +916,30 @@ function activateToolButton(button) {
 
 // 清除标注
 function clearAnnotations() {
-    const toolList = ['Length', 'Angle', 'RectangleRoi', 'EllipticalRoi', 'Probe'];
-    toolList.forEach(toolType => {
-        cornerstoneTools.clearToolState(element, toolType);
-    });
-    cornerstone.updateImage(element);
-    
-    // 如果当前工具是探针，重新初始化它
-    if (currentTool === 'Probe') {
-        cornerstoneTools.addTool(cornerstoneTools.ProbeTool);
-        cornerstoneTools.setToolActive('Probe', { mouseButtonMask: 1 });
+    try {
+        // 清除所有测量工具的标注
+        const toolsToClean = [
+            'Length',
+            'Angle',
+            'RectangleRoi',
+            'EllipticalRoi',
+            'Probe'
+        ];
+        
+        // 遍历清除每个工具的标注
+        toolsToClean.forEach(toolName => {
+            try {
+                cornerstoneTools.clearToolState(element, toolName);
+            } catch (err) {
+                console.warn(`清除工具 ${toolName} 状态失败:`, err);
+            }
+        });
+        
+        cornerstone.updateImage(element);
+        Logger.log(Logger.levels.INFO, '所有标注已清除');
+    } catch (error) {
+        Logger.log(Logger.levels.ERROR, '清除标注失败', error);
     }
-
-    Logger.log(Logger.levels.INFO, '标注已清除');
 }
 
 // 图像渲染事件处理
