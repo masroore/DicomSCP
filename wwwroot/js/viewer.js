@@ -80,6 +80,12 @@ const TOOL_MAP = {
         label: '椭圆',
         icon: 'ellipse.svg',
         mouseButton: 1
+    },
+    Stack: {
+        name: 'StackScroll',
+        label: '翻层',
+        icon: 'stack.svg',
+        mouseButton: 1
     }
 };
 
@@ -576,7 +582,15 @@ function initializeTools() {
     Object.values(TOOL_MAP).forEach(tool => {
         const toolClass = cornerstoneTools[`${tool.name}Tool`];
         if (toolClass) {
-            if (tool.configuration) {
+            if (tool.name === 'StackScroll') {
+                // 特殊配置堆栈滚动工具
+                cornerstoneTools.addTool(toolClass, {
+                    configuration: {
+                        loop: true,
+                        allowSkipping: true
+                    }
+                });
+            } else if (tool.configuration) {
                 cornerstoneTools.addTool(toolClass, tool.configuration);
             } else {
                 cornerstoneTools.addTool(toolClass);
@@ -631,9 +645,8 @@ function initializeTools() {
         });
     }
 
-    // 初始化翻层工具
-    cornerstoneTools.addTool(cornerstoneTools.StackScrollTool);
-    cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 });
+    // 初始化堆栈状态管理器
+    cornerstoneTools.addStackStateManager(element, ['stack']);
 
     setupToolEvents();
 }
@@ -677,6 +690,16 @@ function setupToolEvents() {
 
     // 优化滚轮事件
     element.addEventListener('wheel', handleMouseWheel);
+
+    // 添加堆栈滚动事件监听
+    element.addEventListener('cornerstonetoolsstackscroll', function(e) {
+        const image = cornerstone.getImage(element);
+        const viewport = cornerstone.getViewport(element);
+        if (image && viewport) {
+            currentImageIndex = cornerstoneTools.getToolState(element, 'stack').data[0].currentImageIdIndex;
+            updateCornerInfo(image, viewport);
+        }
+    });
 }
 
 // 优化滚轮事件处理
@@ -688,7 +711,34 @@ function handleMouseWheel(e) {
     if (e.shiftKey) {
         handleZoomWheel(e);
     } else {
-        handleImageScroll(e);
+        // 获取当前图像的帧数信息
+        const image = cornerstone.getImage(element);
+        const numberOfFrames = image.data.intString('x00280008') || 1;
+        
+        // 如果是翻层工具或多帧图像，使用堆栈滚动
+        if (currentTool === 'Stack' || numberOfFrames > 1) {
+            const delta = e.deltaY < 0 ? -1 : 1;
+            let nextIndex = currentImageIndex + delta;
+            
+            // 处理循环滚动
+            if (nextIndex < 0) {
+                nextIndex = imageIds.length - 1;
+            } else if (nextIndex >= imageIds.length) {
+                nextIndex = 0;
+            }
+            
+            // 使用 requestAnimationFrame 优化性能
+            requestAnimationFrame(() => {
+                displayImage(nextIndex);
+                // 更新堆栈状态和图像信息
+                const updatedImage = cornerstone.getImage(element);
+                const viewport = cornerstone.getViewport(element);
+                updateStackState();
+                updateCornerInfo(updatedImage, viewport);
+            });
+        } else {
+            handleImageScroll(e);
+        }
     }
 }
 
@@ -741,11 +791,12 @@ function activateTool(toolName) {
             'Probe',
             'Wwwc',
             'Pan',
-            'Zoom'
+            'Zoom',
+            'StackScroll'
         ];
         
         toolsToPassive.forEach(name => {
-            cornerstoneTools.setToolEnabled(name);
+            cornerstoneTools.setToolPassive(name);
         });
 
         // 更新当前工具
@@ -761,7 +812,30 @@ function activateTool(toolName) {
             }
         });
 
-        // 特殊处理调窗工具
+        // 特殊处理堆栈滚动工具
+        if (toolName === 'Stack') {
+            // 确保堆栈状态是最新的
+            updateStackState();
+            
+            // 激活堆栈滚动工具
+            cornerstoneTools.setToolActive('StackScroll', { 
+                mouseButtonMask: 1,
+                synchronizationContext: element  // 添加同步上下文
+            });
+            
+            // 保持平移和缩放功能
+            cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 2 });
+            cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 4 });
+
+            // 更新工具提示
+            const toolTip = document.getElementById('toolTip');
+            if (toolTip) {
+                toolTip.textContent = '使用鼠标滚轮或拖动进行翻层';
+            }
+            return;
+        }
+
+        // 处理其他工具
         if (toolName === 'Wwwc') {
             cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
             return;
@@ -899,7 +973,7 @@ function handleToolButtonClick(e) {
             return;
         case 'Probe':
             try {
-                // 先清除现有的探针标注
+                // 先清除现有的针标注
                 cornerstoneTools.clearToolState(element, 'Probe');
                 // 激活探针工具
                 cornerstoneTools.setToolActive('Probe', { mouseButtonMask: 1 });
@@ -940,7 +1014,7 @@ function clearAnnotations() {
             'Probe'
         ];
         
-        // 遍历清除每个工具的标注
+        // 遍历清除每个工具的注
         toolsToClean.forEach(toolName => {
             try {
                 cornerstoneTools.clearToolState(element, toolName);
@@ -1149,22 +1223,33 @@ function handleImageLoaded(image, imageId) {
         imageIds.push(imageId);
     }
 
-    // 如果是多帧图像，置堆栈状态
-    if (imageIds.length > 1) {
-        const stack = {
-            currentImageIdIndex: 0,
-            imageIds: imageIds
-        };
-        
-        cornerstoneTools.addStackStateManager(element, ['stack']);
-        cornerstoneTools.addToolState(element, 'stack', stack);
+    // 更新堆栈状态
+    updateStackState();
+}
+
+// 添加新函数：更新堆栈状态
+function updateStackState() {
+    const stack = {
+        currentImageIdIndex: currentImageIndex,
+        imageIds: imageIds
+    };
+    
+    cornerstoneTools.clearToolState(element, 'stack');
+    cornerstoneTools.addToolState(element, 'stack', stack);
+    
+    // 获取当前图像和视口
+    const image = cornerstone.getImage(element);
+    const viewport = cornerstone.getViewport(element);
+    
+    // 更新角落信息
+    if (image && viewport) {
+        updateCornerInfo(image, viewport);
     }
 }
 
-// 优化显示图像函数
+// 修改 displayImage 函数，确保在切换图像时更新堆栈状态
 async function displayImage(index) {
     if (index < 0 || index >= imageIds.length) {
-        // 不记录警告，因为已经在 handleImageScroll 中处理了边界情况
         return;
     }
     
@@ -1175,6 +1260,11 @@ async function displayImage(index) {
         
         await cornerstone.displayImage(element, image, viewport);
         currentImageIndex = index;
+        
+        // 更新堆栈状态
+        updateStackState();
+        
+        // 更新角落信息
         updateCornerInfo(image, viewport);
         
     } catch (error) {
@@ -1412,6 +1502,9 @@ async function loadAndDisplayFirstImage() {
         
         // 标记为已加载
         imageCache.loaded.add(imageId);
+        
+        // 更新堆栈状态
+        updateStackState();
         
         // 立即显示第一张图像
         await displayImage(0);
