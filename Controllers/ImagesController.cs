@@ -3,6 +3,8 @@ using DicomSCP.Models;
 using DicomSCP.Data;
 using Microsoft.Extensions.Configuration;
 using DicomSCP.Services;
+using FellowOakDicom;
+using FellowOakDicom.Imaging.Codec;
 
 namespace DicomSCP.Controllers;
 
@@ -150,7 +152,7 @@ public class ImagesController : ControllerBase
     }
 
     [HttpGet("download/{instanceUid}")]
-    public async Task<IActionResult> DownloadInstance(string instanceUid)
+    public async Task<IActionResult> DownloadInstance(string instanceUid, [FromQuery] string? transferSyntax)
     {
         try
         {
@@ -168,24 +170,15 @@ public class ImagesController : ControllerBase
             // 处理存储路径
             if (storagePath.StartsWith("./") || storagePath.StartsWith(".\\"))
             {
-                // 如果是以./开头的相对路径，转换为基于应用程序根目录的绝对路径
                 storagePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, storagePath.Substring(2)));
             }
             else if (!Path.IsPathRooted(storagePath))
             {
-                // 其他相对路径，转换为基于应用程序根目录的绝对路径
                 storagePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, storagePath));
             }
 
             // 拼接完整的文件路径并规范化
             var fullPath = Path.GetFullPath(Path.Combine(storagePath, instance.FilePath));
-
-            DicomLogger.Information("Api",
-                "[API] 准备下载文件 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
-                instanceUid,
-                storagePath,
-                fullPath
-            );
 
             if (!System.IO.File.Exists(fullPath))
             {
@@ -193,23 +186,78 @@ public class ImagesController : ControllerBase
                     "[API] 文件不存在 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
                     instanceUid,
                     storagePath,
-                    fullPath
-                );
+                    fullPath);
                 return NotFound("图像文件不存在");
             }
 
-            // 构造文件名，使用 SOP Instance UID
+            // 读取DICOM文件
+            var file = await DicomFile.OpenAsync(fullPath);
+
+            // 如果指定了传输语法，进行转码
+            if (!string.IsNullOrEmpty(transferSyntax))
+            {
+                var currentSyntax = file.Dataset.InternalTransferSyntax;
+                var requestedSyntax = GetRequestedTransferSyntax(transferSyntax);
+
+                if (currentSyntax != requestedSyntax)
+                {
+                    try
+                    {
+                        DicomLogger.Information("Api", 
+                            "[API] 开始转码 - InstanceUid: {InstanceUid}, 原格式: {Original}, 目标格式: {Target}",
+                            instanceUid,
+                            currentSyntax.UID.Name,
+                            requestedSyntax.UID.Name);
+
+                        var transcoder = new DicomTranscoder(currentSyntax, requestedSyntax);
+                        file = transcoder.Transcode(file);
+
+                        DicomLogger.Information("Api", "[API] 转码完成");
+                    }
+                    catch (Exception ex)
+                    {
+                        DicomLogger.Error("Api", ex, 
+                            "[API] 转码失败 - InstanceUid: {InstanceUid}, 原格式: {Original}, 目标格式: {Target}",
+                            instanceUid,
+                            currentSyntax.UID.Name,
+                            requestedSyntax.UID.Name);
+                        // 转码失败时使用原始文件
+                    }
+                }
+            }
+
+            // 构造文件名
             var fileName = $"{instance.SopInstanceUid}.dcm";
 
-            // 使用 Append 而不是 Add 来设置 Content-Disposition 头
+            // 准备内存流
+            var memoryStream = new MemoryStream();
+            await file.SaveAsync(memoryStream);
+            memoryStream.Position = 0;
+
+            // 设置响应头
             Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{fileName}\"");
+            Response.Headers.Append("X-Transfer-Syntax", file.Dataset.InternalTransferSyntax.UID.Name);
             
-            return PhysicalFile(fullPath, "application/dicom");
+            return File(memoryStream, "application/dicom");
         }
         catch (Exception ex)
         {
             DicomLogger.Error("Api", ex, "[API] 下载文件失败 - InstanceUid: {InstanceUid}", instanceUid);
             return StatusCode(500, "下载文件失败");
         }
+    }
+
+    private DicomTransferSyntax GetRequestedTransferSyntax(string syntax)
+    {
+        return syntax.ToLower() switch
+        {
+            "jpeg" => DicomTransferSyntax.JPEGProcess14SV1,
+            "jpeg2000" => DicomTransferSyntax.JPEG2000Lossless,
+            "jpegls" => DicomTransferSyntax.JPEGLSLossless,
+            "rle" => DicomTransferSyntax.RLELossless,
+            "explicit" => DicomTransferSyntax.ExplicitVRLittleEndian,
+            "implicit" => DicomTransferSyntax.ImplicitVRLittleEndian,
+            _ => DicomTransferSyntax.ExplicitVRLittleEndian
+        };
     }
 } 

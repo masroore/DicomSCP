@@ -429,10 +429,10 @@ function getTransferSyntaxName(transferSyntax) {
         '1.2.840.10008.1.2.4.50': 'JPEG Baseline',
         '1.2.840.10008.1.2.4.51': 'JPEG Extended',
         '1.2.840.10008.1.2.4.57': 'JPEG Lossless',
-        '1.2.840.10008.1.2.4.70': 'JPEG Lossless First Order',
-        '1.2.840.10008.1.2.4.80': 'JPEG-LS Lossless',
-        '1.2.840.10008.1.2.4.81': 'JPEG-LS Near Lossless',
-        '1.2.840.10008.1.2.4.90': 'JPEG 2000 Lossless',
+        '1.2.840.10008.1.2.4.70': 'JPEG Lossless',
+        '1.2.840.10008.1.2.4.80': 'JPEG-LS',
+        '1.2.840.10008.1.2.4.81': 'JPEG-LS',
+        '1.2.840.10008.1.2.4.90': 'JPEG 2000',
         '1.2.840.10008.1.2.4.91': 'JPEG 2000',
         '1.2.840.10008.1.2.5': 'RLE Lossless'
     };
@@ -1081,7 +1081,7 @@ async function loadRemainingImages() {
         
         for (let i = 1; i < imageCache.instances.length; i++) {
             const instance = imageCache.instances[i];
-            const imageId = `wadouri:${baseUrl}/api/images/download/${instance.sopInstanceUid}`;
+            const imageId = `wadouri:${baseUrl}/api/images/download/${instance.sopInstanceUid}?transferSyntax=jpeg`;
             
             if (!imageCache.loaded.has(imageId) && !imageCache.loading.has(imageId)) {
                 imageCache.loading.add(imageId);
@@ -1346,7 +1346,8 @@ async function loadAndDisplayFirstImage() {
             throw new Error('Invalid first instance data');
         }
 
-        const imageId = `wadouri:${baseUrl}/api/images/download/${firstInstance.sopInstanceUid}`;
+        // 添加 transferSyntax=jpeg 参数到 URL
+        const imageId = `wadouri:${baseUrl}/api/images/download/${firstInstance.sopInstanceUid}?transferSyntax=jpeg`;
         Logger.log(Logger.levels.INFO, 'Loading first image', { imageId });
         
         // 加载第一张图像
