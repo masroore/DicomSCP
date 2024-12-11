@@ -39,8 +39,8 @@ public class AuthController : ControllerBase
             new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3),
-                IssuedUtc = DateTimeOffset.UtcNow
+                IssuedUtc = DateTimeOffset.UtcNow,
+                AllowRefresh = true
             });
 
         return Ok();
@@ -54,7 +54,6 @@ public class AuthController : ControllerBase
         {
             var username = User.Identity?.Name ?? "unknown";
             await HttpContext.SignOutAsync("CustomAuth");
-            Response.Cookies.Delete("username", new CookieOptions { Path = "/" });
             
             DicomLogger.Information("Api", "[API] 用户登出 - 用户名: {Username}", username);
             return Ok();
@@ -92,7 +91,6 @@ public class AuthController : ControllerBase
 
             // 清除登录状态
             await HttpContext.SignOutAsync("CustomAuth");
-            Response.Cookies.Delete("username", new CookieOptions { Path = "/" });
             
             DicomLogger.Information("Api", "[API] 修改密码成功 - 用户名: {Username}", username);
             return Ok();
@@ -107,59 +105,10 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("check-session")]
-    public async Task<IActionResult> CheckSession()
+    public IActionResult CheckSession()
     {
-        try
-        {
-            // 检查认证票据是否过期
-            var authenticateResult = await HttpContext.AuthenticateAsync("CustomAuth");
-            if (!authenticateResult.Succeeded || authenticateResult.Properties?.ExpiresUtc <= DateTimeOffset.UtcNow)
-            {
-                await HttpContext.SignOutAsync("CustomAuth");
-                return Unauthorized("会话已过期");
-            }
-
-            // 更新最后活动时间
-            var identity = User.Identity as ClaimsIdentity;
-            var lastActivityClaim = identity?.FindFirst("LastActivity");
-            if (lastActivityClaim != null)
-            {
-                var claims = new List<Claim>(User.Claims);
-                claims.Remove(lastActivityClaim);
-                claims.Add(new Claim("LastActivity", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")));
-
-                var newIdentity = new ClaimsIdentity(claims, "CustomAuth");
-                var authProperties = new AuthenticationProperties
-                {
-                    IsPersistent = true,
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3),
-                    AllowRefresh = true,
-                    IssuedUtc = DateTimeOffset.UtcNow
-                };
-
-                // 重新签发认证票据
-                await HttpContext.SignInAsync("CustomAuth", 
-                    new ClaimsPrincipal(newIdentity), 
-                    authProperties);
-
-                // 更新 username cookie
-                Response.Cookies.Append("username", User.Identity?.Name ?? "", new CookieOptions
-                {
-                    HttpOnly = false,
-                    SameSite = SameSiteMode.Lax,
-                    Path = "/",
-                    Secure = Request.IsHttps,
-                    Expires = DateTimeOffset.UtcNow.AddMinutes(3)
-                });
-            }
-            
-            return Ok(new { username = User.Identity?.Name });
-        }
-        catch (Exception ex)
-        {
-            DicomLogger.Error("Api", ex, "[API] 检查会话状态失败");
-            return StatusCode(500, "检查会话状态失败");
-        }
+        // 由于中间件已经处理了认证，这里只需要返回用户信息
+        return Ok(new { username = User.Identity?.Name });
     }
 }
 

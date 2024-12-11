@@ -3,7 +3,7 @@ class ServiceManager {
         this.initAxiosInterceptors();
         this.updateStatus();
         // 每30秒更新一次状态
-        setInterval(() => this.updateStatus(), 60000);
+        setInterval(() => this.updateStatus(), 30000);
     }
 
     initAxiosInterceptors() {

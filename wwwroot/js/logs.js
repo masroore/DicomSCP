@@ -299,22 +299,33 @@ class LogManager {
 
     async clearLogContent() {
         const select = document.getElementById('logFileSelect');
-        if (select && await showConfirmDialog('确认清空', `确定要清空日志文件 ${select.value} 吗？`)) {
-            try {
-                const response = await fetch(`/api/logs/${this.currentType}/${select.value}/clear`, {
-                    method: 'POST'
-                });
-                
-                if (!response.ok) {
-                    throw new Error('清空失败');
-                }
-                
-                await this.refreshLogContent();
-                await this.loadLogFiles(this.currentType);
-                window.showToast('日志文件已清空', 'success');
-            } catch (error) {
-                window.showToast('清空日志失败', 'error');
+        if (!select) return;
+
+        try {
+            if (!await showConfirmDialog('确认清空', `确定要清空日志文件 ${select.value} 吗？`)) {
+                return;
             }
+
+            const response = await fetch(`/api/logs/${this.currentType}/${select.value}/clear`, {
+                method: 'POST'
+            });
+            
+            if (response.status === 409) {
+                window.showToast('文件正在被使用，请稍后重试', 'warning');
+                return;
+            }
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText);
+            }
+            
+            await this.refreshLogContent();
+            await this.loadLogFiles(this.currentType);
+            window.showToast('日志文件已清空', 'success');
+        } catch (error) {
+            console.error('清空日志失败:', error);
+            window.showToast(error.message || '清空日志失败', 'error');
         }
     }
 

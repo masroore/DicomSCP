@@ -91,7 +91,7 @@ class ConfigManager {
             }
 
             await axios.post('/api/config', config);
-            window.showToast('配置保存成功！需要重启服务生效', 'success');
+            window.showToast('配置保存成功！需要手动重启服务生效！', 'success');
         } catch (error) {
             window.showToast(error.response?.data || '保存配置失败', 'error');
         } finally {

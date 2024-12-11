@@ -1482,7 +1482,7 @@ function updateCornerInfo(image, viewport) {
 
         // 更新图像信息显示
         document.getElementById('imageInfo').innerHTML = `
-            序列号: ${seriesNumber}${seriesDescription ? ' - ' + seriesDescription : ''}<br>
+            序列号: ${seriesNumber}<br>
             ${numberOfFrames > 1 ? '帧号' : '图像号'}: ${numberOfFrames > 1 ? (currentImageIndex + 1) : instanceNumber}<br>
             ${currentImageIndex + 1}/${totalImages}
         `;

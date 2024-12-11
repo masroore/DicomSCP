@@ -280,24 +280,46 @@ public class LogsController : ControllerBase
 
             try
             {
-                // 尝试清空文件内容
-                using (var fileStream = new FileStream(filePath, FileMode.Truncate, FileAccess.Write, FileShare.ReadWrite))
+                // 使用 FileShare.ReadWrite 来允许其他进程同时读写文件
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
                 {
-                    // Truncate 模式会自动清空文件内容
+                    fs.SetLength(0); // 清空文件内容
+                    fs.Flush();      // 确保写入磁盘
+                    return Ok();
                 }
-                return Ok();
             }
             catch (IOException ex) when ((ex.HResult & 0x0000FFFF) == 32) // 文件正在使用
             {
-                // 如果文件被锁定，尝试使用另一种方式
+                // 如果第一种方式失败，尝试第二种方式
                 try
                 {
-                    System.IO.File.WriteAllText(filePath, string.Empty);
-                    return Ok();
+                    // 创建临时文件
+                    var tempPath = Path.Combine(logPath, $"{Path.GetFileNameWithoutExtension(filename)}.tmp");
+                    using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        // 创建空文件
+                    }
+
+                    // 尝试替换原文件
+                    try
+                    {
+                        System.IO.File.Replace(tempPath, filePath, null);
+                        return Ok();
+                    }
+                    catch
+                    {
+                        // 如果替换失败，删除临时文件
+                        if (System.IO.File.Exists(tempPath))
+                        {
+                            System.IO.File.Delete(tempPath);
+                        }
+                        throw;
+                    }
                 }
                 catch
                 {
-                    return StatusCode(409, "文件正在使用中，无法清空内容");
+                    // 如果所有尝试都失败，返回 409
+                    return StatusCode(409, "文件正在被其他进程锁定，无法清空内容");
                 }
             }
         }

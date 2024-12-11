@@ -128,13 +128,17 @@ builder.Services.AddAuthentication("CustomAuth")
     {
         options.Cookie.Name = "auth";
         options.LoginPath = "/login.html";
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(3);
-        options.SlidingExpiration = true;
+        // cookies过期时间
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+        options.SlidingExpiration = false;  // 禁用默认的滑动过期
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.Path = "/";
-        
+        //启用最大有效期后下发的是请求的时间戳，不打开就是请求的时间戳+30分钟。
+        //如果设置的大于30分钟，则每次请求都会更新过期时间，导致过期时间不准确。
+        //options.Cookie.MaxAge = TimeSpan.FromHours(12);
+
         // 添加验证票据过期处理
         options.Events = new CookieAuthenticationEvents
         {
@@ -156,37 +160,16 @@ builder.Services.AddAuthentication("CustomAuth")
                 {
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync("CustomAuth");
+                    return;
                 }
-                // 每次请求都更新过期时间
-                else if (context.Properties != null)
+
+                // 如果不是 status 接口，手动更新过期时间
+                if (!context.HttpContext.Request.Path.StartsWithSegments("/api/dicom/status") && 
+                    context.Properties is not null)
                 {
-                    context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3);
-                    
-                    // 检查 principal 是否为 null
-                    if (context.Principal != null)
-                    {
-                        // 重新签发认证票据
-                        await context.HttpContext.SignInAsync(
-                            "CustomAuth",
-                            context.Principal,
-                            context.Properties);
-                    }
-                }
-            },
-            // 添加滑动过期处理
-            OnCheckSlidingExpiration = context =>
-            {
-                // 如果是 status 接口，不进行滑动续期
-                if (context.Request.Path.StartsWithSegments("/api/dicom/status"))
-                {
-                    context.ShouldRenew = false;
-                }
-                else
-                {
-                    // 对其他请求进行滑动续期
+                    context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.Add(options.ExpireTimeSpan);
                     context.ShouldRenew = true;
                 }
-                return Task.CompletedTask;
             }
         };
     });
@@ -253,8 +236,7 @@ app.Use(async (context, next) =>
         path?.StartsWith("/css/") == true ||
         path?.StartsWith("/js/login.js") == true ||
         path?.StartsWith("/images/") == true ||
-        path?.StartsWith("/favicon.ico") == true ||
-        path?.StartsWith("/api/dicom/status") == true)  // 添加 status 接口到白名单
+        path?.StartsWith("/favicon.ico") == true)  // 移除 status 接口
     {
         await next();
         return;
