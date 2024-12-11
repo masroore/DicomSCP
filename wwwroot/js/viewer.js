@@ -251,11 +251,44 @@ const DicomTagsViewer = {
 
     getAllTags(dataset) {
         const tags = [];
+        
+        // 特别处理 rows 和 columns
+        const rows = dataset.uint16('x00280010');
+        const columns = dataset.uint16('x00280011');
+        
+        // 添加调试日志
+        console.log('DICOM Image Size:', {
+            rows: rows,
+            columns: columns,
+            rowsHex: '0x00280010',
+            columnsHex: '0x00280011'
+        });
+
+        // 添加基本的图像尺寸信息
+        if (rows && columns) {
+            tags.push({
+                tag: '(0028,0010)',
+                vr: 'US',
+                description: 'Rows (图像行数)',
+                value: rows.toString()
+            });
+            tags.push({
+                tag: '(0028,0011)',
+                vr: 'US',
+                description: 'Columns (图像列数)',
+                value: columns.toString()
+            });
+        }
+
+        // 处理其他标签
         for (let tag in dataset.elements) {
             const element = dataset.elements[tag];
             const tagInfo = this.getTagInfo(tag, element, dataset);
             if (tagInfo && tagInfo.description) {
-                tags.push(tagInfo);
+                // 避免重复添加 rows 和 columns
+                if (tag !== 'x00280010' && tag !== 'x00280011') {
+                    tags.push(tagInfo);
+                }
             }
         }
         
@@ -264,7 +297,40 @@ const DicomTagsViewer = {
 
     getTagInfo(tag, element, dataset) {
         try {
-            const value = dataset.string(tag);
+            let value = '';
+            // 获取字符集信息
+            const charset = dataset.string('x00080005') || 'ISO_IR 192';
+            
+            // 特殊处理某些标签
+            if (tag === 'x00280010') {
+                value = dataset.uint16('x00280010').toString();
+            } else if (tag === 'x00280011') {
+                value = dataset.uint16('x00280011').toString();
+            } else {
+                // 获取原始值
+                const rawValue = dataset.string(tag) || '';
+                
+                // 判断是否需要字符集解码
+                const needsDecode = [
+                    'x00100010', // Patient Name
+                    'x00081030', // Study Description
+                    'x0008103e', // Series Description
+                    'x00081070', // Operators Name
+                    'x00081090', // Manufacturer Model
+                    'x00081040', // Institution Department
+                    'x00081050', // Performing Physician
+                    'x00081060', // Protocol Name
+                    'x00081080', // Institution Name
+                    'x00081081', // Institution Address
+                    'x00081090', // Manufacturer Model Name
+                    'x00104000', // Patient Comments
+                    'x00081010', // Station Name
+                    'x00081030'  // Study Description
+                ].includes(tag);
+
+                value = needsDecode ? decodeText(rawValue, charset) : rawValue;
+            }
+
             const vr = element.vr;
             const tagGroup = tag.substring(1, 5);
             const tagElement = tag.substring(5, 9);
@@ -274,9 +340,14 @@ const DicomTagsViewer = {
                 tag: `(${tagGroup},${tagElement})`,
                 vr: vr || '',
                 description: description || '',
-                value: value || ''
+                value: value
             };
         } catch (error) {
+            console.error('Error getting tag info:', error, {
+                tag,
+                element,
+                charset: dataset.string('x00080005')
+            });
             return null;
         }
     },
@@ -1233,61 +1304,122 @@ function onImageRendered(e) {
     updateCornerInfo(image, viewport);
 }
 
-// 更新角落信息
+// 添加字符集处理函数
+function decodeText(text, charset) {
+    if (!text) return 'N/A';
+    
+    try {
+        // 处理常见的中文字符集
+        switch (charset) {
+            case 'ISO_IR 192':   // UTF-8
+                return text;
+            case 'GB18030':
+            case 'GBK':
+            case 'GB2312':
+                // 尝试使用 iconv-lite 或其他方式进行解码
+                try {
+                    // 先将文本转换为字节数组
+                    const bytes = new Uint8Array(text.length);
+                    for (let i = 0; i < text.length; i++) {
+                        bytes[i] = text.charCodeAt(i);
+                    }
+                    // 使用 TextDecoder 解码
+                    return new TextDecoder(charset).decode(bytes);
+                } catch (e) {
+                    console.error('字符集解码失败，尝试直接返回:', e);
+                    return text;
+                }
+            case 'ISO_IR 100':   // Latin1
+                return new TextDecoder('iso-8859-1').decode(new TextEncoder().encode(text));
+            default:
+                console.warn('未知字符集:', charset);
+                return text;
+        }
+    } catch (error) {
+        console.error('字符集解码失败:', error, {
+            text,
+            charset
+        });
+        return text;
+    }
+}
+
+// 修改 updateCornerInfo 函数
 function updateCornerInfo(image, viewport) {
-    const patientInfo = {
-        name: image.data.string('x00100010') || 'N/A',
-        id: image.data.string('x00100020') || 'N/A',
-        gender: image.data.string('x00100040') || 'N/A'
+    try {
+        // 获取字符集信息
+        const charset = image.data.string('x00080005') || 'ISO_IR 192';  // 默认使用 UTF-8
+        
+        // 获取并解码患者信息
+        const patientInfo = {
+            name: decodeText(image.data.string('x00100010'), charset),
+            id: image.data.string('x00100020') || 'N/A',
+            gender: decodeText(image.data.string('x00100040'), charset)
+        };
+
+        // 获取并解码检查信息
+        const studyInfo = {
+            accessionNumber: image.data.string('x00080050') || 'N/A',
+            modality: image.data.string('x00080060') || 'N/A',
+            studyDate: formatDate(image.data.string('x00080020')),
+            studyDescription: decodeText(image.data.string('x00081030'), charset)
+        };
+
+        // 获取传输语法并转换为可读格式
+        const transferSyntax = image.data.string('x00020010') || 'N/A';
+        const transferSyntaxName = getTransferSyntaxName(transferSyntax);
+
+        // 更新界面显示
+        document.getElementById('patientInfo').innerHTML = `
+            ${patientInfo.name}<br>
+            ID: ${patientInfo.id}<br>
+            性别: ${formatGender(patientInfo.gender)}
+        `;
+
+        document.getElementById('studyInfo').innerHTML = `
+            检查号: ${studyInfo.accessionNumber}<br>
+            检查类型: ${studyInfo.modality}<br>
+            检查时间: ${studyInfo.studyDate}${studyInfo.studyDescription ? '<br>' + studyInfo.studyDescription : ''}
+        `;
+
+        // 获取总帧数和实例号
+        const numberOfFrames = image.data.intString('x00280008') || 1;
+        const instanceNumber = image.data.string('x00200013') || 'N/A';
+        const seriesNumber = image.data.string('x00200011') || 'N/A';
+        const seriesDescription = decodeText(image.data.string('x0008103E'), charset);
+
+        // 计算总图像数
+        const totalImages = imageCache.instances.reduce((total, instance) => {
+            const frames = instance.numberOfFrames || 1;
+            return total + frames;
+        }, 0);
+
+        // 更新图像信息显示
+        document.getElementById('imageInfo').innerHTML = `
+            序列号: ${seriesNumber}${seriesDescription ? ' - ' + seriesDescription : ''}<br>
+            ${numberOfFrames > 1 ? '帧号' : '图像号'}: ${numberOfFrames > 1 ? (currentImageIndex + 1) : instanceNumber}<br>
+            ${currentImageIndex + 1}/${totalImages}
+        `;
+
+        document.getElementById('windowInfo').innerHTML = `
+            窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
+            窗位: ${Math.round(viewport.voi.windowCenter)}<br>
+            ${transferSyntaxName}
+        `;
+
+    } catch (error) {
+        console.error('更新角落信息失败:', error);
+    }
+}
+
+// 格式化性别显示
+function formatGender(gender) {
+    const genderMap = {
+        'M': '男',
+        'F': '女',
+        'O': '其他'
     };
-
-    const studyInfo = {
-        accessionNumber: image.data.string('x00080050') || 'N/A',
-        modality: image.data.string('x00080060') || 'N/A',
-        studyDate: formatDate(image.data.string('x00080020'))
-    };
-
-    // 获取输语法并转换为可读格式
-    const transferSyntax = image.data.string('x00020010') || 'N/A';
-    const transferSyntaxName = getTransferSyntaxName(transferSyntax);
-
-    // 更新界面显示
-    document.getElementById('patientInfo').innerHTML = `
-        ${patientInfo.name}<br>
-        ID: ${patientInfo.id}<br>
-        性别: ${patientInfo.gender}
-    `;
-
-    document.getElementById('studyInfo').innerHTML = `
-        检查号: ${studyInfo.accessionNumber}<br>
-        检查类型: ${studyInfo.modality}<br>
-        检查时间: ${studyInfo.studyDate}
-    `;
-
-    // 获取总帧数和实例号
-    const numberOfFrames = image.data.intString('x00280008') || 1;
-    const instanceNumber = image.data.string('x00200013') || 'N/A';
-    const seriesNumber = image.data.string('x00200011') || 'N/A';
-
-    // 计算总图像数
-    const totalImages = imageCache.instances.reduce((total, instance) => {
-        // 获取每个实例的帧数
-        const frames = instance.numberOfFrames || 1;
-        return total + frames;
-    }, 0);
-
-    // 更新图像信息显示
-    document.getElementById('imageInfo').innerHTML = `
-        序列号: ${seriesNumber}<br>
-        ${numberOfFrames > 1 ? '帧号' : '图像号'}: ${numberOfFrames > 1 ? (currentImageIndex + 1) : instanceNumber}<br>
-        ${currentImageIndex + 1}/${totalImages}
-    `;
-
-    document.getElementById('windowInfo').innerHTML = `
-        窗宽: ${Math.round(viewport.voi.windowWidth)}<br>
-        窗位: ${Math.round(viewport.voi.windowCenter)}<br>
-        ${transferSyntaxName}
-    `;
+    return genderMap[gender] || gender || 'N/A';
 }
 
 // 格式日期

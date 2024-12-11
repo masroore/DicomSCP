@@ -161,11 +161,16 @@ builder.Services.AddAuthentication("CustomAuth")
                 else if (context.Properties != null)
                 {
                     context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(3);
-                    // 重新签发认证票据
-                    await context.HttpContext.SignInAsync(
-                        "CustomAuth",
-                        context.Principal,
-                        context.Properties);
+                    
+                    // 检查 principal 是否为 null
+                    if (context.Principal != null)
+                    {
+                        // 重新签发认证票据
+                        await context.HttpContext.SignInAsync(
+                            "CustomAuth",
+                            context.Principal,
+                            context.Properties);
+                    }
                 }
             },
             // 添加滑动过期处理
