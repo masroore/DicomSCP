@@ -20,6 +20,12 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
+    <ItemGroup>
+    <Content Update="wwwroot\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="fo-dicom" Version="5.1.5" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="7.0.0" />
@@ -39,10 +45,5 @@
     <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="app.ico">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
 
 </Project> 

@@ -27,6 +27,7 @@ function initDropZone() {
         dropZone.addEventListener(eventName, unhighlight, false);
     });
 
+    // 直接绑定到外部定义的 handleDrop 函数
     dropZone.addEventListener('drop', handleDrop, false);
 
     function highlight(e) {
@@ -41,92 +42,130 @@ function initDropZone() {
         e.preventDefault();
         e.stopPropagation();
     }
-
-    function handleDrop(e) {
-        const items = e.dataTransfer.items;
-        if (items) {
-            [...items].forEach(item => {
-                if (item.kind === 'file') {
-                    const entry = item.webkitGetAsEntry();
-                    if (entry) {
-                        processEntry(entry);
-                    }
-                }
-            });
-        }
-    }
 }
 
 // 处理文件拖放
 async function handleDrop(e) {
+    e.preventDefault();
     const items = e.dataTransfer.items;
+    const counts = { added: 0, skipped: 0 };
     const filePromises = [];
+
+    // 显示加载提示
+    window.showToast('正在扫描文件...', 'info');
 
     for (let item of items) {
         if (item.kind === 'file') {
             const entry = item.webkitGetAsEntry();
             if (entry) {
-                filePromises.push(processEntry(entry));
+                if (entry.isDirectory) {
+                    // 如果是文件夹，显示文件夹名称
+                    window.showToast(`正在扫描文件夹: ${entry.name}`, 'info');
+                }
+                filePromises.push(processEntry(entry, counts));
             }
         }
     }
 
-    // 等待所有文件处理完成
-    await Promise.all(filePromises);
+    try {
+        // 等待所有文件处理完成
+        await Promise.all(filePromises);
+
+        // 显示处理结果
+        if (counts.added > 0 || counts.skipped > 0) {
+            let message = '';
+            if (items.length === 1 && items[0].webkitGetAsEntry().isDirectory) {
+                // 如果只拖入了一个文件夹，显示文件夹名称和文件数量
+                const folderName = items[0].webkitGetAsEntry().name;
+                message = `文件夹 "${folderName}" 中包含 ${counts.added} 个DICOM文件`;
+            } else {
+                // 如果是多个文件或文件夹，只显示总数
+                message = `已添加 ${counts.added} 个DICOM文件`;
+            }
+            if (counts.skipped > 0) {
+                message += `，跳过 ${counts.skipped} 个非DICOM文件`;
+            }
+            window.showToast(message, 'success');
+        }
+    } catch (error) {
+        console.error('处理文件失败:', error);
+        window.showToast('处理文件失败', 'error');
+    }
+
     updateUI();
 }
 
 // 处理文件系统入口
-async function processEntry(entry) {
-    let addedCount = 0;
-    let skippedCount = 0;
-
-    if (entry.isFile) {
-        const file = await getFileFromEntry(entry);
-        if (file.name.toLowerCase().endsWith('.dcm')) {
-            addFileToSelection(file);
-            addedCount++;
-        } else {
-            skippedCount++;
+async function processEntry(entry, counts = { added: 0, skipped: 0 }) {
+    try {
+        if (entry.isFile) {
+            const file = await getFileFromEntry(entry);
+            if (file.name.toLowerCase().endsWith('.dcm')) {
+                addFileToSelection(file);
+                counts.added++;
+                console.log(`添加DICOM文件: ${file.name}, 当前计数:`, counts); // 添加日志
+            } else {
+                counts.skipped++;
+                console.log(`跳过非DICOM文件: ${file.name}, 当前计数:`, counts); // 添加日志
+            }
+        } else if (entry.isDirectory) {
+            await processDirectory(entry, counts);
         }
-    } else if (entry.isDirectory) {
-        await processDirectory(entry);
-    }
-
-    if (addedCount > 0 || skippedCount > 0) {
-        let message = `已添加 ${addedCount} 个DICOM文件`;
-        if (skippedCount > 0) {
-            message += `，跳过 ${skippedCount} 个非DICOM文件`;
-        }
-        window.showToast(message, 'success');
+        return counts;
+    } catch (error) {
+        console.error('处理文件失败:', error);
+        throw error;
     }
 }
 
 // 处理目录
-async function processDirectory(dirEntry) {
-    const entries = await readDirectoryEntries(dirEntry);
-    const promises = entries.map(entry => processEntry(entry));
-    await Promise.all(promises);
+async function processDirectory(dirEntry, counts) {
+    try {
+        console.log(`开始处理目录: ${dirEntry.fullPath}`); // 添加日志
+        const entries = await readDirectoryEntries(dirEntry);
+        console.log(`目录 ${dirEntry.fullPath} 中找到 ${entries.length} 个条目`); // 添加日志
+        
+        // 并行处理所有条目
+        const promises = entries.map(entry => {
+            console.log(`处理条目: ${entry.fullPath}`); // 添加日志
+            return processEntry(entry, counts);
+        });
+        
+        await Promise.all(promises);
+        console.log(`目录 ${dirEntry.fullPath} 处理完成，当前计数:`, counts); // 添加日志
+    } catch (error) {
+        console.error('处理目录失败:', error);
+        throw error;
+    }
 }
 
 // 读取目录内容
 function readDirectoryEntries(dirEntry) {
     return new Promise((resolve, reject) => {
         const reader = dirEntry.createReader();
-        const entries = [];
+        const allEntries = [];
 
-        function readEntries() {
-            reader.readEntries(async (results) => {
-                if (results.length === 0) {
-                    resolve(entries);
-                } else {
-                    entries.push(...results);
-                    readEntries(); // 继续读取，直到没有更多条目
+        // 递归读取所有条目
+        function readAllEntries() {
+            reader.readEntries(
+                (results) => {
+                    if (results.length) {
+                        allEntries.push(...results);
+                        // 继续读取，直到返回空数组
+                        readAllEntries();
+                    } else {
+                        // 所有条目都已读取完成
+                        resolve(allEntries);
+                    }
+                },
+                (error) => {
+                    console.error('读取目录失败:', error);
+                    reject(error);
                 }
-            }, reject);
+            );
         }
 
-        readEntries();
+        readAllEntries();
     });
 }
 
