@@ -317,34 +317,139 @@ class PrintManager {
     // 预览图像
     async previewImage(jobId) {
         try {
+            let scale = 1;
+            let rotation = 0;
+            let translateX = 0;
+            let translateY = 0;
+            
             return showDialog({
                 title: '预览',
                 content: `
-                    <div class="text-center position-relative" style="height: calc(90vh - 120px);">
-                        <div id="imageLoading" class="spinner-border text-primary position-absolute top-50 start-50" role="status">
+                    <div class="text-center position-relative" style="height: calc(90vh - 120px); background: #000;">
+                        <div id="imageLoading" class="spinner-border text-light position-absolute top-50 start-50" role="status">
                             <span class="visually-hidden">加载中...</span>
                         </div>
-                        <div id="previewContainer" style="height: 100%;"></div>
+                        <div id="imageContainer" class="h-100 position-relative" 
+                            style="overflow: hidden; user-select: none;">
+                            <div id="imageWrapper" class="position-absolute w-100 h-100 d-flex align-items-center justify-content-center">
+                                <img id="previewImage" 
+                                    style="display: none; max-width: 98%; max-height: 98%; object-fit: contain;"
+                                    draggable="false">
+                            </div>
+                        </div>
+                        <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 1050;">
+                            <div class="btn-group">
+                                <button class="btn btn-dark" id="zoomIn">
+                                    <i class="bi bi-zoom-in"></i>
+                                </button>
+                                <button class="btn btn-dark" id="zoomOut">
+                                    <i class="bi bi-zoom-out"></i>
+                                </button>
+                                <button class="btn btn-dark" id="rotateLeft">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </button>
+                                <button class="btn btn-dark" id="rotateRight">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                                <button class="btn btn-dark" id="reset">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 `,
                 onShow: async () => {
-                    const container = document.getElementById('previewContainer');
+                    const container = document.getElementById('imageContainer');
+                    const wrapper = document.getElementById('imageWrapper');
+                    const image = document.getElementById('previewImage');
                     const loading = document.getElementById('imageLoading');
 
+                    // 设置按钮样式
+                    document.querySelectorAll('.btn-dark').forEach(btn => {
+                        Object.assign(btn.style, {
+                            backgroundColor: '#333',
+                            borderColor: '#444'
+                        });
+                        btn.addEventListener('mouseover', () => btn.style.backgroundColor = '#444');
+                        btn.addEventListener('mouseout', () => btn.style.backgroundColor = '#333');
+                    });
+
                     try {
-                        // 使用 axios 获取图像数据
                         const response = await axios.get(`/api/print/${jobId}/image?width=1200`, {
                             responseType: 'blob'
                         });
                         
                         const imageUrl = URL.createObjectURL(response.data);
-                        container.innerHTML = `
-                            <img src="${imageUrl}" 
-                                style="max-width: 100%; height: 100%; object-fit: contain;" 
-                                alt="预览图像"
-                            />
-                        `;
-                        loading.style.display = 'none';
+                        image.src = imageUrl;
+
+                        image.onload = () => {
+                            image.style.display = 'block';
+                            loading.style.display = 'none';
+
+                            // 计算初始缩放比例以适应窗口
+                            const containerRect = container.getBoundingClientRect();
+                            const imageAspect = image.naturalWidth / image.naturalHeight;
+                            const containerAspect = containerRect.width / containerRect.height;
+
+                            // 设置图片初始大小以填充容器，留出少量边距
+                            if (imageAspect > containerAspect) {
+                                // 图片更宽，以宽度为准
+                                image.style.width = '98%';
+                                image.style.height = 'auto';
+                            } else {
+                                // 图片更高，以高度为准
+                                image.style.width = 'auto';
+                                image.style.height = '98%';
+                            }
+
+                            // 更新变换
+                            const updateTransform = () => {
+                                wrapper.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+                                wrapper.style.transformOrigin = 'center center';
+                            };
+
+                            // 绑定按钮事件
+                            document.getElementById('zoomIn').onclick = () => {
+                                scale = Math.min(scale * 1.2, 3);
+                                updateTransform();
+                            };
+
+                            document.getElementById('zoomOut').onclick = () => {
+                                scale = Math.max(scale / 1.2, 0.5);
+                                updateTransform();
+                            };
+
+                            document.getElementById('rotateLeft').onclick = () => {
+                                rotation = (rotation - 90) % 360;
+                                updateTransform();
+                            };
+
+                            document.getElementById('rotateRight').onclick = () => {
+                                rotation = (rotation + 90) % 360;
+                                updateTransform();
+                            };
+
+                            document.getElementById('reset').onclick = () => {
+                                scale = 1;
+                                rotation = 0;
+                                updateTransform();
+                            };
+
+                            // 添加鼠标滚轮缩放
+                            container.onwheel = (e) => {
+                                e.preventDefault();
+                                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                                scale = Math.max(0.5, Math.min(3, scale * delta));
+                                updateTransform();
+                            };
+
+                            // 初始化变换
+                            updateTransform();
+                        };
+
+                        return () => {
+                            URL.revokeObjectURL(imageUrl);
+                        };
                     } catch (error) {
                         loading.style.display = 'none';
                         window.showToast('图像加载失败', 'error');
@@ -398,12 +503,14 @@ class PrintManager {
             window.showToast('删除成功', 'success');
 
             // 获取当前页的数据数量
-            const tbody = document.getElementById('print-table-body');
-            const currentPageItems = tbody.getElementsByTagName('tr').length;
-            
-            // 如果当前页只有一条数据，且不是第一页，则加载上一页
-            if (currentPageItems === 1 && this.currentPage > 1) {
-                this.currentPage--;
+            const tbody = document.getElementById('print-jobs-table-body');
+            if (tbody) {
+                const currentPageItems = tbody.getElementsByTagName('tr').length;
+                
+                // 如果当前页只有一条数据，且不是第一页，则加载上一页
+                if (currentPageItems === 1 && this.currentPage > 1) {
+                    this.currentPage--;
+                }
             }
 
             await this.loadPrintJobs();
