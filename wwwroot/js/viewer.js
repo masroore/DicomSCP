@@ -324,8 +324,7 @@ const DicomTagsViewer = {
                     'x00081081', // Institution Address
                     'x00081090', // Manufacturer Model Name
                     'x00104000', // Patient Comments
-                    'x00081010', // Station Name
-                    'x00081030'  // Study Description
+                    'x00081010'  // Station Name
                 ].includes(tag);
 
                 value = needsDecode ? decodeText(rawValue, charset) : rawValue;
@@ -513,48 +512,135 @@ function getTransferSyntaxName(transferSyntax) {
     return syntaxMap[transferSyntax] || transferSyntax;
 }
 
-// 修改计算最佳视口的函数
+// 修改计算最佳视口的函数，增强兼容性
 function calculateOptimalViewport(element, image, defaultViewport) {
     try {
-        // 获取图像的原始尺寸
-        const imageWidth = image.width;
-        const imageHeight = image.height;
+        // 安全获取图像尺寸
+        const imageWidth = image.columns || image.width || image.getWidth?.() || defaultViewport.width;
+        const imageHeight = image.rows || image.height || image.getHeight?.() || defaultViewport.height;
+        const modality = (image.data?.string('x00080060') || '').toUpperCase();
         
-        // 获取显示区域的尺寸
-        const viewportWidth = element.offsetWidth;
-        const viewportHeight = element.offsetHeight;
+        // 安全获取显示区域尺寸
+        const viewportWidth = element.offsetWidth || element.clientWidth || window.innerWidth;
+        const viewportHeight = element.offsetHeight || element.clientHeight || window.innerHeight;
         
-        // 计算合适的缩放比例
-        let fitScale;
-        if (image.rowPixelSpacing && image.columnPixelSpacing) {
-            // 如果有像素间距信息，使用它来计算实际的缩放比例
-            const widthScale = viewportWidth / (imageWidth * image.columnPixelSpacing);
-            const heightScale = viewportHeight / (imageHeight * image.rowPixelSpacing);
-            fitScale = Math.min(widthScale, heightScale);
-        } else {
-            // 如果没有像素间距信息，使用默认计算方式
-            const widthRatio = viewportWidth / imageWidth;
-            const heightRatio = viewportHeight / imageHeight;
-            fitScale = Math.min(widthRatio, heightRatio);
-        }
+        // 计算基本比例，确保不为0
+        const imageAspectRatio = imageWidth && imageHeight ? imageWidth / imageHeight : 1;
+        const viewportAspectRatio = viewportWidth && viewportHeight ? viewportWidth / viewportHeight : 1;
 
-        // 使用默认视口作为基础
-        const viewport = {
-            ...defaultViewport,
-            scale: fitScale * 0.95, // 留出5%的边距
-            pixelReplication: false
-        };
+        // 获取所有可能的像素间距信息
+        const pixelSpacing = image.data?.string('x00280030') || '';
+        const imagerPixelSpacing = image.data?.string('x00181164') || '';
+        const nominalScannedPixelSpacing = image.data?.string('x00182010') || '';
+        const presentationPixelSpacing = image.data?.string('x00700102') || '';
 
-        Logger.log(Logger.levels.INFO, 'Viewport calculated', {
+        // 添加详细的调试日志
+        console.log('Image details:', {
             imageSize: `${imageWidth}x${imageHeight}`,
             viewportSize: `${viewportWidth}x${viewportHeight}`,
-            scale: viewport.scale
+            modality,
+            pixelSpacing,
+            imagerPixelSpacing,
+            nominalScannedPixelSpacing,
+            presentationPixelSpacing,
+            imageAspectRatio,
+            viewportAspectRatio,
+            transferSyntax: image.data?.string('x00020010'),
+            photometricInterpretation: image.data?.string('x00280004'),
+            bitsAllocated: image.data?.uint16('x00280100'),
+            bitsStored: image.data?.uint16('x00280101'),
+            highBit: image.data?.uint16('x00280102'),
+            samplesPerPixel: image.data?.uint16('x00280002')
+        });
+
+        let fitScale;
+        
+        // 根据不同模态使用不同的缩放策略
+        switch (modality) {
+            case 'CR':
+            case 'DX':
+            case 'DR':
+            case 'MG':
+                // 获取最合适的像素间距
+                const spacing = imagerPixelSpacing || nominalScannedPixelSpacing || presentationPixelSpacing || pixelSpacing;
+                if (spacing) {
+                    const [rowSpacing, colSpacing] = spacing.split('\\').map(Number);
+                    if (rowSpacing && colSpacing) {
+                        const physicalAspectRatio = (imageWidth * colSpacing) / (imageHeight * rowSpacing);
+                        fitScale = calculateScaleFromRatio(physicalAspectRatio, viewportAspectRatio, viewportWidth, viewportHeight, imageWidth, imageHeight);
+                    }
+                }
+                // 如果无法获取像素间距，使用适应屏幕的策略
+                if (!fitScale) {
+                    fitScale = calculateScaleFromRatio(imageAspectRatio, viewportAspectRatio, viewportWidth, viewportHeight, imageWidth, imageHeight);
+                }
+                break;
+
+            case 'CT':
+            case 'MR':
+            case 'PT':
+            case 'NM':
+                if (pixelSpacing) {
+                    const [rowSpacing, colSpacing] = pixelSpacing.split('\\').map(Number);
+                    if (rowSpacing && colSpacing) {
+                        const physicalAspectRatio = (imageWidth * colSpacing) / (imageHeight * rowSpacing);
+                        fitScale = calculateScaleFromRatio(physicalAspectRatio, viewportAspectRatio, viewportWidth, viewportHeight, imageWidth, imageHeight);
+                    }
+                }
+                // 如果没有像素间距信息，使用1:1显示
+                if (!fitScale) {
+                    fitScale = 1.0;
+                }
+                break;
+
+            default:
+                // 其他模态使用默认缩放策略
+                fitScale = calculateScaleFromRatio(imageAspectRatio, viewportAspectRatio, viewportWidth, viewportHeight, imageWidth, imageHeight);
+                break;
+        }
+
+        // 确保缩放比例在合理范围内
+        fitScale = Math.min(Math.max(fitScale, 0.125), 4.0);
+        fitScale *= 0.95; // 留出边距
+
+        // 创建视口设置，保留所有必要的属性
+        const viewport = Object.assign({}, defaultViewport, {
+            scale: fitScale,
+            translation: { x: 0, y: 0 },
+            voi: defaultViewport.voi,
+            pixelReplication: false,
+            rotation: 0,
+            hflip: false,
+            vflip: false,
+            modalityLUT: defaultViewport.modalityLUT,
+            voiLUT: defaultViewport.voiLUT,
+            colormap: defaultViewport.colormap,
+            invert: defaultViewport.invert
         });
 
         return viewport;
     } catch (error) {
-        Logger.log(Logger.levels.ERROR, 'Failed to calculate optimal viewport', error);
-        return defaultViewport;
+        console.error('Failed to calculate optimal viewport:', error);
+        // 返回安全的默认值
+        return {
+            ...defaultViewport,
+            scale: 1.0,
+            translation: { x: 0, y: 0 }
+        };
+    }
+}
+
+// 添加辅助函数计算缩放比例
+function calculateScaleFromRatio(imageRatio, viewportRatio, viewportWidth, viewportHeight, imageWidth, imageHeight) {
+    try {
+        if (imageRatio > viewportRatio) {
+            return viewportWidth / imageWidth;
+        } else {
+            return viewportHeight / imageHeight;
+        }
+    } catch (error) {
+        console.error('Scale calculation failed:', error);
+        return 1.0; // 返回安全的默认值
     }
 }
 
