@@ -3,7 +3,6 @@ using FellowOakDicom.Network;
 using FellowOakDicom.Network.Client;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
-using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Services;
 

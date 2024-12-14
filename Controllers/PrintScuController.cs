@@ -4,7 +4,6 @@ using DicomSCP.Models;
 using DicomSCP.Data;
 using DicomSCP.Configuration;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using Microsoft.Extensions.Options;
 
 namespace DicomSCP.Controllers;

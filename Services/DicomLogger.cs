@@ -1,6 +1,4 @@
 using Serilog;
-using Serilog.Events;
-using Serilog.Core;
 using DicomSCP.Configuration;
 using ILogger = Serilog.ILogger;
 

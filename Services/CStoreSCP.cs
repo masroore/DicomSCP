@@ -7,7 +7,6 @@ using DicomSCP.Configuration;
 using DicomSCP.Data;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
-using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Services;
 

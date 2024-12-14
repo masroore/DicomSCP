@@ -3,16 +3,9 @@ using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
 using DicomSCP.Data;
-using DicomSCP.Models;
-using Microsoft.Extensions.Logging;
-using System.IO;
 using System.Management;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System;
-using System.Linq;
-using System.Collections.Generic;
-
 namespace DicomSCP.Controllers;
 
 [ApiController]

@@ -5,7 +5,6 @@ using DicomSCP.Data;
 using DicomSCP.Models;
 using DicomSCP.Configuration;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Configuration;
 using TinyPinyin;
 using System.Globalization;
 

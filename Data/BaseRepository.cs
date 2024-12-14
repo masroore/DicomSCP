@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
 using Microsoft.Data.Sqlite;

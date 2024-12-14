@@ -4,9 +4,7 @@ using FellowOakDicom;
 using DicomSCP.Services;
 using DicomSCP.Configuration;
 using DicomSCP.Models;
-using System.Text.Json;
 using FellowOakDicom.Network;
-using Microsoft.Extensions.Logging;
 
 namespace DicomSCP.Controllers;
 

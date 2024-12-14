@@ -3,7 +3,6 @@ using FellowOakDicom;
 using FellowOakDicom.Network;
 using FellowOakDicom.Network.Client;
 using FellowOakDicom.Imaging.Codec;
-using FellowOakDicom.Imaging.NativeCodec;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Data;

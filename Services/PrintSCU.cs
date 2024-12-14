@@ -5,8 +5,7 @@ using FellowOakDicom.Imaging;
 using DicomSCP.Configuration;
 using DicomSCP.Models;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Logging;
-using static DicomSCP.Models.PrintJob;
+
 
 namespace DicomSCP.Services;
 

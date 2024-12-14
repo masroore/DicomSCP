@@ -1,17 +1,11 @@
 using Dapper;
 using DicomSCP.Models;
 using FellowOakDicom;
-using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
-using System.Threading;
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text;
-using DicomSCP.Data;
-using System.IO;
-using System.Text.Json;
 using System.Data;
 using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;

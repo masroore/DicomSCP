@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using DicomSCP.Models;
 using DicomSCP.Data;
-using Microsoft.Extensions.Configuration;
 using DicomSCP.Services;
 using FellowOakDicom;
 using FellowOakDicom.Imaging.Codec;

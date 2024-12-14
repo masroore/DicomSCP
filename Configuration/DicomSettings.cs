@@ -1,6 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Serilog.Events;
-using DicomSCP.Models;
 
 namespace DicomSCP.Configuration;
 

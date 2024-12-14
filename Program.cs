@@ -1,18 +1,13 @@
 using FellowOakDicom;
-using FellowOakDicom.Network;
 using FellowOakDicom.Imaging.NativeCodec;
-using FellowOakDicom.Imaging.Codec;
 using Serilog;
 using Serilog.Events;
-using Serilog.Filters;
 using DicomSCP.Configuration;
 using DicomSCP.Services;
 using DicomSCP.Data;
-using DicomSCP.Models;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);

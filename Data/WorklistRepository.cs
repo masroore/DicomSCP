@@ -1,11 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
 using DicomSCP.Models;
-using DicomSCP.Configuration;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Logging;
-using DicomSCP.Data;
-using Microsoft.Extensions.Configuration;
 using System.Text;
 
 namespace DicomSCP.Data;

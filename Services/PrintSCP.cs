@@ -1,7 +1,6 @@
 using System.Text;
 using FellowOakDicom;
 using FellowOakDicom.Network;
-using FellowOakDicom.Printing;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
 using DicomSCP.Models;

@@ -1,7 +1,3 @@
-using DicomSCP.Configuration;
-using DicomSCP.Data;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace DicomSCP.Services;
 
