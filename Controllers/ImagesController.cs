@@ -13,11 +13,16 @@ public class ImagesController : ControllerBase
 {
     private readonly DicomRepository _repository;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
 
-    public ImagesController(DicomRepository repository, IConfiguration configuration)
+    public ImagesController(
+        DicomRepository repository, 
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
     {
         _repository = repository;
         _configuration = configuration;
+        _environment = environment;
 
         // 验证必要的配置是否存在
         var storagePath = configuration["DicomSettings:StoragePath"];
@@ -150,6 +155,18 @@ public class ImagesController : ControllerBase
         }
     }
 
+    private string GetStoragePath(string configPath)
+    {
+        // 如果是绝对路径，直接返回
+        if (Path.IsPathRooted(configPath))
+        {
+            return configPath;
+        }
+
+        // 使用 ContentRootPath 作为基准路径
+        return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configPath));
+    }
+
     [HttpGet("download/{instanceUid}")]
     public async Task<IActionResult> DownloadInstance(string instanceUid, [FromQuery] string? transferSyntax)
     {
@@ -163,21 +180,27 @@ public class ImagesController : ControllerBase
             }
 
             // 从配置获取存储根路径
-            var storagePath = _configuration["DicomSettings:StoragePath"] 
+            var configPath = _configuration["DicomSettings:StoragePath"] 
                 ?? throw new InvalidOperationException("DicomSettings:StoragePath is not configured");
             
             // 处理存储路径
-            if (storagePath.StartsWith("./") || storagePath.StartsWith(".\\"))
-            {
-                storagePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, storagePath.Substring(2)));
-            }
-            else if (!Path.IsPathRooted(storagePath))
-            {
-                storagePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, storagePath));
-            }
+            var storagePath = GetStoragePath(configPath);
+            DicomLogger.Debug("Api", "存储路径解析 - 配置路径: {ConfigPath}, 实际路径: {StoragePath}", 
+                configPath, storagePath);
 
             // 拼接完整的文件路径并规范化
             var fullPath = Path.GetFullPath(Path.Combine(storagePath, instance.FilePath));
+
+            // 添加路径安全检查
+            if (!fullPath.StartsWith(storagePath))
+            {
+                DicomLogger.Error("Api", null,
+                    "[API] 非法的文件路径 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
+                    instanceUid,
+                    storagePath,
+                    fullPath);
+                return BadRequest("非法的文件路径");
+            }
 
             if (!System.IO.File.Exists(fullPath))
             {

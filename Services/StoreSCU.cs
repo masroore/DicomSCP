@@ -70,18 +70,40 @@ public class StoreSCU : IStoreSCU
 
             // 创建 C-STORE 请求
             var request = new DicomCStoreRequest(file);
+            var success = true;
+            var errorMessage = string.Empty;
 
             // 注册回调
             request.OnResponseReceived += (req, response) =>
             {
-                DicomLogger.Information("StoreSCU", "收到存储响应 - 状态: {Status}", response.Status);
+                if (response.Status.State != DicomState.Success)
+                {
+                    success = false;
+                    errorMessage = $"{response.Status.State} [{response.Status.Code}: {response.Status.Description}]";
+                    DicomLogger.Error("StoreSCU", 
+                        "存储失败 - 文件: {FilePath}, 状态: {Status} [{Code}: {Description}]",
+                        filePath,
+                        response.Status.State,
+                        response.Status.Code,
+                        response.Status.Description);
+                }
+                else
+                {
+                    DicomLogger.Information("StoreSCU", 
+                        "存储成功 - 文件: {FilePath}, 状态: {Status}",
+                        filePath,
+                        response.Status.State);
+                }
             };
 
             // 发送请求
             await client.AddRequestAsync(request);
             await client.SendAsync(cancellationToken);
 
-            DicomLogger.Information("StoreSCU", "DICOM 文件发送完成 - 文件: {FilePath}", filePath);
+            if (!success)
+            {
+                throw new DicomNetworkException($"存储失败: {errorMessage}");
+            }
         }
         catch (Exception ex)
         {
@@ -100,6 +122,7 @@ public class StoreSCU : IStoreSCU
 
             // 创建客户端
             var client = CreateClient(node);
+            var failedFiles = new List<(string FilePath, string Error)>();
 
             // 添加所有文件的请求
             foreach (var filePath in filePaths)
@@ -111,8 +134,19 @@ public class StoreSCU : IStoreSCU
 
                     request.OnResponseReceived += (req, response) =>
                     {
-                        DicomLogger.Information("StoreSCU", "收到存储响应 - 文件: {FilePath}, 状态: {Status}",
-                            filePath, response.Status);
+                        if (response.Status.State != DicomState.Success)
+                        {
+                            var errorMessage = $"{response.Status.State} [{response.Status.Code}: {response.Status.Description}]";
+                            DicomLogger.Error("StoreSCU", 
+                                "存储失败 - 文件: {FilePath}, 状态: {Status}", 
+                                filePath, errorMessage);
+                            failedFiles.Add((filePath, errorMessage));
+                        }
+                        else
+                        {
+                            DicomLogger.Information("StoreSCU", 
+                                "存储成功 - 文件: {FilePath}", filePath);
+                        }
                     };
 
                     await client.AddRequestAsync(request);
@@ -120,12 +154,20 @@ public class StoreSCU : IStoreSCU
                 catch (Exception ex)
                 {
                     DicomLogger.Error("StoreSCU", ex, "添加文件到发送队列失败 - 文件: {FilePath}", filePath);
+                    failedFiles.Add((filePath, ex.Message));
                     continue;
                 }
             }
 
             // 发送所有请求
             await client.SendAsync(cancellationToken);
+
+            // 检查是否有失败的文件
+            if (failedFiles.Any())
+            {
+                var errorMessage = string.Join("\n", failedFiles.Select(f => $"文件: {f.FilePath}, 错误: {f.Error}"));
+                throw new DicomNetworkException($"部分文件发送失败:\n{errorMessage}");
+            }
 
             DicomLogger.Information("StoreSCU", "批量 DICOM 文件发送完成 - 总文件数: {Count}", filePaths.Count());
         }
