@@ -15,202 +15,95 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
         }
 
-        /* 查看器容器 */
-        .viewer-container {
-            position: relative;
+        /* 视图容器 */
+        .viewport {
             width: 100%;
             height: 100vh;
-            background: #000;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* 工具栏 */
-        .toolbar {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 10px;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(10px);
-            min-height: 52px;
             position: relative;
-            z-index: 1000;
-        }
-
-        /* 窗位预设按钮组 */
-        .presets-container {
-            position: relative;
-            display: inline-block;
-        }
-
-        .window-presets-menu {
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-top: 5px;
-            background: rgba(30, 30, 30, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 8px;
-            display: none;
-            flex-direction: column;
-            gap: 4px;
-            z-index: 1100;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            min-width: 120px;
-            white-space: nowrap;
-            backdrop-filter: blur(8px);
-            transform: translateX(-50%);
-        }
-
-        .window-presets-menu.show {
-            display: flex;
-        }
-
-        /* 预设按钮样式 */
-        .preset-button {
-            display: flex;
-            align-items: center;
-            padding: 6px 12px;
-            border: none;
-            background: none;
             color: white;
-            width: 100%;
-            text-align: left;
-            font-size: 12px;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: background-color 0.2s;
-        }
-
-        .preset-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        /* 视图容器 - 采用 flex 布局自动填充剩余空间 */
-        .viewport {
-            flex: 1;
-            position: relative;
-            width: 100%;
-            background: #000;
-            border-radius: 0 0 8px 8px;
-            overflow: hidden;
-            z-index: 900;
-        }
-
-        /* 图像显示区域 */
-        #viewer {
-            width: 100%;
-            height: 100%;
-            position: relative;
+            display: inline-block;
+            background-color: black;
         }
 
         /* 角落信息 */
         .corner-info {
             position: absolute;
-            padding: 10px;
-            color: #fff;
+            padding: 8px;
             font-size: 12px;
-            font-family: monospace;
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
-            border-radius: 6px;
-            margin: 10px;
+            color: white;
+            z-index: 100;
+            text-shadow: 
+                1px 1px 2px rgba(0,0,0,0.8),
+                -1px -1px 2px rgba(0,0,0,0.8),
+                1px -1px 2px rgba(0,0,0,0.8),
+                -1px 1px 2px rgba(0,0,0,0.8);
             line-height: 1.5;
         }
-        .top-left { top: 0; left: 0; }
-        .top-right { top: 0; right: 0; }
-        .bottom-left { bottom: 0; left: 0; }
-        .bottom-right { bottom: 0; right: 0; }
+        .top-left { top: 10px; left: 10px; }
+        .top-right { top: 10px; right: 10px; text-align: right; }
+        .bottom-left { bottom: 10px; left: 10px; }
+        .bottom-right { bottom: 10px; right: 10px; text-align: right; }
 
         /* 工具组 */
         .tool-group {
             display: flex;
-            gap: 4px;
-            padding: 0 8px;
-            align-items: center;
-            height: 40px;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        /* 工具组之间的分隔线 */
-        .tool-group:not(:last-child)::after {
-            content: '';
-            height: 24px;
-            width: 1px;
-            margin: 0 4px;
-            background: linear-gradient(
-                to bottom,
-                transparent,
-                rgba(255, 255, 255, 0.15) 20%,
-                rgba(255, 255, 255, 0.15) 80%,
-                transparent
-            );
-            align-self: center;
-        }
-
-        /* 最后一个工具组不需要右边框 */
-        .tool-group:last-child {
-            border-right: none;
+        /* 工具栏 */
+        .toolbar {
+            position: absolute;
+            top: 50%;
+            left: 10px;
+            transform: translateY(-50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         /* 工具按钮 */
         .tool-button {
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 6px;
+            background: #444;
+            color: white;
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: none;
-            background: none;
-            cursor: pointer;
-            border-radius: 6px;
             transition: all 0.2s ease;
-            color: rgba(255, 255, 255, 0.8);
-            position: relative;
+            padding: 0;
         }
-
-        .tool-button img {
-            width: 20px;
-            height: 20px;
-            filter: brightness(0) invert(1);
-            opacity: 0.8;
-            transition: all 0.2s ease;
-        }
-
         .tool-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-        }
-
-        .tool-button:hover img {
-            opacity: 1;
-            transform: scale(1.1);
-        }
-
-        .tool-button.active {
-            background: rgba(0, 123, 255, 0.3);
-            color: #fff;
-            box-shadow: 0 0 0 1px rgba(0, 123, 255, 0.5);
+            background: #555;
             transform: translateY(-1px);
         }
-
-        /* 工具组之间的间距 */
-        .toolbar > .tool-group + .tool-group {
-            margin-left: 4px;
+        .tool-button.active {
+            background: #007bff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .tool-button img {
+            width: 24px;
+            height: 24px;
+            filter: invert(1);
+            transition: transform 0.2s ease;
+        }
+        .tool-button:hover img {
+            transform: scale(1.1);
         }
 
         /* 分隔线 */
         .divider {
-            width: 1px;
-            height: 28px;
-            background: linear-gradient(to bottom, 
-                transparent, 
-                rgba(255, 255, 255, 0.2), 
-                transparent
-            );
-            margin: 0 2px;
+            height: 1px;
+            background: #666;
+            margin: 4px 0;
         }
 
         /* 加载指示器样式 */
@@ -246,382 +139,67 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        /* DICOM Tags 模态框样式 */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.75);
-            z-index: 2000;
-            backdrop-filter: blur(4px);
-        }
-
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(30, 30, 30, 0.95);
-            padding: 24px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 1200px;
-            height: 90vh;
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #e0e0e0;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .modal-title {
-            font-size: 20px;
-            font-weight: 500;
-            color: #fff;
-        }
-
-        .close-button {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: rgba(255, 255, 255, 0.6);
-            transition: all 0.2s ease;
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .close-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-        }
-
-        .search-box {
-            width: 100%;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            font-size: 14px;
-            transition: all 0.2s ease;
-        }
-
-        .search-box:focus {
-            outline: none;
-            border-color: rgba(0, 102, 204, 0.5);
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
-        }
-
-        .search-box::placeholder {
-            color: rgba(255, 255, 255, 0.4);
-        }
-
-        .tags-table-container {
-            flex: 1;
-            overflow: auto;
-            margin: 0 -24px;
-            padding: 0 24px;
-            border-radius: 8px;
-        }
-
-        .tags-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 0;
-            font-size: 14px;
-            table-layout: fixed;
-        }
-
-        .tags-table th,
-        .tags-table td {
-            padding: 8px 12px;
-            vertical-align: top;
-            line-height: 1.5;
-        }
-
-        /* 设置各列宽度 */
-        .tags-table th:nth-child(1),
-        .tags-table td:nth-child(1) {  /* Tag Group 列 */
-            width: 120px;
-        }
-
-        .tags-table th:nth-child(2),
-        .tags-table td:nth-child(2) {  /* VR 列 */
-            width: 80px;
-        }
-
-        .tags-table th:nth-child(3),
-        .tags-table td:nth-child(3) {  /* 描述列 */
-            width: 40%;
-        }
-
-        .tags-table th:nth-child(4),
-        .tags-table td:nth-child(4) {  /* 值列 */
-            width: calc(60% - 200px);  /* 剩余宽度 */
-        }
-
-        .tag-group {
-            color: #66b3ff;
-            font-family: monospace;
-            white-space: nowrap;
-        }
-
-        .tag-vr {
-            color: #ff9966;
-            font-family: monospace;
-            white-space: nowrap;
-            text-align: center;
-        }
-
-        .tag-description {
-            color: rgba(255, 255, 255, 0.9);
-        }
-
-        .tag-value {
-            word-break: break-all;
-            color: rgba(255, 255, 255, 0.9);
-            font-family: monospace;
-        }
-
-        /* 修改表头样式 */
-        .tags-table thead tr {
-            background: rgba(20, 20, 20, 0.95);
-        }
-
-        .tags-table th {
-            position: sticky;
-            top: 0;
-            background: rgba(20, 20, 20, 0.95);
-            z-index: 1;
-            padding: 12px;
-            text-align: left;
-            font-weight: 500;
-            color: #fff;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* 修改表格内容区域 */
-        .tags-table-container {
-            flex: 1;
-            overflow: auto;
-            margin: 0 -24px;
-            padding: 0 24px;
-            border-radius: 8px;
-        }
-
-        /* 修改表格行样式 */
-        .tags-table tr {
-            transition: background-color 0.2s ease;
-        }
-
-        .tags-table tr:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .tags-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        /* 滚动条样式 */
-        .tags-table-container::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        .tags-table-container::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 4px;
-        }
-
-        .tags-table-container::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-        }
-
-        .tags-table-container::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        /* 工具提示 */
-        .tool-button[data-tooltip]::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s ease;
-            z-index: 10001;
-            pointer-events: none;
-            backdrop-filter: blur(4px);
-        }
-
-        .tool-button[data-tooltip]:hover::after {
-            opacity: 1;
-            visibility: visible;
-            bottom: -35px;
-        }
-
-        /* 预设分组样式 */
-        .preset-group {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 4px;
-            margin-bottom: 4px;
-        }
-
-        .preset-group:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-            margin-bottom: 0;
-        }
     </style>
 </head>
 <body>
-    <div class="viewer-container">
-        <!-- 工具栏 -->
-        <div class="toolbar">
-            <!-- 第一组：基础操作工具 -->
-            <div class="tool-group">
-                <button class="tool-button active" data-tool="Wwwc" data-tooltip="窗宽窗位">
-                    <img src="images/tools/contrast.svg" alt="窗宽窗位">
-                </button>
-                <button class="tool-button" data-tool="Stack" data-tooltip="翻层">
-                    <img src="images/tools/layers.svg" alt="翻层">
-                </button>
-                <button id="playButton" class="tool-button" data-tooltip="播放/暂停">
-                    <img src="images/tools/cine.svg" alt="播放">
-                </button>
-                <button class="tool-button" data-tool="Pan" data-tooltip="平移">
-                    <img src="images/tools/move.svg" alt="平移">
-                </button>
-                <button class="tool-button" data-tool="Zoom" data-tooltip="缩放">
-                    <img src="images/tools/search.svg" alt="缩放">
-                </button>
-                <button class="tool-button" data-tool="Magnify" data-tooltip="放大镜">
-                    <img src="images/tools/magnifier.svg" alt="放大镜">
-                </button>
-            </div>
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <!-- 基础工具组 -->
+        <div class="tool-group">
+            <button class="tool-button active" data-tool="wwwc" title="窗宽窗位">
+                <img src="images/tools/window.svg" alt="窗宽窗位">
+            </button>
+            <button class="tool-button" data-tool="pan" title="平移">
+                <img src="images/tools/pan.svg" alt="平移">
+            </button>
+            <button class="tool-button" data-tool="zoom" title="缩放">
+                <img src="images/tools/zoom.svg" alt="缩放">
+            </button>
+        </div>
+        <div class="divider"></div>
 
-            <!-- 第二组：测量工具 -->
-            <div class="tool-group">
-                <button class="tool-button" data-tool="Probe" data-tooltip="探针">
-                    <img src="images/tools/crosshair.svg" alt="探针">
-                </button>
-                <button class="tool-button" data-tool="Length" data-tooltip="测距">
-                    <img src="images/tools/ruler.svg" alt="测距">
-                </button>
-                <button class="tool-button" data-tool="Angle" data-tooltip="角度">
-                    <img src="images/tools/protractor.svg" alt="角度">
-                </button>
-                <button class="tool-button" data-tool="Rectangle" data-tooltip="矩形">
-                    <img src="images/tools/roi-rect.svg" alt="矩形">
-                </button>
-                <button class="tool-button" data-tool="Ellipse" data-tooltip="椭圆">
-                    <img src="images/tools/roi-circle.svg" alt="椭圆">
-                </button>
-            </div>
+        <!-- 测量工具组 -->
+        <div class="tool-group">
+            <button class="tool-button" data-tool="length" title="测距">
+                <img src="images/tools/length.svg" alt="测距">
+            </button>
+            <button class="tool-button" data-tool="angle" title="角度">
+                <img src="images/tools/angle.svg" alt="角度">
+            </button>
+            <button class="tool-button" data-tool="rectangle" title="矩形">
+                <img src="images/tools/rectangle.svg" alt="矩形">
+            </button>
+            <button class="tool-button" data-tool="ellipse" title="椭圆">
+                <img src="images/tools/ellipse.svg" alt="椭圆">
+            </button>
+        </div>
+        <div class="divider"></div>
 
-            <!-- 第三组：图像变换工具 -->
-            <div class="tool-group">
-                <button class="tool-button" data-tool="flip-horizontal" data-tooltip="水平翻转">
-                    <img src="images/tools/flip-horizontal.svg" alt="水平翻转">
-                </button>
-                <button class="tool-button" data-tool="flip-vertical" data-tooltip="垂直翻转">
-                    <img src="images/tools/flip-vertical.svg" alt="垂直翻转">
-                </button>
-                <button class="tool-button" data-tool="rotate-right" data-tooltip="顺时针旋转">
-                    <img src="images/tools/rotate-clockwise.svg" alt="顺时针旋转">
-                </button>
-                <button class="tool-button" data-tool="rotate-left" data-tooltip="逆时针旋转">
-                    <img src="images/tools/rotate-counterclockwise.svg" alt="逆时针旋转">
-                </button>
-                <button class="tool-button" data-tool="invert" data-tooltip="反相">
-                    <img src="images/tools/invert-color.svg" alt="反相">
-                </button>
-            </div>
-
-            <!-- 第四组：功能按钮 -->
-            <div class="tool-group">
-                <button class="tool-button" id="resetView" data-tooltip="重置">
-                    <img src="images/tools/reset-view.svg" alt="重置">
-                </button>
-                <button class="tool-button" id="clearAnnotations" data-tooltip="清除标注">
-                    <img src="images/tools/clear-all.svg" alt="清除标注">
-                </button>
-                <div class="presets-container">
-                    <button class="tool-button" id="windowPresets" data-tooltip="窗位预设">
-                        <img src="images/tools/window-presets.svg" alt="窗位预设">
-                    </button>
-                    <div class="window-presets-menu" id="windowPresetsMenu">
-                        <div class="preset-group">
-                            <button class="preset-button" data-preset="default">默认窗位</button>
-                            <button class="preset-button" data-preset="softTissue">软组织窗</button>
-                        </div>
-                        <div class="preset-group">
-                            <button class="preset-button" data-preset="brain">脑窗</button>
-                            <button class="preset-button" data-preset="brainSoft">脑软组织窗</button>
-                            <button class="preset-button" data-preset="stroke">卒中窗</button>
-                            <button class="preset-button" data-preset="subdural">硬膜下窗</button>
-                        </div>
-                        <div class="preset-group">
-                            <button class="preset-button" data-preset="lung">肺窗</button>
-                            <button class="preset-button" data-preset="mediastinum">纵隔窗</button>
-                            <button class="preset-button" data-preset="chest">胸窗</button>
-                        </div>
-                        <div class="preset-group">
-                            <button class="preset-button" data-preset="bone">骨窗</button>
-                            <button class="preset-button" data-preset="spine">脊柱窗</button>
-                            <button class="preset-button" data-preset="temporal">颞骨窗</button>
-                        </div>
-                        <div class="preset-group">
-                            <button class="preset-button" data-preset="liver">肝窗</button>
-                            <button class="preset-button" data-preset="angio">血管窗</button>
-                        </div>
-                    </div>
-                </div>
-                <button class="tool-button" id="showDicomTags" data-tooltip="DICOM Tags">
-                    <img src="images/tools/dicom-info.svg" alt="DICOM Tags">
-                </button>
-            </div>
+        <!-- 功能按钮组 -->
+        <div class="tool-group">
+            <button class="tool-button" id="resetView" title="重置">
+                <img src="images/tools/reset.svg" alt="重置">
+            </button>
+            <button class="tool-button" id="clearAnnotations" title="清除标注">
+                <img src="images/tools/clear.svg" alt="清除标注">
+            </button>
         </div>
 
-        <!-- 主视图 -->
-        <div class="viewport" id="viewer">
-            <!-- 角落信息 -->
-            <div class="corner-info top-left" id="patientInfo"></div>
-            <div class="corner-info top-right" id="studyInfo"></div>
-            <div class="corner-info bottom-left" id="imageInfo"></div>
-            <div class="corner-info bottom-right" id="windowInfo"></div>
+        <!-- 播放控制按钮组 -->
+        <div class="tool-group">
+            <button id="playButton" class="tool-button" title="播放/暂停">
+                <img src="images/tools/play.svg" alt="播放" width="20" height="20">
+            </button>
         </div>
+    </div>
+
+    <!-- 主视图 -->
+    <div class="viewport" id="viewer">
+        <!-- 角落信息 -->
+        <div class="corner-info top-left" id="patientInfo"></div>
+        <div class="corner-info top-right" id="studyInfo"></div>
+        <div class="corner-info bottom-left" id="imageInfo"></div>
+        <div class="corner-info bottom-right" id="windowInfo"></div>
     </div>
 
     <!-- 核心库 -->
@@ -635,30 +213,5 @@
     
     <!-- 应用代码 -->
     <script src="js/viewer.js"></script>
-
-    <!-- 在 body 底部添加模态框 -->
-    <div id="dicomTagsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">DICOM Tags</h3>
-                <button class="close-button">&times;</button>
-            </div>
-            <input type="text" class="search-box" placeholder="搜索标签...">
-            <div class="tags-table-container">
-                <table class="tags-table">
-                    <thead>
-                        <tr>
-                            <th>标签</th>
-                            <th>VR</th>
-                            <th>描述</th>
-                            <th>值</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tagsTableBody">
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 </body>
 </html> 
