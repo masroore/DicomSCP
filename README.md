@@ -4,7 +4,6 @@
 基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，并集成了 Web 端 DICOM 查看器。
 
 
-
 ![登录](about/登录.png)  
 ![影像管理](about/影像查看.png)  
 ![工作列表](about/worklistscp.png)  
@@ -58,7 +57,7 @@
 2. 修改 appsettings.json 配置文件
 3. 运行 DicomSCP.exe
 4. 访问 http://localhost:5000
-
+5、默认账号 admin / admin
 
 
 ## 技术栈
