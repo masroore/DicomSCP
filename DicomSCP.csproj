@@ -4,10 +4,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Company>ztx</Company>
+    <Company>ZTX</Company>
     <Product>DICOM SCP Server</Product>
     <Description>DICOM Service Class Provider</Description>
-    <Copyright>Copyright © 2024 ztx</Copyright>
+    <Copyright>Copyright © 2024 ZTX</Copyright>
     <Version>1.0.0</Version>
     <FileVersion>1.0.0.0</FileVersion>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
