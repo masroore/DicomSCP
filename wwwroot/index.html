@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM 管理系统</title>
+    <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="lib/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="css/main.css" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-0">
+        <div class="container">
+            <a class="navbar-brand py-2" href="#">DICOM管理系统</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#worklist" data-page="worklist">
+                            <i class="bi bi-calendar-check me-1"></i>预约登记
+                        </a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#images" data-page="images">
+                            <i class="bi bi-images me-1"></i>影像管理
+                        </a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#qr" data-page="qr">
+                            <i class="bi bi-search me-1"></i>查询检索
+                        </a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#store" data-page="store">
+                            <i class="bi bi-upload me-1"></i>发送图像
+                        </a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#print" data-page="print">
+                            <i class="bi bi-printer me-1"></i>打印管理
+                        </a>
+                    </li>
+                    <li class="nav-item" style="margin-right: -0.4rem;">
+                        <a class="nav-link py-2" href="#logs" data-page="logs">
+                            <i class="bi bi-journal-text me-1"></i>日志管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2" href="#settings" data-page="settings">
+                            <i class="bi bi-gear me-1"></i>系统设置
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="d-flex align-items-center ms-auto">
+                    <div class="system-status-group me-auto" style="cursor: pointer;">
+                        <div class="d-flex flex-column">
+                            <div class="status-item mb-1">
+                                <i class="bi bi-cpu"></i>
+                                <span id="cpuStatus">0%</span>
+                            </div>
+                            <div class="status-item">
+                                <i class="bi bi-memory"></i>
+                                <span id="memoryStatus">0MB</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="status-tip position-absolute bg-dark text-white p-2 rounded" 
+                        style="display: none; font-size: 0.8rem; z-index: 1000;">
+                        点击查看详细信息
+                    </div>
+
+                    <div class="service-status-group me-0" style="cursor: pointer;">
+                        <span class="service-status">
+                            <span class="service-name">StoreSCP</span>
+                            <span id="storeScp-status" class="badge bg-secondary">加载中...</span>
+                        </span>
+                        <span class="service-status">
+                            <span class="service-name">WListSCP</span>
+                            <span id="worklistScp-status" class="badge bg-secondary">加载中...</span>
+                        </span>
+                        <span class="service-status">
+                            <span class="service-name">QRSCP</span>
+                            <span id="qrScp-status" class="badge bg-secondary">加载中...</span>
+                        </span>
+                        <span class="service-status">
+                            <span class="service-name">PrintSCP</span>
+                            <span id="printScp-status" class="badge bg-secondary">加载中...</span>
+                        </span>
+                    </div>
+
+                    <ul class="navbar-nav ms-2">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle me-1"></i>
+                                <span id="currentUsername">加载中...</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="changePassword()">
+                                        <i class="bi bi-key me-2"></i>修改密码
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="logout()">
+                                        <i class="bi bi-box-arrow-right me-2"></i>退出系统
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div id="content-area">
+            <!-- Worklist管理页面 -->
+            <div id="worklist-page">
+                <!-- 添加搜索表单 -->
+                <div class="card mb-3">
+                    <div class="card-body p-2">
+                        <form id="worklistSearchForm" class="d-flex align-items-center flex-wrap">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">患者ID</span>
+                                <input type="text" class="form-control" style="width: 180px;" id="worklist-searchPatientId" placeholder="输入ID">
+                            </div>
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">姓名</span>
+                                <input type="text" class="form-control" style="width: 180px;" id="worklist-searchPatientName" placeholder="输入姓名">
+                            </div>
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">检查号</span>
+                                <input type="text" class="form-control" style="width: 180px;" id="worklist-searchAccessionNumber" placeholder="输入检查号">
+                            </div>
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">类型</span>
+                                <select class="form-select" style="width: 180px;" id="worklist-searchModality">
+                                    <option value="">全部</option>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="DR">DR</option>
+                                    <option value="US">US</option>
+                                </select>
+                            </div>
+                            <div class="d-flex align-items-center me-3">
+                                <span class="text-nowrap me-2">时间</span>
+                                <input type="date" class="form-control" style="width: 180px;" id="worklist-searchScheduledDate">
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="bi bi-search"></i>
+                                    查询
+                                </button>
+                                <button type="reset" class="btn btn-secondary me-2">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                    重置
+                                </button>
+                                <button type="button" class="btn btn-success" onclick="openAddWorklistModal()">
+                                    <i class="bi bi-calendar-plus"></i>
+                                    预约
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 检查列表 -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width: 120px">患者ID</th>
+                                <th style="width: 100px">姓名</th>
+                                <th style="width: 60px">性别</th>
+                                <th style="width: 60px">年龄</th>
+                                <th style="width: 120px">检查号</th>
+                                <th style="width: 80px">检查类型</th>
+                                <th style="width: 150px">预约时间</th>
+                                <th style="width: 80px">状态</th>
+                                <th style="width: 120px">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="worklist-table-body">
+                            <!-- 数据将通过JavaScript动态加载 -->
+                        </tbody>
+                    </table>
+                    
+                    <!-- 添加分页组件 -->
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div class="pagination-info">
+                            显示 <span id="worklist-currentRange">1-10</span> 条，共 <span id="worklist-totalCount">0</span> 条
+                        </div>
+                        <nav aria-label="分页导航">
+                            <ul class="pagination mb-0">
+                                <li class="page-item">
+                                    <button class="page-link" id="worklist-prevPage" aria-label="上一页">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </button>
+                                </li>
+                                <li class="page-item">
+                                    <span class="page-link" id="worklist-currentPage">1</span>
+                                </li>
+                                <li class="page-item">
+                                    <button class="page-link" id="worklist-nextPage" aria-label="下一页">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 影像管理页面 -->
+            <div id="images-page" style="display: none;">
+                <!-- 添加查询表单 -->
+                <div class="card mb-3">
+                    <div class="card-body p-2">
+                        <form id="imagesSearchForm" class="d-flex align-items-center flex-wrap">
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">患者ID</span>
+                                <input type="text" class="form-control" style="width: 190px;" id="images-searchPatientId" placeholder="输入ID">
+                            </div>
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">姓名</span>
+                                <input type="text" class="form-control" style="width: 190px;" id="images-searchPatientName" placeholder="输入姓名">
+                            </div>
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">检查号</span>
+                                <input type="text" class="form-control" style="width: 190px;" id="images-searchAccessionNumber" placeholder="输入检查号">
+                            </div>
+                            <div class="d-flex align-items-center me-2">
+                                <span class="text-nowrap me-2">类型</span>
+                                <select class="form-select" style="width: 190px;" id="images-searchModality">
+                                    <option value="">全部</option>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="DR">DR</option>
+                                    <option value="US">US</option>
+                                </select>
+                            </div>
+                            <div class="d-flex align-items-center me-3">
+                                <span class="text-nowrap me-2">时间</span>
+                                <input type="date" class="form-control" style="width: 190px;" id="images-searchStudyDate">
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="bi bi-search"></i>
+                                    查询
+                                </button>
+                                <button type="reset" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                    重置
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table id="images-table" class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>患者ID</th>
+                                <th>姓名</th>
+                                <th>检查号</th>
+                                <th>检查类型</th>
+                                <th>检查时间</th>
+                                <th>检查描述</th>
+                                <th>图像数</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="images-table-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 添加影像分页组件 -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="pagination-info">
+                        显示 <span id="images-currentRange">1-10</span> 条，共 <span id="images-totalCount">0</span> 条
+                    </div>
+                    <nav aria-label="分页导航">
+                        <ul class="pagination mb-0">
+                            <li class="page-item">
+                                <button class="page-link" id="images-prevPage" aria-label="上一页">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                            </li>
+                            <li class="page-item">
+                                <span class="page-link" id="images-currentPage">1</span>
+                            </li>
+                            <li class="page-item">
+                                <button class="page-link" id="images-nextPage" aria-label="下一页">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- 查询检索页面 -->
+            <div id="qr-page" style="display: none;">
+                <!-- 查询表单 -->
+                <div class="card mb-3">
+                    <div class="card-body p-3">
+                        <form id="qrSearchForm" class="row g-3">
+                            <div class="col-auto me-4" style="width: 250px;">
+                                <label class="form-label">PACS节点</label>
+                                <select class="form-select" id="qrNode" style="width: 250px;">
+                                    <!-- 节点列表将通过JavaScript动态加载 -->
+                                </select>
+                            </div>
+                            <div class="col-auto me-4" style="width: 180px;">
+                                <label class="form-label">病人ID</label>
+                                <input type="text" class="form-control" id="qrPatientId" style="width: 180px;">
+                            </div>
+                            <div class="col-auto me-4" style="width: 180px;">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="qrPatientName" style="width: 180px;">
+                            </div>
+                            <div class="col-auto me-4" style="width: 180px;">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="qrAccessionNumber" style="width: 180px;">
+                            </div>
+                            <div class="col-auto me-4" style="width: 180px;">
+                                <label class="form-label">检查类型</label>
+                                <select class="form-select" id="qrModality" style="width: 180px;">
+                                    <option value="">全部</option>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="DR">DR</option>
+                                    <option value="US">US</option>
+                                </select>
+                            </div>
+                            <div class="col-auto me-4" style="width: 180px;">
+                                <label class="form-label">检查日期</label>
+                                <input type="date" class="form-control" id="qrStudyDate" style="width: 180px;">
+                            </div>
+                            <div class="col-auto d-flex align-items-end">
+                                <button type="button" class="btn btn-primary me-2" onclick="searchQR()">
+                                    <i class="bi bi-search me-1"></i>查询
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="resetQRSearch()">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 查询结果表 -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>病人ID</th>
+                                <th>姓名</th>
+                                <th>检查号</th>
+                                <th>检查类型</th>
+                                <th>检查日期</th>
+                                <th>检查描述</th>
+                                <th>序列数</th>
+                                <th>图像数</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qr-table-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页 -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="pagination-info">
+                        显示 <span id="qr-currentRange">1-10</span> 条，共 <span id="qr-totalCount">0</span> 条
+                    </div>
+                    <nav aria-label="分页导航">
+                        <ul class="pagination mb-0">
+                            <li class="page-item">
+                                <button class="page-link" id="qr-prevPage" aria-label="上页">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                            </li>
+                            <li class="page-item">
+                                <span class="page-link" id="qr-currentPage">1</span>
+                            </li>
+                            <li class="page-item">
+                                <button class="page-link" id="qr-nextPage" aria-label="下一页">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+
+    <!-- 系统设置页面 -->
+    <div id="settings-page" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between mb-3">
+                            <h5 class="card-title">系统配置</h5>
+                            <div>
+                                <button type="button" class="btn btn-outline-info me-2" onclick="configManager.showHelp()">
+                                    <i class="bi bi-question-circle me-1"></i>参数说明
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="configManager.saveConfig()">
+                                    <i class="bi bi-save me-1"></i>保存配置
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <textarea id="configEditor" class="form-control" 
+                                style="height: 500px; font-family: Consolas, monospace; font-size: 14px;"
+                                spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+            <!-- 发送图像页面 -->
+            <div id="store-page" style="display: none;">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="storeForm">
+                            <div class="mb-3">
+                                <label class="form-label">目标节点</label>
+                                <select class="form-select" id="storeNode" required>
+                                    <!-- 节点列表将通过JavaScript动态加载 -->
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">选择文件或拖到此处</label>
+                                <div class="drop-zone border rounded p-4 text-center" id="dropZone">
+                                    <div class="mb-3">
+                                        <i class="bi bi-cloud-upload"></i>
+                                        <p class="mb-0">拖拽文件/文件夹到这里，或点击选择</p>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-primary me-2" id="fileInput">
+                                        <i class="bi bi-file-earmark-medical me-1"></i>DICOM文件
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary" id="folderInput">
+                                        <i class="bi bi-folder me-1"></i>选择文件夹
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="selectedFiles" class="mb-3" style="display: none;">
+                                <h6>已选择的文件：</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>文件名</th>
+                                                <th>大小</th>
+                                                <th>状态</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fileList">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-primary" id="sendButton" disabled>
+                                        <i class="bi bi-send me-1"></i>发送文件
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="clearButton">
+                                        <i class="bi bi-trash me-1"></i>清空列表
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- 日志管理页面 -->
+            <div id="logs-page" style="display: none;">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="list-group" id="logTypes">
+                                    <!-- 日志类型列表将通过 JavaScript 动态加载 -->
+                                </div>
+                            </div>
+                            <div class="col-md-9">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>文件名</th>
+                                                <th>大小</th>
+                                                <th>修改时间</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="logFiles">
+                                            <!-- 日志文件列表通过 JavaScript 动态加载 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="logFiles-pagination"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+    <!-- 打印管理页面 -->
+    <div id="print-page" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <!-- 搜索表单 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <form id="printSearchForm" class="row g-3">
+                            <div class="d-flex align-items-center justify-content-start gap-3">
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label me-2 mb-0" style="width: 80px;">请求方AE</label>
+                                    <input type="text" class="form-control" style="width: 180px;" id="searchCallingAE">
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label me-2 mb-0" style="width: 80px;">检查UID</label>
+                                    <input type="text" class="form-control" style="width: 300px;" id="searchStudyUID">
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label me-2 mb-0" style="width: 50px;">状态</label>
+                                    <select class="form-select" style="width: 120px;" id="searchPrintStatus">
+                                        <option value="">全部状态</option>
+                                        <option value="Created">已创建</option>
+                                        <option value="ImageReceived">已接收</option>
+                                        <option value="Completed">已完成</option>
+                                        <option value="Failed">失败</option>
+                                    </select>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <label class="form-label me-2 mb-0" style="width: 50px;">日期</label>
+                                    <input type="date" class="form-control" style="width: 180px;" id="searchDate">
+                                </div>
+                                <div class="d-flex align-items-center ms-3">
+                                    <button type="button" class="btn btn-primary me-2" onclick="printManager.searchPrintJobs()">
+                                        <i class="bi bi-search me-1"></i>查询
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="printManager.resetSearch()">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 打印任务列表 -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>任务ID</th>
+                                <th>请求方AE</th>
+                                <th>StudyUID</th>
+                                <th>创建时间</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="print-jobs-table-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页导航 -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="pagination-info">
+                        显示 <span id="print-currentRange">0-0</span> 条，共 <span id="print-totalCount">0</span> 条
+                    </div>
+                    <nav aria-label="分页导航">
+                        <ul class="pagination mb-0">
+                            <li class="page-item">
+                                <button class="page-link" id="print-prevPage">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </button>
+                            </li>
+                            <li class="page-item">
+                                <span class="page-link" id="print-currentPage">1</span>
+                            </li>
+                            <li class="page-item">
+                                <button class="page-link" id="print-nextPage">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑检查的模态框 -->
+    <div class="modal fade" id="worklistModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">添加预约</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="worklistForm">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">患者ID</label>
+                                <input type="text" class="form-control" id="patientId" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="patientName" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">性别</label>
+                                <select class="form-select" id="patientSex" required>
+                                    <option value="M">男</option>
+                                    <option value="F">女</option>
+                                    <option value="O">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">年龄</label>
+                                <input type="number" class="form-control" id="patientAge" min="0" max="150" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查号</label>
+                                <input type="text" class="form-control" id="accessionNumber" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查类型</label>
+                                <select class="form-select" id="modality" required>
+                                    <option value="CT">CT</option>
+                                    <option value="MR">MR</option>
+                                    <option value="DR">DR</option>
+                                    <option value="US">US</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">预约时间</label>
+                                <input type="datetime-local" class="form-control" id="scheduledDateTime" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">设备AE Title</label>
+                                <input type="text" class="form-control" id="scheduledAET" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">设备名称</label>
+                                <input type="text" class="form-control" id="scheduledStationName">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">检查部位</label>
+                                <input type="text" class="form-control" id="bodyPartExamined">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">状态</label>
+                                <select class="form-select" id="status" required>
+                                    <option value="SCHEDULED">已预约</option>
+                                    <option value="IN_PROGRESS">检查中</option>
+                                    <option value="COMPLETED">已完成</option>
+                                    <option value="DISCONTINUED">已中断</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveWorklist()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加修改密码的模态框 -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改密码</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="changePasswordForm" onsubmit="return false;">
+                        <input type="text" 
+                            name="username" 
+                            style="display: none;" 
+                            autocomplete="username" 
+                            aria-hidden="true">
+                        <div class="mb-3">
+                            <label class="form-label">旧密码</label>
+                            <input type="password" class="form-control" id="oldPassword" 
+                                autocomplete="current-password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">新密码</label>
+                            <input type="password" class="form-control" id="newPassword" 
+                                autocomplete="new-password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">确认新密码</label>
+                            <input type="password" class="form-control" id="confirmPassword" 
+                                autocomplete="new-password" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="savePasswordChange()">确认修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="lib/jquery/jquery.min.js"></script>
+    <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="lib/axios/axios.min.js"></script>
+
+    <script src="js/main.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/services.js"></script>
+
+    <script src="js/config.js"></script>
+    <script src="js/logs.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/print.js"></script>
+    <script src="js/worklist.js"></script>
+    <script src="js/images.js"></script>
+    <script src="js/qr.js"></script>
+
+    <!-- Toast 容器 -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="storeToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto">提示</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body"></div>
+    </div>
+</div>
+</body>
+</html>
