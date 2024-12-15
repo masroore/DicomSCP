@@ -101,6 +101,7 @@ function initializeTools() {
     cornerstoneTools.addTool(cornerstoneTools.WwwcTool);
     cornerstoneTools.addTool(cornerstoneTools.PanTool);
     cornerstoneTools.addTool(cornerstoneTools.ZoomTool);
+    cornerstoneTools.addTool(cornerstoneTools.ProbeTool);  // 添加探针工具
     cornerstoneTools.addTool(cornerstoneTools.LengthTool);
     cornerstoneTools.addTool(cornerstoneTools.AngleTool);
     cornerstoneTools.addTool(cornerstoneTools.RectangleRoiTool);
@@ -156,6 +157,7 @@ function activateTool(toolName) {
         'wwwc': 'Wwwc',
         'pan': 'Pan',
         'zoom': 'Zoom',
+        'probe': 'Probe',  // 添加探针工具映射
         'length': 'Length',
         'angle': 'Angle',
         'rectangle': 'RectangleRoi',
@@ -245,7 +247,7 @@ function handleToolButtonClick(e) {
 
 // 清除标注
 function clearAnnotations() {
-    const toolList = ['Length', 'Angle', 'RectangleRoi', 'EllipticalRoi'];
+    const toolList = ['Length', 'Angle', 'RectangleRoi', 'EllipticalRoi', 'Probe'];  // 添加 Probe
     toolList.forEach(toolType => {
         cornerstoneTools.clearToolState(element, toolType);
     });
@@ -293,7 +295,7 @@ function updateCornerInfo(image, viewport) {
     document.getElementById('studyInfo').innerHTML = `
         检查号: ${image.data.string('x00080050') || 'N/A'}<br>
         类型: ${image.data.string('x00080060') || 'N/A'}<br>
-        ${formatDate(image.data.string('x00080020'))}
+        时间：${formatDate(image.data.string('x00080020'))}
     `;
 
     // 获取总帧数
@@ -365,60 +367,42 @@ async function loadImages() {
             return instanceNumberA - instanceNumberB;
         });
         
-        // 构建图像ID数组
-        imageIds = [];
+        // 先加载第一个实例以确定是否是多帧图像
+        if (instances.length > 0) {
+            const firstImageId = `wadouri:${baseUrl}/api/images/download/${instances[0].sopInstanceUid}?transferSyntax=jpeg`;
+            const firstImage = await cornerstone.loadAndCacheImage(firstImageId);
+            const numberOfFrames = firstImage.data.intString('x00280008') || 1;
 
-        // 先构建完整的 imageIds 数组
-        for (const instance of instances) {
-            const imageId = `wadouri:${baseUrl}/api/images/download/${instance.sopInstanceUid}?transferSyntax=jpeg`;
-            try {
-                // 加载第一张图像并显示
-                if (imageIds.length === 0) {
-                    const image = await cornerstone.loadAndCacheImage(imageId);
-                    const numberOfFrames = image.data.intString('x00280008') || 1;
-                    
-                    if (numberOfFrames > 1) {
-                        // 多帧图像
-                        for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
-                            imageIds.push(`${imageId}?frame=${frameIndex}`);
-                        }
-                    } else {
-                        imageIds.push(imageId);
-                    }
-                    // 显示第一张图像并关闭加载提示
-                    await displayImage(0);
-                    hideLoadingIndicator();  // 第一张图像显示后就关闭加载提示
-                } else {
-                    // 后台加载其他图像
-                    const image = await cornerstone.loadAndCacheImage(imageId);
-                    const numberOfFrames = image.data.intString('x00280008') || 1;
-                    
-                    if (numberOfFrames > 1) {
-                        for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
-                            imageIds.push(`${imageId}?frame=${frameIndex}`);
-                        }
-                    } else {
-                        imageIds.push(imageId);
-                    }
+            // 构建完整的 imageIds 数组
+            imageIds = [];
+            if (numberOfFrames > 1) {
+                // 多帧图像
+                for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+                    imageIds.push(`${firstImageId}?frame=${frameIndex}`);
                 }
-            } catch (error) {
-                console.error('[Error] Failed to load image:', error);
+            } else {
+                // 单帧图像，处理所有实例
+                imageIds = instances.map(instance => 
+                    `wadouri:${baseUrl}/api/images/download/${instance.sopInstanceUid}?transferSyntax=jpeg`
+                );
             }
+
+            // 显示第一张图像
+            const viewport = cornerstone.getDefaultViewportForImage(element, firstImage);
+            currentImageIndex = 0;
+            await cornerstone.displayImage(element, firstImage, viewport);
+            updateCornerInfo(firstImage, viewport);
+            hideLoadingIndicator();
+
+            // 后台加载其他图像
+            imageIds.slice(1).forEach(imageId => {
+                cornerstone.loadAndCacheImage(imageId).catch(() => {});
+            });
         }
-
-        if (imageIds.length === 0) {
-            throw new Error('No valid images loaded');
-        }
-
-        // 后台预加载其余图像
-        imageIds.slice(1).forEach(imageId => {
-            cornerstone.loadAndCacheImage(imageId).catch(() => {});
-        });
-
     } catch (error) {
         console.error('[Error] Failed to load images:', error);
         alert('加载图像失败');
-        hideLoadingIndicator();  // 确保出错时也关闭加载提示
+        hideLoadingIndicator();
     }
 }
 
@@ -442,7 +426,7 @@ function hideLoadingIndicator() {
     }
 }
 
-// 修改显示图像的函数，优化性能
+// 修改显示图像的函数，进一步优化性能
 async function displayImage(index) {
     if (index < 0) {
         index = imageIds.length - 1;
@@ -451,7 +435,7 @@ async function displayImage(index) {
     }
     
     try {
-        // 预加载下一张图像
+        // 预加载下一张图像，但不等待其完成
         const nextIndex = (index + 1) % imageIds.length;
         cornerstone.loadAndCacheImage(imageIds[nextIndex]).catch(() => {});
 
@@ -459,7 +443,7 @@ async function displayImage(index) {
         const imageId = imageIds[index];
         const image = await cornerstone.loadAndCacheImage(imageId);
         
-        // 准备视口配置
+        // 在 requestAnimationFrame 外准备视口配置
         const viewport = cornerstone.getDefaultViewportForImage(element, image);
         const currentViewport = cornerstone.getViewport(element);
         
@@ -470,15 +454,16 @@ async function displayImage(index) {
             viewport.invert = currentViewport.invert;
         }
 
-        // 使用 requestAnimationFrame 优化渲染
+        // 分离渲染和信息更新
         requestAnimationFrame(() => {
+            // 只在这一帧进行图像渲染
             cornerstone.displayImage(element, image, viewport);
             currentImageIndex = index;
             
-            // 延迟更新角落信息
-            setTimeout(() => {
+            // 在下一帧更新角落信息
+            requestAnimationFrame(() => {
                 updateCornerInfo(image, viewport);
-            }, 0);
+            });
         });
     } catch (error) {
         console.error('显示图像失败:', error);
@@ -494,7 +479,7 @@ function togglePlay() {
     }
 }
 
-// 修改播放控制函数，优化性能
+// 优化播放控制函数
 function startPlay() {
     if (!isPlaying && imageIds.length > 1) {
         isPlaying = true;
@@ -503,21 +488,30 @@ function startPlay() {
         
         let lastTime = performance.now();
         let frameCount = 0;
+        let pendingFrame = false;
         
         const animate = (currentTime) => {
             if (!isPlaying) return;
 
+            // 如果上一帧还在处理中，跳过这一帧
+            if (pendingFrame) {
+                requestAnimationFrame(animate);
+                return;
+            }
+
             const deltaTime = currentTime - lastTime;
-            
-            // 限制帧率
             if (deltaTime >= playbackSpeed) {
                 frameCount++;
-                if (frameCount % 2 === 0) { // 每两帧更新一次
+                if (frameCount % 2 === 0) {
+                    pendingFrame = true;
                     let nextIndex = currentImageIndex + 1;
                     if (nextIndex >= imageIds.length) {
                         nextIndex = 0;
                     }
-                    displayImage(nextIndex);
+                    
+                    displayImage(nextIndex).finally(() => {
+                        pendingFrame = false;
+                    });
                 }
                 lastTime = currentTime;
             }
