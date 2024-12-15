@@ -56,8 +56,8 @@
 1. 下载最新发布版本
 2. 修改 appsettings.json 配置文件
 3. 运行 DicomSCP.exe
-4. 访问 http://localhost:5000
-5、默认账号 admin / admin
+4. 访问 http://localhost:5000  
+5. 默认账号 admin / admin
 
 
 ## 技术栈
