@@ -2,6 +2,18 @@
 
 基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，并集成了 Web 端 DICOM 查看器。
 
+
+![登录](about/登录.png)  
+![影像管理](about/影像查看.png)  
+![工作列表](about/worklistscp.png)  
+![查询检索](about/qrscu.png) 
+![发送图像](about/发送图像.png)  
+![打印](about/打印管理.png)  
+![配置](about/设置.png) 
+![日志](about/日志.png) 
+![监控](about/监控信息.png) 
+
+
 ## 功能特性
 
 ### DICOM 服务
@@ -104,12 +116,6 @@ dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true /p:IncludeNativeL
 - UI 组件：Bootstrap
 
 
-
-## 技术支持
-
-- 提交 Issue
-- 发送邮件至 support@example.com
-- 查看在线文档
 
 ## 许可证
 
