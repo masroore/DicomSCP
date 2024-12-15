@@ -294,8 +294,8 @@ function updateCornerInfo(image, viewport) {
     // 检查信息
     document.getElementById('studyInfo').innerHTML = `
         检查号: ${image.data.string('x00080050') || 'N/A'}<br>
-        类型: ${image.data.string('x00080060') || 'N/A'}<br>
-        时间：${formatDate(image.data.string('x00080020'))}
+        时间：${formatDate(image.data.string('x00080020'))}<br>
+        类型: ${image.data.string('x00080060') || 'N/A'}
     `;
 
     // 获取总帧数
