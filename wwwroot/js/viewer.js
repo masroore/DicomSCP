@@ -159,7 +159,8 @@ function activateTool(toolName) {
         'length': 'Length',
         'angle': 'Angle',
         'rectangle': 'RectangleRoi',
-        'ellipse': 'EllipticalRoi'
+        'ellipse': 'EllipticalRoi',
+        'invert': 'Invert'
     };
 
     const toolToActivate = toolMap[toolName];
@@ -201,6 +202,16 @@ function setupToolbar() {
     document.querySelectorAll('.tool-button').forEach(button => {
         button.addEventListener('click', handleToolButtonClick);
     });
+
+    // 添加反相按钮事件监听
+    const invertButton = document.getElementById('invertButton');
+    if (invertButton) {
+        invertButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleInvert();
+        });
+    }
 }
 
 // 工具按钮点击处理
@@ -225,6 +236,10 @@ function handleToolButtonClick(e) {
         cornerstone.reset(element);
     } else if (this.id === 'clearAnnotations') {
         clearAnnotations();
+    } else if (this.id === 'invertButton') {
+        // 切换反相按钮的激活状态
+        this.classList.toggle('active');
+        toggleInvert();
     }
 }
 
@@ -277,8 +292,8 @@ function updateCornerInfo(image, viewport) {
     // 检查信息
     document.getElementById('studyInfo').innerHTML = `
         检查号: ${image.data.string('x00080050') || 'N/A'}<br>
-        检查类型: ${image.data.string('x00080060') || 'N/A'}<br>
-        检查时间: ${formatDate(image.data.string('x00080020'))}
+        类型: ${image.data.string('x00080060') || 'N/A'}<br>
+        ${formatDate(image.data.string('x00080020'))}
     `;
 
     // 获取总帧数
@@ -352,35 +367,58 @@ async function loadImages() {
         
         // 构建图像ID数组
         imageIds = [];
+
+        // 先构建完整的 imageIds 数组
         for (const instance of instances) {
             const imageId = `wadouri:${baseUrl}/api/images/download/${instance.sopInstanceUid}?transferSyntax=jpeg`;
             try {
-                const image = await cornerstone.loadAndCacheImage(imageId);
-                const numberOfFrames = image.data.intString('x00280008') || 1;
-                
-                if (numberOfFrames > 1) {
-                    // 多帧图像
-                    for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
-                        imageIds.push(`${imageId}?frame=${frameIndex}`);
+                // 加载第一张图像并显示
+                if (imageIds.length === 0) {
+                    const image = await cornerstone.loadAndCacheImage(imageId);
+                    const numberOfFrames = image.data.intString('x00280008') || 1;
+                    
+                    if (numberOfFrames > 1) {
+                        // 多帧图像
+                        for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+                            imageIds.push(`${imageId}?frame=${frameIndex}`);
+                        }
+                    } else {
+                        imageIds.push(imageId);
                     }
+                    // 显示第一张图像并关闭加载提示
+                    await displayImage(0);
+                    hideLoadingIndicator();  // 第一张图像显示后就关闭加载提示
                 } else {
-                    imageIds.push(imageId);
+                    // 后台加载其他图像
+                    const image = await cornerstone.loadAndCacheImage(imageId);
+                    const numberOfFrames = image.data.intString('x00280008') || 1;
+                    
+                    if (numberOfFrames > 1) {
+                        for (let frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+                            imageIds.push(`${imageId}?frame=${frameIndex}`);
+                        }
+                    } else {
+                        imageIds.push(imageId);
+                    }
                 }
             } catch (error) {
                 console.error('[Error] Failed to load image:', error);
             }
         }
 
-        if (imageIds.length > 0) {
-            await displayImage(0);
-        } else {
+        if (imageIds.length === 0) {
             throw new Error('No valid images loaded');
         }
+
+        // 后台预加载其余图像
+        imageIds.slice(1).forEach(imageId => {
+            cornerstone.loadAndCacheImage(imageId).catch(() => {});
+        });
+
     } catch (error) {
         console.error('[Error] Failed to load images:', error);
         alert('加载图像失败');
-    } finally {
-        hideLoadingIndicator();
+        hideLoadingIndicator();  // 确保出错时也关闭加载提示
     }
 }
 
@@ -404,7 +442,7 @@ function hideLoadingIndicator() {
     }
 }
 
-// 修改显示图像的函数
+// 修改显示图像的函数，优化性能
 async function displayImage(index) {
     if (index < 0) {
         index = imageIds.length - 1;
@@ -413,22 +451,35 @@ async function displayImage(index) {
     }
     
     try {
+        // 预加载下一张图像
+        const nextIndex = (index + 1) % imageIds.length;
+        cornerstone.loadAndCacheImage(imageIds[nextIndex]).catch(() => {});
+
+        // 加载当前图像
         const imageId = imageIds[index];
         const image = await cornerstone.loadAndCacheImage(imageId);
-        const viewport = cornerstone.getDefaultViewportForImage(element, image);
         
-        // 保持当前的视口状态
+        // 准备视口配置
+        const viewport = cornerstone.getDefaultViewportForImage(element, image);
         const currentViewport = cornerstone.getViewport(element);
+        
         if (currentViewport) {
             viewport.scale = currentViewport.scale;
             viewport.translation = currentViewport.translation;
             viewport.voi = currentViewport.voi;
+            viewport.invert = currentViewport.invert;
         }
-        
-        await cornerstone.displayImage(element, image, viewport);
-        currentImageIndex = index;
-        
-        updateCornerInfo(image, viewport);
+
+        // 使用 requestAnimationFrame 优化渲染
+        requestAnimationFrame(() => {
+            cornerstone.displayImage(element, image, viewport);
+            currentImageIndex = index;
+            
+            // 延迟更新角落信息
+            setTimeout(() => {
+                updateCornerInfo(image, viewport);
+            }, 0);
+        });
     } catch (error) {
         console.error('显示图像失败:', error);
     }
@@ -443,19 +494,38 @@ function togglePlay() {
     }
 }
 
+// 修改播放控制函数，优化性能
 function startPlay() {
     if (!isPlaying && imageIds.length > 1) {
         isPlaying = true;
         const playButton = document.getElementById('playButton');
         playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停" width="20" height="20">';
         
-        playInterval = setInterval(() => {
-            let nextIndex = currentImageIndex + 1;
-            if (nextIndex >= imageIds.length) {
-                nextIndex = 0; // 循环播放
+        let lastTime = performance.now();
+        let frameCount = 0;
+        
+        const animate = (currentTime) => {
+            if (!isPlaying) return;
+
+            const deltaTime = currentTime - lastTime;
+            
+            // 限制帧率
+            if (deltaTime >= playbackSpeed) {
+                frameCount++;
+                if (frameCount % 2 === 0) { // 每两帧更新一次
+                    let nextIndex = currentImageIndex + 1;
+                    if (nextIndex >= imageIds.length) {
+                        nextIndex = 0;
+                    }
+                    displayImage(nextIndex);
+                }
+                lastTime = currentTime;
             }
-            displayImage(nextIndex);
-        }, playbackSpeed);
+            
+            requestAnimationFrame(animate);
+        };
+        
+        requestAnimationFrame(animate);
     }
 }
 
@@ -464,24 +534,25 @@ function pausePlay() {
         isPlaying = false;
         const playButton = document.getElementById('playButton');
         playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放" width="20" height="20">';
-        
-        if (playInterval) {
-            clearInterval(playInterval);
-            playInterval = null;
-        }
     }
 }
 
-// 修改播放功能相关的代码
-function playImages() {
-    if (isPlaying) {
-        currentImageIndex = (currentImageIndex + 1) % totalImages;
-        displayImage(currentImageIndex);
-        // 使用playbackSpeed控制播放速度
-        setTimeout(playImages, playbackSpeed);
+// 修改反相功能
+function toggleInvert() {
+    const viewport = cornerstone.getViewport(element);
+    viewport.invert = !viewport.invert;
+    cornerstone.setViewport(element, viewport);
+
+    // 保持反相状态
+    const invertButton = document.getElementById('invertButton');
+    if (invertButton) {
+        invertButton.classList.toggle('active', viewport.invert);
     }
 }
 
-// 初始化并加载图像
-initializeViewer();
-loadImages();
+// 修改文件末尾的初始化代码
+// 只保留一处初始化
+document.addEventListener('DOMContentLoaded', () => {
+    initializeViewer();
+    loadImages();
+});
