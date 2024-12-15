@@ -1,6 +1,6 @@
 # DICOM 管理系统
 
-## 打造中文开源社区最完善的DICOM工具箱
+## 携手CURSOR重磅发布，打造中文开源社区最完善的DICOM工具箱!
 基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，并集成了 Web 端 DICOM 查看器。
 
 
