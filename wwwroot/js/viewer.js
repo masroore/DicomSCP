@@ -235,11 +235,7 @@ function handleToolButtonClick(e) {
 
     // 特殊按钮处理
     if (this.id === 'resetView') {
-        const image = cornerstone.getImage(element);
-        if (image) {
-            const viewport = getDefaultViewport(image);
-            cornerstone.setViewport(element, viewport);
-        }
+        cornerstone.reset(element);
     } else if (this.id === 'clearAnnotations') {
         clearAnnotations();
     } else if (this.id === 'invertButton') {
@@ -298,8 +294,8 @@ function updateCornerInfo(image, viewport) {
     // 检查信息
     document.getElementById('studyInfo').innerHTML = `
         检查号: ${image.data.string('x00080050') || 'N/A'}<br>
-        时间：${formatDate(image.data.string('x00080020'))}<br>
-        类型: ${image.data.string('x00080060') || 'N/A'}
+        类型: ${image.data.string('x00080060') || 'N/A'}<br>
+        时间：${formatDate(image.data.string('x00080020'))}
     `;
 
     // 获取总帧数
@@ -356,26 +352,7 @@ function formatDate(dateStr) {
     return `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
 }
 
-// 添加一个函数来获取默认视口设置
-function getDefaultViewport(image) {
-    const viewport = cornerstone.getDefaultViewportForImage(element, image);
-    
-    // 设置固定的初始视口参数
-    viewport.scale = 1.0;
-    viewport.translation = { x: 0, y: 0 };
-    
-    // 计算合适的窗宽窗位
-    if (!viewport.voi.windowWidth || !viewport.voi.windowCenter) {
-        const maxVoi = image.maxPixelValue || 255;
-        const minVoi = image.minPixelValue || 0;
-        viewport.voi.windowWidth = maxVoi - minVoi;
-        viewport.voi.windowCenter = (maxVoi + minVoi) / 2;
-    }
-    
-    return viewport;
-}
-
-// 修改 loadImages 函数中显示第一张图像的部分
+// 修改加载图像的函数
 async function loadImages() {
     try {
         showLoadingIndicator();
@@ -390,7 +367,7 @@ async function loadImages() {
             return instanceNumberA - instanceNumberB;
         });
         
-        // 显示第一张图像
+        // 先加载第一个实例以确定是否是多帧图像
         if (instances.length > 0) {
             const firstImageId = `wadouri:${baseUrl}/api/images/download/${instances[0].sopInstanceUid}?transferSyntax=jpeg`;
             const firstImage = await cornerstone.loadAndCacheImage(firstImageId);
@@ -410,8 +387,8 @@ async function loadImages() {
                 );
             }
 
-            // 使用新的默认视口设置
-            const viewport = getDefaultViewport(firstImage);
+            // 显示第一张图像
+            const viewport = cornerstone.getDefaultViewportForImage(element, firstImage);
             currentImageIndex = 0;
             await cornerstone.displayImage(element, firstImage, viewport);
             updateCornerInfo(firstImage, viewport);
