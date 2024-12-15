@@ -126,7 +126,7 @@ function addCopyright() {
         <div class="container text-center">
             <span class="text-muted">
                 © ${new Date().getFullYear()} DICOM管理系统 by 
-                <a href="https://github.com/fightroad" target="_blank">
+                <a href="https://gitee.com/fightroad/DicomSCP" target="_blank">
                     平凡之路 <i class="bi bi-github"></i>
                 </a>
             </span>
