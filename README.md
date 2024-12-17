@@ -45,7 +45,7 @@
   - 支持发送DICOM图像到DICOM SCP
   - 可配置多个目标节点
 
-  **Print-SCU (Print-SCU)**
+- **Print-SCU (Print-SCU)**
   - 支持将PRINTSCP接收到的图像打印到其他打印机或PRINTSCP服务
   - 构建打印图像会保留原始图像的标签信息
 
