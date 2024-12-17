@@ -107,7 +107,7 @@
   - 支持将PRINTSCP接收到的图像打印到其他打印机或PRINTSCP服务
   - 构建打印图像会保留原始图像的标签信息
 
-- **LOG SERVICE (日志服务)**
+- **Log Service (日志服务)**
   - 支持查看、下载、删除日志
   - 个服务日志独立配置
   - 多日志级别配置
@@ -138,6 +138,24 @@
 - 数据库：SQLite
 - HTTP 客户端：Axios
 - UI 组件：Bootstrap
+
+## 使用的开源项目
+
+本项目使用了以下优秀的开源项目：
+
+### 后端
+- [fo-dicom](https://github.com/fo-dicom/fo-dicom) - Fellow Oak DICOM for .NET
+- [Serilog](https://github.com/serilog/serilog) - 结构化日志框架
+- [SQLite-net](https://github.com/praeclarum/sqlite-net) - 简单、强大的 SQLite 客户端
+
+### 前端
+- [Cornerstone.js](https://github.com/cornerstonejs/cornerstone) - 现代 Web DICOM 查看器
+- [dicomParser](https://github.com/cornerstonejs/dicomParser) - DICOM 解析器
+- [Hammer.js](https://github.com/hammerjs/hammer.js) - 触摸手势库
+- [Axios](https://github.com/axios/axios) - 基于 Promise 的 HTTP 客户端
+- [Bootstrap](https://github.com/twbs/bootstrap) - 前端组件库
+
+感谢这些优秀的开源项目，让本项目得以实现！
 
 ## 赞助者
 
