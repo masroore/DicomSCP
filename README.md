@@ -19,10 +19,10 @@
 
 ### DICOM 服务
 - **存储服务 (C-STORE SCP)**
-  - 支持多种传输语法和压缩格式
-  - 可配置并发存储限制
-  - 自动组织存储目录结构
-  - 支持 JPEG、JPEG2000、JPEG-LS RLE 等压缩
+  - 按照4个级别的标签入库和归档
+  - 按照级别标签自动组织存储目录结构
+  - 支持 JPEG、JPEG2000、JPEG-LS、RLE 等压缩
+  - 对不标准的字符集中文字符进行乱码处理
 
 - **工作列表服务 (Worklist SCP)**
   - 提供标准 DICOM Modality Worklist 服务
@@ -33,12 +33,21 @@
   - 提供 C-FIND、C-MOVE、C-GET 服务
   - 可配置多个目标节点
   - 支持多种查询级别（Study/Series/Image）
-  - 支持JPEG、JPEG2000、JPEG-LS RLE 传输语法实时转码
+  - 支持JPEG、JPEG2000、JPEG-LS、RLE 传输语法实时转码
 
 - **打印服务 (Print SCP)**
   - 打印任务队列管理
   - 支持多种打印格式
   - 打印任务状态跟踪
+  - 归档打印的原始文件和标签
+
+- **CSTORE-SCU (CSTORE-SCU)**
+  - 支持发送DICOM图像到DICOM SCP
+  - 可配置多个目标节点
+
+ **Print-SCU (Print-SCU)**
+ - 支持将PRINTSCP接收到的图像打印到其他打印机或PRINTSCP服务
+ - 构建打印图像会保留原始图像的标签信息
 
 
 
