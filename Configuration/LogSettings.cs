@@ -64,6 +64,16 @@ public class ServiceLoggingConfig
         OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"
     };
 
+    public ServiceLogConfig WADO { get; set; } = new ServiceLogConfig
+    {
+        Enabled = true,
+        EnableConsoleLog = true,
+        EnableFileLog = true,
+        MinimumLevel = LogEventLevel.Debug,
+        LogPath = "logs/wado",
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [WADO] {Message:lj}{NewLine}{Exception}"
+    };
+
     public ServiceLogConfig PrintSCP { get; set; } = new ServiceLogConfig
     {
         Enabled = true,

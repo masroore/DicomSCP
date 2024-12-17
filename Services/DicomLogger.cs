@@ -140,6 +140,44 @@ public static class DicomLogger
             _loggers["Api"] = apiLogger.CreateLogger();
         }
 
+        // 配置WADO服务的日志
+        if (settings.Services.WADO?.Enabled == true)
+        {
+            var wadoConfig = settings.Services.WADO;
+            var wadoLogger = new LoggerConfiguration()
+                .MinimumLevel.Is(wadoConfig.MinimumLevel);
+
+            if (wadoConfig.EnableConsoleLog)
+            {
+                wadoLogger.WriteTo.Console(
+                    outputTemplate: string.IsNullOrEmpty(wadoConfig.OutputTemplate) 
+                        ? (_settings?.OutputTemplate ?? DefaultConsoleTemplate)
+                        : wadoConfig.OutputTemplate);
+            }
+
+            if (wadoConfig.EnableFileLog)
+            {
+                var logPath = string.IsNullOrEmpty(wadoConfig.LogPath)
+                    ? Path.Combine(_settings?.LogPath ?? "logs", "wado")
+                    : wadoConfig.LogPath;
+
+                Directory.CreateDirectory(logPath);
+
+                wadoLogger.WriteTo.File(
+                    path: Path.Combine(logPath, "wado-.log"),
+                    rollingInterval: RollingInterval.Day,
+                    outputTemplate: string.IsNullOrEmpty(wadoConfig.OutputTemplate)
+                        ? (_settings?.OutputTemplate ?? DefaultFileTemplate)
+                        : wadoConfig.OutputTemplate,
+                    retainedFileCountLimit: _settings?.RetainedDays ?? 31);
+            }
+
+            _loggers["WADO"] = wadoLogger.CreateLogger();
+            
+            // 记录WADO服务启动
+            _loggers["WADO"].Information("WADO服务日志系统已初始化");
+        }
+
         // 设置默认日志记录器
         _logger = serverLogger;
         Log.Logger = serverLogger;

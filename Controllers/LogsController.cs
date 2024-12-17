@@ -35,6 +35,7 @@ public class LogsController : ControllerBase
                 "WorklistSCP",
                 "PrintSCP",
                 "PrintSCU",
+                "WADO",
                 "Database",
                 "Api"
             };
@@ -68,6 +69,7 @@ public class LogsController : ControllerBase
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
                 "printscu" => logSettings.Services.PrintSCU.LogPath,
+                "wado" => logSettings.Services.WADO.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null
@@ -124,6 +126,7 @@ public class LogsController : ControllerBase
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
                 "printscu" => logSettings.Services.PrintSCU.LogPath,
+                "wado" => logSettings.Services.WADO.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null
@@ -192,6 +195,7 @@ public class LogsController : ControllerBase
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
                 "printscu" => logSettings.Services.PrintSCU.LogPath,
+                "wado" => logSettings.Services.WADO.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null
@@ -258,6 +262,7 @@ public class LogsController : ControllerBase
                 "worklistscp" => logSettings.Services.WorklistSCP.LogPath,
                 "printscp" => logSettings.Services.PrintSCP.LogPath,
                 "printscu" => logSettings.Services.PrintSCU.LogPath,
+                "wado" => logSettings.Services.WADO.LogPath,
                 "database" => logSettings.Database.LogPath,
                 "api" => logSettings.Api.LogPath,
                 _ => null

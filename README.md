@@ -41,6 +41,33 @@
   - 打印任务状态跟踪
   - 归档打印的原始文件和标签
 
+- **WADO 服务 (Web Access to DICOM Objects)**
+- 必需参数
+  - `requestType`: 必须为 "WADO"
+  - `studyUID`: 研究实例 UID
+  - `seriesUID`: 序列实例 UID
+  - `objectUID`: 实例 UID
+
+- 可选参数
+  - `contentType`: 返回内容类型 不传默认 image/jpeg
+    - `application/dicom`: 返回 DICOM 格式
+    - `image/jpeg`: 返回 JPEG 格式
+  
+  - `transferSyntax`: DICOM 传输语法 UID 不传默认不转码
+    - `1.2.840.10008.1.2`: Implicit VR Little Endian
+    - `1.2.840.10008.1.2.1`: Explicit VR Little Endian
+    - `1.2.840.10008.1.2.4.50`: JPEG Baseline
+    - `1.2.840.10008.1.2.4.57`: JPEG Lossless
+    - `1.2.840.10008.1.2.4.70`: JPEG Lossless SV1
+    - `1.2.840.10008.1.2.4.90`: JPEG 2000 Lossless
+    - `1.2.840.10008.1.2.4.91`: JPEG 2000 Lossy
+    - `1.2.840.10008.1.2.4.80`: JPEG-LS Lossless
+    - `1.2.840.10008.1.2.5`: RLE Lossless
+
+  - `anonymize`: 是否匿名化
+    - `yes`: 执行匿名化处理
+    - 其他值或不传: 不进行匿名化
+
 - **CSTORE-SCU (CSTORE-SCU)**
   - 支持发送DICOM图像到DICOM SCP
   - 可配置多个目标节点
@@ -49,8 +76,11 @@
   - 支持将PRINTSCP接收到的图像打印到其他打印机或PRINTSCP服务
   - 构建打印图像会保留原始图像的标签信息
 
+- 完整参数例子
+```
+http://localhost:5000/wado?requestType=WADO&studyUID=1.2.840.113704.1.111.5096.1719875982.1&seriesUID=1.3.46.670589.33.1.13252761201319485513.2557156297609063016&objectUID=1.3.46.670589.33.1.39304787935332940.2231985654917411587&contentType=application/dicom&transferSyntax=1.2.840.10008.1.2.4.70&anonymize=yes
 
-
+```
 ## 系统要求
 
 - Windows 10/11 或 Windows Server 2016+

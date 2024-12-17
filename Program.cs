@@ -172,6 +172,18 @@ builder.Services.AddAuthentication("CustomAuth")
 // 添加授权但不设置默认策略
 builder.Services.AddAuthorization();
 
+// 在 ConfigureServices 部分添加
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", 
+        builder =>
+        {
+            builder.AllowAnyOrigin()
+                   .AllowAnyMethod()
+                   .AllowAnyHeader();
+        });
+});
+
 var app = builder.Build();
 
 // 初始化服务提供者
@@ -231,6 +243,7 @@ app.Use(async (context, next) =>
         path?.StartsWith("/css/") == true ||
         path?.StartsWith("/js/login.js") == true ||
         path?.StartsWith("/images/") == true ||
+        path?.StartsWith("/wado") == true ||
         path?.StartsWith("/favicon.ico") == true)  // 移除 status 接口
     {
         await next();
@@ -268,5 +281,8 @@ app.MapGet("/", context =>
     context.Response.Redirect("/index.html");
     return Task.CompletedTask;
 });
+
+// 在中间件配置部分添加（在 UseRouting 之后，UseAuthorization 之前）
+app.UseCors("AllowAll");
 
 app.Run(); 
