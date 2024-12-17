@@ -68,6 +68,11 @@
     - `yes`: 执行匿名化处理
     - 其他值或不传: 不进行匿名化
 
+  - 完整请求参数例子
+  ```
+  http://localhost:5000/wado?requestType=WADO&studyUID=1.2.840.113704.1.111.5096.1719875982.1&seriesUID=1.3.46.670589.33.1.13252761201319485513.2557156297609063016&objectUID=1.3.46.670589.33.1.39304787935332940.2231985654917411587&contentType=application/dicom&transferSyntax=1.2.840.10008.1.2.4.70&anonymize=yes
+
+  ```
 - **CSTORE-SCU (CSTORE-SCU)**
   - 支持发送DICOM图像到DICOM SCP
   - 可配置多个目标节点
@@ -76,11 +81,13 @@
   - 支持将PRINTSCP接收到的图像打印到其他打印机或PRINTSCP服务
   - 构建打印图像会保留原始图像的标签信息
 
-- 完整参数例子
-```
-http://localhost:5000/wado?requestType=WADO&studyUID=1.2.840.113704.1.111.5096.1719875982.1&seriesUID=1.3.46.670589.33.1.13252761201319485513.2557156297609063016&objectUID=1.3.46.670589.33.1.39304787935332940.2231985654917411587&contentType=application/dicom&transferSyntax=1.2.840.10008.1.2.4.70&anonymize=yes
+- **LOG SERVICE (日志服务)**
+  - 支持查看、下载、删除日志
+  - 个服务日志独立配置
+  - 多日志级别配置
+  - 服务预置详细日志 方便对接查找问题
 
-```
+
 ## 系统要求
 
 - Windows 10/11 或 Windows Server 2016+
