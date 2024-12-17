@@ -484,7 +484,7 @@ function startPlay() {
     if (!isPlaying && imageIds.length > 1) {
         isPlaying = true;
         const playButton = document.getElementById('playButton');
-        playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停" width="20" height="20">';
+        playButton.innerHTML = '<img src="images/tools/pause.svg" alt="暂停">';
         
         let lastTime = performance.now();
         let frameCount = 0;
@@ -527,7 +527,7 @@ function pausePlay() {
     if (isPlaying) {
         isPlaying = false;
         const playButton = document.getElementById('playButton');
-        playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放" width="20" height="20">';
+        playButton.innerHTML = '<img src="images/tools/play.svg" alt="播放">';
     }
 }
 
