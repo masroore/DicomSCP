@@ -744,11 +744,14 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             {
                 try
                 {
-                    await SendToDestinationAsync(client, new List<DicomFile> { file });
+                    var singleFileList = new List<DicomFile> { file };
+                    await SendToDestinationAsync(client, singleFileList);
+                    localSuccess++;
                 }
-                catch
+                catch (Exception retryEx)
                 {
                     localFailed++;
+                    DicomLogger.Error("QRSCP", retryEx, "本地单文件重试失败");
                 }
             }
             return (localSuccess, localFailed, false);
@@ -980,16 +983,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var moveTransferSyntax = moveContext?.AcceptedTransferSyntax;
             if (moveTransferSyntax != null)
             {
-                var (isSourceCompressed, sourceType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
-                var (isTargetCompressed, targetType) = GetCompressionInfo(moveTransferSyntax);
-
                 if (!_transferSyntaxLogged)
                 {
                     DicomLogger.Information("QRSCP", 
-                        "传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
-                        isSourceCompressed ? sourceType : "未压缩",
+                        "传输语法检查 - 本地文件: {SourceSyntax}, 请求格式: {TargetSyntax}", 
                         file.Dataset.InternalTransferSyntax.UID.Name,
-                        isTargetCompressed ? targetType : "未压缩",
                         moveTransferSyntax.UID.Name);
                     _transferSyntaxLogged = true;
                 }
@@ -1005,16 +1003,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var storageTransferSyntax = storageContext?.AcceptedTransferSyntax;
             if (storageTransferSyntax != null)
             {
-                var (isSourceCompressed, sourceType) = GetCompressionInfo(file.Dataset.InternalTransferSyntax);
-                var (isTargetCompressed, targetType) = GetCompressionInfo(storageTransferSyntax);
-
                 if (!_transferSyntaxLogged)
                 {
                     DicomLogger.Information("QRSCP", 
-                        "存储类传输语法检查 - 本地文件: {SourceType} ({SourceSyntax}), 请求格式: {TargetType} ({TargetSyntax})", 
-                        isSourceCompressed ? sourceType : "未压缩",
+                        "存储类传输语法检查 - 本地文件: {SourceSyntax}, 请求格式: {TargetSyntax}", 
                         file.Dataset.InternalTransferSyntax.UID.Name,
-                        isTargetCompressed ? targetType : "未压缩",
                         storageTransferSyntax.UID.Name);
                     _transferSyntaxLogged = true;
                 }
@@ -1233,38 +1226,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         // 3. 一次性发送所有请求
         await client.SendAsync();
-    }
-
-    private async Task SendToDestinationAsync(IDicomClient client, DicomFile file)
-        => await SendToDestinationAsync(client, new List<DicomFile> { file });
-
-    private (bool isCompressed, string compressionType) GetCompressionInfo(DicomTransferSyntax syntax)
-    {
-        if (syntax == DicomTransferSyntax.JPEGProcess1 ||
-            syntax == DicomTransferSyntax.JPEGProcess2_4)
-            return (true, "JPEG Baseline");
-        
-        if (syntax == DicomTransferSyntax.JPEGProcess14 ||
-            syntax == DicomTransferSyntax.JPEGProcess14SV1)
-            return (true, "JPEG Lossless");
-        
-        if (syntax == DicomTransferSyntax.JPEGLSLossless ||
-            syntax == DicomTransferSyntax.JPEGLSNearLossless)
-            return (true, "JPEG-LS");
-        
-        if (syntax == DicomTransferSyntax.JPEG2000Lossless)
-            return (true, "JPEG2000 Lossless");
-        
-        if (syntax == DicomTransferSyntax.JPEG2000Lossy)
-            return (true, "JPEG2000 Lossy");
-        
-        if (syntax == DicomTransferSyntax.RLELossless)
-            return (true, "RLE");
-        
-        if (syntax == DicomTransferSyntax.DeflatedExplicitVRLittleEndian)
-            return (true, "Deflated");
-
-        return (false, string.Empty);
     }
 }
 
