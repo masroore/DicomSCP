@@ -174,8 +174,6 @@ public static class DicomLogger
 
             _loggers["WADO"] = wadoLogger.CreateLogger();
             
-            // 记录WADO服务启动
-            _loggers["WADO"].Information("WADO服务日志系统已初始化");
         }
 
         // 设置默认日志记录器

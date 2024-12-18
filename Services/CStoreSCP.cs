@@ -849,34 +849,46 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         try
         {
             var element = dataset.GetDicomItem<DicomElement>(tag);
-            if (element == null || element.Buffer.Data == null || element.Buffer.Data.Length == 0)
+            if (element?.Buffer.Data == null || element.Buffer.Data.Length == 0)
                 return string.Empty;
 
             var bytes = element.Buffer.Data;
-            
-            // 尝试不同的编码
-            var encodings = new[]
-            {
-                "GB18030",
-                "GB2312",
-                "UTF-8",
-                "ISO-8859-1"
-            };
+            var originalText = dataset.GetString(tag);
 
+            // 检查原始文本是否包含乱码（通过检查是否包含特殊字符）
+            bool hasPotentialGarbledText = originalText.Any(c => 
+                (c >= 0xE000 && c <= 0xFFFD) || // 私有区域字符
+                (c >= 0xFFFE) ||                // 无效字符
+                (c == 0xFFFD));                 // 替换字符
+
+            // 如果原始文本正常且不包含乱码，直接返回
+            if (!hasPotentialGarbledText && !ContainsUnreadableText(originalText))
+            {
+                DicomLogger.Debug("StoreSCP", 
+                    "使用原始文本(正常) - 标签: {Tag}, 文本: {Text}", 
+                    tag, originalText);
+                return originalText;
+            }
+
+            // 尝试使用中文编码解码
+            var encodings = new[] { "GB18030", "GB2312", "UTF-8" };
             foreach (var encodingName in encodings)
             {
                 try
                 {
                     var encoding = Encoding.GetEncoding(encodingName);
-                    var text = encoding.GetString(bytes);
+                    var decodedText = encoding.GetString(bytes);
 
-                    // 检查是否包含中文字符
-                    if (text.Any(c => c >= 0x4E00 && c <= 0x9FFF))
+                    // 检查解码后的文本是否包含有效的中文字符
+                    if (ContainsChineseCharacters(decodedText) && !ContainsUnreadableText(decodedText))
                     {
                         DicomLogger.Debug("StoreSCP", 
-                            "成功解码文本 - 标签: {Tag}, 编码: {Encoding}, 文本: {Text}", 
-                            tag, encodingName, text);
-                        return text;
+                            "成功解码中文 - 标签: {Tag}, 原字符集: {OriginalCharSet}, 使用编码: {Encoding}, 文本: {Text}", 
+                            tag, 
+                            dataset.GetString(DicomTag.SpecificCharacterSet) ?? "未指定",
+                            encodingName, 
+                            decodedText);
+                        return decodedText;
                     }
                 }
                 catch
@@ -885,13 +897,46 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 }
             }
 
-            // 如果没有检测到中文，返回原始文本
-            return dataset.GetString(tag);
+            // 如果所有尝试都失败，返回原始文本
+            DicomLogger.Warning("StoreSCP", 
+                "无法正确解码，使用原始文本 - 标签: {Tag}, 字符集: {CharSet}, 文本: {Text}", 
+                tag, 
+                dataset.GetString(DicomTag.SpecificCharacterSet) ?? "未指定", 
+                originalText);
+            return originalText;
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("StoreSCP", ex, "解码文本失败 - 标签: {Tag}", tag);
+            DicomLogger.Error("StoreSCP", ex, 
+                "解码文本失败 - 标签: {Tag}, 字符集: {CharSet}", 
+                tag, dataset.GetString(DicomTag.SpecificCharacterSet));
             return string.Empty;
         }
+    }
+
+    /// <summary>
+    /// 检查是否包含中文字符
+    /// </summary>
+    private bool ContainsChineseCharacters(string text)
+    {
+        return text.Any(c => 
+            (c >= 0x4E00 && c <= 0x9FFF) ||  // 基本汉字
+            (c >= 0x3400 && c <= 0x4DBF) ||  // 扩展 A
+            (c >= 0x20000 && c <= 0x2A6DF)   // 扩展 B
+        );
+    }
+
+    /// <summary>
+    /// 检查是否包含不可读的文本（乱码）
+    /// </summary>
+    private bool ContainsUnreadableText(string text)
+    {
+        return text.Any(c =>
+            (c >= 0xE000 && c <= 0xF8FF) ||  // 私有区域
+            (c >= 0xFFFE) ||                 // 无效字符
+            (c == 0xFFFD) ||                 // 替换字符
+            (c >= 0x80 && c <= 0x9F) ||      // 控制字符
+            (char.IsControl(c) && c != '\r' && c != '\n' && c != '\t')  // 除了常见控制字符外的其他控制字符
+        );
     }
 } 

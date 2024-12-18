@@ -271,15 +271,23 @@ function updateCornerInfo(image, viewport) {
         if (!value) return 'N/A';
         
         try {
-            // 处理 GB18030/GB2312 编码
-            if (specificCharacterSet === 'ISO_IR 58' || // GB2312
-                specificCharacterSet === 'GB18030' ||
-                specificCharacterSet === 'ISO_IR 192') { // UTF-8
-                return new TextDecoder('gb18030').decode(new Uint8Array(value.split('').map(c => c.charCodeAt(0))));
-            }
-            return value;
+            // 根据DICOM字符集选择对应的编码
+            const encoding = specificCharacterSet.includes('GB18030') ? 'gb18030' : 
+                           specificCharacterSet === 'ISO_IR 58' ? 'gb2312' :
+                           specificCharacterSet.includes('IR 192') ? 'utf-8' : 
+                           'iso-8859-1';
+
+            // 使用指定的编码解码文本
+            const decoder = new TextDecoder(encoding);
+            const bytes = Uint8Array.from(value.split(''), c => c.charCodeAt(0));
+            return decoder.decode(bytes);
         } catch (error) {
-            console.warn('字符解码失败:', error);
+            console.warn('字符解码失败:', {
+                charset: specificCharacterSet,
+                encoding: encoding,
+                value: value,
+                error: error
+            });
             return value;
         }
     }
@@ -291,11 +299,12 @@ function updateCornerInfo(image, viewport) {
         性别: ${decodeDicomText(image.data.string('x00100040')) || 'N/A'}
     `;
 
-    // 检查信息
+    // 检查信息 - 也需要解码描述字段
     document.getElementById('studyInfo').innerHTML = `
         检查号: ${image.data.string('x00080050') || 'N/A'}<br>
         时间：${formatDate(image.data.string('x00080020'))}<br>
-        类型: ${image.data.string('x00080060') || 'N/A'}
+        类型: ${image.data.string('x00080060') || 'N/A'}<br>
+        描述: ${decodeDicomText(image.data.string('x00081030')) || 'N/A'}
     `;
 
     // 获取总帧数
