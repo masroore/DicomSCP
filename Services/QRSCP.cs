@@ -748,7 +748,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 }
                 catch
                 {
-                    localFailed++;  // 只在重试失败时增加失败计数
+                    localFailed++;
                 }
             }
             return (localSuccess, localFailed, false);
@@ -869,115 +869,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             result.failedCount, 
             finalStatus);
     }
-
-    private async Task<(int success, int failed)> ProcessSingleInstance(DicomCGetRequest request, Instance instance)
-    {
-        try
-        {
-            // 1. 验证文件存在
-            var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
-            if (!File.Exists(filePath))
-            {
-                DicomLogger.Warning("QRSCP", "文件不存在 - UID: {SopInstanceUid}", instance.SopInstanceUid);
-                return (0, 1);  // 失败
-            }
-
-            // 2. 加载DICOM文件
-            var file = await DicomFile.OpenAsync(filePath);
-            
-            try
-            {
-                // 3. 创建C-STORE请求
-                var storeRequest = new DicomCStoreRequest(file);
-
-                // 4. 处理传输语法转换
-                var requestedTransferSyntax = GetRequestedTransferSyntax(file);
-                if (requestedTransferSyntax != null && file.Dataset.InternalTransferSyntax != requestedTransferSyntax)
-                {
-                    try
-                    {
-                        var originalSyntax = file.Dataset.InternalTransferSyntax;
-                        var transcoder = new DicomTranscoder(originalSyntax, requestedTransferSyntax);
-                        var transcodedFile = transcoder.Transcode(file);
-                        
-                        DicomLogger.Debug("QRSCP", 
-                            "语法转换 - UID: {SopInstanceUid}, {Original} -> {Target}", 
-                            instance.SopInstanceUid,
-                            originalSyntax.UID.Name,
-                            requestedTransferSyntax.UID.Name);
-
-                        // 5. 发送转换后的文件
-                        await SendRequestAsync(new DicomCStoreRequest(transcodedFile));
-                    }
-                    catch (Exception ex)
-                    {
-                        DicomLogger.Warning("QRSCP", ex,
-                            "语法转换失败，使用原格式 - UID: {SopInstanceUid}", 
-                            instance.SopInstanceUid);
-                        // 使用原始格式发送
-                        await SendRequestAsync(new DicomCStoreRequest(file));
-                    }
-                }
-                else
-                {
-                    // 5. 直接发送原始文件
-                    await SendRequestAsync(new DicomCStoreRequest(file));
-                }
-
-                DicomLogger.Debug("QRSCP", "传输成功 - UID: {SopInstanceUid}", 
-                    instance.SopInstanceUid);
-                return (1, 0);  // 成功
-            }
-            catch (Exception ex)
-            {
-                if (IsNetworkError(ex))
-                {
-                    DicomLogger.Error("QRSCP", ex, 
-                        "网络错误，终止传输 - UID: {SopInstanceUid}", 
-                        instance.SopInstanceUid);
-                    return (0, 1);  // 失败
-                }
-                else
-                {
-                    DicomLogger.Error("QRSCP", ex, 
-                        "传输失败 - UID: {SopInstanceUid}", 
-                        instance.SopInstanceUid);
-                    return (0, 1);  // 失败
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            DicomLogger.Error("QRSCP", ex, "传输失败 - UID: {SopInstanceUid}", instance.SopInstanceUid);
-            return (0, 1);  // 失败
-        }
-    }
-
-    private async Task SendToDestinationAsync(IDicomClient client, List<DicomFile> files)
-    {
-        // 1. 按 SOP Class 分组添加 PresentationContext
-        var sopClassGroups = files.GroupBy(f => f.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID));
-        foreach (var group in sopClassGroups)
-        {
-            var presentationContext = new DicomPresentationContext(
-                (byte)client.AdditionalPresentationContexts.Count(),
-                group.Key);
-            presentationContext.AcceptTransferSyntaxes(AcceptedImageTransferSyntaxes);
-            client.AdditionalPresentationContexts.Add(presentationContext);
-        }
-
-        // 2. 批量添加请求
-        foreach (var file in files)
-        {
-            await client.AddRequestAsync(new DicomCStoreRequest(file));
-        }
-
-        // 3. 一次性发送所有请求
-        await client.SendAsync();
-    }
-
-    private async Task SendToDestinationAsync(IDicomClient client, DicomFile file)
-        => await SendToDestinationAsync(client, new List<DicomFile> { file });
 
     private async Task<IEnumerable<Instance>> GetRequestedInstances(DicomRequest request)
     {
@@ -1142,68 +1033,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
     }
 
-    /// <summary>
-    /// 检查传输语法是否为压缩格式，并返回压缩类型
-    /// </summary>
-    private (bool isCompressed, string compressionType) GetCompressionInfo(DicomTransferSyntax syntax)
-    {
-        if (syntax == DicomTransferSyntax.JPEGProcess1 ||
-            syntax == DicomTransferSyntax.JPEGProcess2_4)
-            return (true, "JPEG Baseline");
-        
-        if (syntax == DicomTransferSyntax.JPEGProcess14 ||
-            syntax == DicomTransferSyntax.JPEGProcess14SV1)
-            return (true, "JPEG Lossless");
-        
-        if (syntax == DicomTransferSyntax.JPEGLSLossless ||
-            syntax == DicomTransferSyntax.JPEGLSNearLossless)
-            return (true, "JPEG-LS");
-        
-        if (syntax == DicomTransferSyntax.JPEG2000Lossless)
-            return (true, "JPEG2000 Lossless");
-        
-        if (syntax == DicomTransferSyntax.JPEG2000Lossy)
-            return (true, "JPEG2000 Lossy");
-        
-        if (syntax == DicomTransferSyntax.RLELossless)
-            return (true, "RLE");
-        
-        if (syntax == DicomTransferSyntax.DeflatedExplicitVRLittleEndian)
-            return (true, "Deflated");
-
-        return (false, string.Empty);
-    }
-
-    /// <summary>
-    /// 获取传输语法的友好名称
-    /// </summary>
-    private string GetTransferSyntaxName(DicomTransferSyntax? syntax)
-    {
-        if (syntax == null)
-        {
-            return "未知传输语法";
-        }
-
-        // 判断压缩类型
-        var (_, compressionType) = GetCompressionInfo(syntax);
-        string compressionDesc = string.IsNullOrEmpty(compressionType) ? "" : compressionType;
-        
-        return syntax.UID.Name switch
-        {
-            "1.2.840.10008.1.2" => "隐式VR小端",
-            "1.2.840.10008.1.2.1" => "显式VR小端",
-            "1.2.840.10008.1.2.2" => "显式VR大端",
-            "1.2.840.10008.1.2.4.70" => $"JPEG {compressionDesc}",
-            "1.2.840.10008.1.2.4.57" => $"JPEG P14 {compressionDesc}",
-            "1.2.840.10008.1.2.4.80" => $"JPEG-LS {compressionDesc}",
-            "1.2.840.10008.1.2.4.81" => "JPEG-LS 近无损",
-            "1.2.840.10008.1.2.4.90" => $"JPEG 2000 {compressionDesc}",
-            "1.2.840.10008.1.2.4.91" => $"JPEG 2000 {compressionDesc}",
-            "1.2.840.10008.1.2.5" => "RLE 无损",
-            _ => syntax.UID.Name
-        };
-    }
-
     // 实现 IDicomCStoreProvider 接口
     public Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
     {
@@ -1272,8 +1101,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         foreach (var seriesGroup in instances.GroupBy(x => x.SeriesInstanceUid))
         {
-            if (hasNetworkError) break;
-
             var batchFiles = new List<DicomFile>();
             foreach (var instance in seriesGroup)
             {
@@ -1287,39 +1114,19 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     }
 
                     var file = await DicomFile.OpenAsync(filePath);
-                    
-                    // 处理传输语法转换...
-                    var requestedTransferSyntax = GetRequestedTransferSyntax(file);
-                    if (requestedTransferSyntax != null && file.Dataset.InternalTransferSyntax != requestedTransferSyntax)
-                    {
-                        try
-                        {
-                            var transcodedFiles = TranscodeFilesIfNeeded(new List<DicomFile> { file }, requestedTransferSyntax);
-                            batchFiles.AddRange(transcodedFiles);
-                        }
-                        catch (Exception ex)
-                        {
-                            DicomLogger.Warning("QRSCP", ex,
-                                "语法转换失败，使用原格式 - UID: {SopInstanceUid}", 
-                                instance.SopInstanceUid);
-                            batchFiles.Add(file);
-                        }
-                    }
-                    else
-                    {
-                        batchFiles.Add(file);
-                    }
+                    batchFiles.Add(file);
 
-                    // 达到批次大小时发送
+                    // 达到批次大小时处理
                     if (batchFiles.Count >= BatchSize)
                     {
+                        // 发送批次
                         var result = client != null 
                             ? await SendBatch(client, batchFiles, successCount, failedCount)
                             : await SendLocalBatch(request, batchFiles, successCount, failedCount);
 
                         if (!result.hasNetworkError)
                         {
-                            successCount += batchFiles.Count;  // 只在发送成功时增加计数
+                            successCount += batchFiles.Count;
                         }
                         failedCount = result.failedCount;
                         hasNetworkError = result.hasNetworkError;
@@ -1333,16 +1140,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 }
             }
 
-            // 处理序列内剩余文件
+            // 处理剩余文件
             if (batchFiles.Any())
             {
+                // 发送批次
                 var result = client != null 
                     ? await SendBatch(client, batchFiles, successCount, failedCount)
                     : await SendLocalBatch(request, batchFiles, successCount, failedCount);
 
                 if (!result.hasNetworkError)
                 {
-                    successCount += batchFiles.Count;  // 只在发送成功时增加计数
+                    successCount += batchFiles.Count;
                 }
                 failedCount = result.failedCount;
                 hasNetworkError = result.hasNetworkError;
@@ -1362,20 +1170,101 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         try
         {
+            // 1. 批量转码
+            var requestedTransferSyntax = GetRequestedTransferSyntax(files[0]);
+            if (requestedTransferSyntax != null)
+            {
+                files = TranscodeFilesIfNeeded(files, requestedTransferSyntax);
+            }
+
+            // 2. 批量发送
             foreach (var file in files)
             {
                 await SendRequestAsync(new DicomCStoreRequest(file));
             }
-            return (currentSuccess, currentFailed, false);  // 直接返回传入的计数
+            return (currentSuccess + files.Count, currentFailed, false);
         }
         catch (Exception ex)
         {
             if (IsNetworkError(ex))
             {
+                DicomLogger.Error("QRSCP", ex, "本地批量发送网络错误 - 文件数: {Count}", files.Count);
                 return (currentSuccess, currentFailed + files.Count, true);
             }
-            return (currentSuccess, currentFailed + files.Count, false);
+
+            // 单文件重试
+            var localSuccess = currentSuccess;
+            var localFailed = currentFailed;
+            foreach (var file in files)
+            {
+                try
+                {
+                    await SendRequestAsync(new DicomCStoreRequest(file));
+                    localSuccess++;
+                }
+                catch (Exception retryEx)
+                {
+                    localFailed++;
+                    DicomLogger.Error("QRSCP", retryEx, "本地单文件重试失败");
+                }
+            }
+            return (localSuccess, localFailed, false);
         }
+    }
+
+    private async Task SendToDestinationAsync(IDicomClient client, List<DicomFile> files)
+    {
+        // 1. 按 SOP Class 分组添加 PresentationContext
+        var sopClassGroups = files.GroupBy(f => f.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID));
+        foreach (var group in sopClassGroups)
+        {
+            var presentationContext = new DicomPresentationContext(
+                (byte)client.AdditionalPresentationContexts.Count(),
+                group.Key);
+            presentationContext.AcceptTransferSyntaxes(AcceptedImageTransferSyntaxes);
+            client.AdditionalPresentationContexts.Add(presentationContext);
+        }
+
+        // 2. 批量添加请求
+        foreach (var file in files)
+        {
+            await client.AddRequestAsync(new DicomCStoreRequest(file));
+        }
+
+        // 3. 一次性发送所有请求
+        await client.SendAsync();
+    }
+
+    private async Task SendToDestinationAsync(IDicomClient client, DicomFile file)
+        => await SendToDestinationAsync(client, new List<DicomFile> { file });
+
+    private (bool isCompressed, string compressionType) GetCompressionInfo(DicomTransferSyntax syntax)
+    {
+        if (syntax == DicomTransferSyntax.JPEGProcess1 ||
+            syntax == DicomTransferSyntax.JPEGProcess2_4)
+            return (true, "JPEG Baseline");
+        
+        if (syntax == DicomTransferSyntax.JPEGProcess14 ||
+            syntax == DicomTransferSyntax.JPEGProcess14SV1)
+            return (true, "JPEG Lossless");
+        
+        if (syntax == DicomTransferSyntax.JPEGLSLossless ||
+            syntax == DicomTransferSyntax.JPEGLSNearLossless)
+            return (true, "JPEG-LS");
+        
+        if (syntax == DicomTransferSyntax.JPEG2000Lossless)
+            return (true, "JPEG2000 Lossless");
+        
+        if (syntax == DicomTransferSyntax.JPEG2000Lossy)
+            return (true, "JPEG2000 Lossy");
+        
+        if (syntax == DicomTransferSyntax.RLELossless)
+            return (true, "RLE");
+        
+        if (syntax == DicomTransferSyntax.DeflatedExplicitVRLittleEndian)
+            return (true, "Deflated");
+
+        return (false, string.Empty);
     }
 }
 
