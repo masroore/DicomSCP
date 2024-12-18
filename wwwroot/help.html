@@ -253,12 +253,31 @@
                             <dd>各服务的日志配置，包含：
                                 <ul>
                                     <li>Enabled - 是否启用</li>
-                                    <li>MinimumLevel - 最低日志级别</li>
+                                    <li>MinimumLevel - 最低日志级别：
+                                        <ul>
+                                            <li>Verbose - 最详细的日志</li>
+                                            <li>Debug - 调试信息</li>
+                                            <li>Information - 一般信息</li>
+                                            <li>Warning - 警告信息</li>
+                                            <li>Error - 错误信息</li>
+                                            <li>Fatal - 致命错误</li>
+                                        </ul>
+                                    </li>
                                     <li>EnableConsoleLog - 是否输出到控制台</li>
                                     <li>EnableFileLog - 是否输出到文件</li>
                                     <li>LogPath - 日志文件路径</li>
                                     <li>OutputTemplate - 输出模板</li>
                                 </ul>
+                                <p>日志级别说明：</p>
+                                <ul>
+                                    <li>Verbose：最详细的调试信息，包含所有操作细节</li>
+                                    <li>Debug：调试信息，用于开发和故障排查</li>
+                                    <li>Information：一般信息，记录正常的操作流程</li>
+                                    <li>Warning：警告信息，表示可能的问题但不影响系统运行</li>
+                                    <li>Error：错误信息，表示发生了需要处理的错误</li>
+                                    <li>Fatal：致命错误，表示系统无法继续运行的严重问题</li>
+                                </ul>
+                                <p>注意：设置某个级别后，将记录该级别及更高级别的日志。例如，设置为 Information 将记录 Information、Warning、Error 和 Fatal 级别的日志。</p>
                             </dd>
                         </dl>
                     </div>
