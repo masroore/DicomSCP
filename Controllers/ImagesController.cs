@@ -107,29 +107,55 @@ public class ImagesController : ControllerBase
 
         try
         {
-            // 1. 从数据库删除记录
+            // 1. 获取检查信息
             var study = await _repository.GetStudyAsync(studyInstanceUid);
             if (study == null)
             {
                 return NotFound("检查不存在");
             }
 
-            await _repository.DeleteStudyAsync(studyInstanceUid);
-
             // 2. 删除文件系统中的文件
             var storagePath = _configuration["DicomSettings:StoragePath"] 
                 ?? throw new InvalidOperationException("DicomSettings:StoragePath is not configured");
-            var studyPath = Path.Combine(storagePath, studyInstanceUid);
+
+            // 构建检查目录路径，处理 StudyDate 为 null 的情况
+            var studyPath = string.IsNullOrEmpty(study.StudyDate)
+                ? Path.Combine(storagePath, studyInstanceUid)  // 如果没有日期，直接用检查UID
+                : Path.Combine(storagePath, study.StudyDate.Substring(0, 4), 
+                    study.StudyDate.Substring(4, 2), 
+                    study.StudyDate.Substring(6, 2), 
+                    studyInstanceUid);  // 按年/月/日/检查UID组织
+
             if (Directory.Exists(studyPath))
             {
-                Directory.Delete(studyPath, true);
-            }
+                try
+                {
+                    // 递归删除目录及其内容
+                    Directory.Delete(studyPath, true);
+                    DicomLogger.Information("Api", "删除检查目录成功 - 路径: {Path}", studyPath);
 
-            return Ok(new { message = "删除成功" });
+                    // 3. 删除数据库记录
+                    await _repository.DeleteStudyAsync(studyInstanceUid);
+
+                    return Ok(new { message = "删除成功" });
+                }
+                catch (Exception ex)
+                {
+                    DicomLogger.Error("Api", ex, "删除检查目录失败 - 路径: {Path}", studyPath);
+                    return StatusCode(500, new { error = "删除文件失败，请重试" });
+                }
+            }
+            else
+            {
+                // 如果目录不存在，只删除数据库记录
+                await _repository.DeleteStudyAsync(studyInstanceUid);
+                DicomLogger.Warning("Api", "检查目录不存在 - 路径: {Path}", studyPath);
+                return Ok(new { message = "删除成功" });
+            }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 删除检查失败 - 检查实例UID: {StudyInstanceUid}", studyInstanceUid);
+            DicomLogger.Error("Api", ex, "[API] 删除检查失败 - StudyUID: {StudyUID}", studyInstanceUid);
             return StatusCode(500, new { error = "删除失败，请重试" });
         }
     }
