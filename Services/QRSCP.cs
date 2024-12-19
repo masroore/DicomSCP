@@ -198,12 +198,21 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
     public void OnConnectionClosed(Exception? exception)
     {
-        if (exception != null)
+        try
         {
-            DicomLogger.Error("QRSCP", exception, "连接异常关闭");
+            if (exception != null)
+            {
+                DicomLogger.Error("QRSCP", exception, "连接异常关闭");
+            }
+
+            // 重置状态
+            _associationReleaseLogged = false;
+            _transferSyntaxLogged = false;
         }
-        _associationReleaseLogged = false;
-        _transferSyntaxLogged = false;
+        catch (Exception ex)
+        {
+            DicomLogger.Error("QRSCP", ex, "处理连接关闭失败");
+        }
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
@@ -458,7 +467,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         var response = new DicomCFindResponse(request, DicomStatus.Pending);
         var dataset = new DicomDataset();
 
-        // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
+        // 获取请求的字符集，如果没有指定则默认使用 UTF-8
         var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
         DicomLogger.Debug("QRSCP", "请求的字符集: {CharacterSet}", requestedCharacterSet);
         
@@ -732,12 +741,13 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             await SendToDestinationAsync(client, files);
             return (currentSuccess, currentFailed, false);
         }
-        catch (Exception ex)
+        catch (DicomNetworkException ex)
         {
-            if (IsNetworkError(ex))
-            {
-                return (currentSuccess, currentFailed + files.Count, true);
-            }
+            DicomLogger.Error("QRSCP", ex, "网络错误，停止发送");
+            return (currentSuccess, currentFailed + files.Count, true);
+        }
+        catch
+        {
             // 单个文件重试
             var localSuccess = currentSuccess;
             var localFailed = currentFailed;
@@ -1106,59 +1116,72 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         foreach (var seriesGroup in instances.GroupBy(x => x.SeriesInstanceUid))
         {
             var batchFiles = new List<DicomFile>();
-            foreach (var instance in seriesGroup)
+            try
             {
-                try
+                foreach (var instance in seriesGroup)
                 {
-                    var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
-                    if (!File.Exists(filePath))
+                    try
+                    {
+                        var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
+                        if (!File.Exists(filePath))
+                        {
+                            failedCount++;
+                            continue;
+                        }
+
+                        var file = await DicomFile.OpenAsync(filePath);
+                        batchFiles.Add(file);
+
+                        // 达到批次大小时处理
+                        if (batchFiles.Count >= BatchSize)
+                        {
+                            // 发送批次
+                            var result = client != null 
+                                ? await SendBatch(client, batchFiles, successCount, failedCount)
+                                : await SendLocalBatch(request, batchFiles, successCount, failedCount);
+
+                            if (!result.hasNetworkError)
+                            {
+                                successCount += batchFiles.Count;
+                            }
+                            failedCount = result.failedCount;
+                            hasNetworkError = result.hasNetworkError;
+                            batchFiles.Clear();
+                        }
+                    }
+                    catch (Exception ex)
                     {
                         failedCount++;
-                        continue;
-                    }
-
-                    var file = await DicomFile.OpenAsync(filePath);
-                    batchFiles.Add(file);
-
-                    // 达到批次大小时处理
-                    if (batchFiles.Count >= BatchSize)
-                    {
-                        // 发送批次
-                        var result = client != null 
-                            ? await SendBatch(client, batchFiles, successCount, failedCount)
-                            : await SendLocalBatch(request, batchFiles, successCount, failedCount);
-
-                        if (!result.hasNetworkError)
-                        {
-                            successCount += batchFiles.Count;
-                        }
-                        failedCount = result.failedCount;
-                        hasNetworkError = result.hasNetworkError;
-                        batchFiles.Clear();
+                        DicomLogger.Error("QRSCP", ex, "处理失败 - UID: {SopInstanceUid}", instance.SopInstanceUid);
                     }
                 }
-                catch (Exception ex)
+
+                // 处理剩余文件
+                if (batchFiles.Any())
                 {
-                    failedCount++;
-                    DicomLogger.Error("QRSCP", ex, "处理失败 - UID: {SopInstanceUid}", instance.SopInstanceUid);
+                    // 发送批次
+                    var result = client != null 
+                        ? await SendBatch(client, batchFiles, successCount, failedCount)
+                        : await SendLocalBatch(request, batchFiles, successCount, failedCount);
+
+                    if (!result.hasNetworkError)
+                    {
+                        successCount += batchFiles.Count;
+                    }
+                    failedCount = result.failedCount;
+                    hasNetworkError = result.hasNetworkError;
+                    batchFiles.Clear();
                 }
             }
-
-            // 处理剩余文件
-            if (batchFiles.Any())
+            finally
             {
-                // 发送批次
-                var result = client != null 
-                    ? await SendBatch(client, batchFiles, successCount, failedCount)
-                    : await SendLocalBatch(request, batchFiles, successCount, failedCount);
-
-                if (!result.hasNetworkError)
-                {
-                    successCount += batchFiles.Count;
-                }
-                failedCount = result.failedCount;
-                hasNetworkError = result.hasNetworkError;
                 batchFiles.Clear();
+            }
+
+            if (hasNetworkError)
+            {
+                DicomLogger.Warning("QRSCP", "发现网络错误，停止处理");
+                break;
             }
         }
 
