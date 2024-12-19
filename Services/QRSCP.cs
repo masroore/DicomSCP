@@ -884,13 +884,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 result.failedCount,
                 finalStatus).Dataset
         };
-
-        DicomLogger.Information("QRSCP", 
-            "C-GET完成 - 总数: {Total}, 成功: {Success}, 失败: {Failed}, 状态: {Status}", 
-            totalInstances, 
-            result.successCount, 
-            result.failedCount, 
-            finalStatus);
     }
 
     private async Task<IEnumerable<Instance>> GetRequestedInstances(DicomRequest request)
