@@ -80,11 +80,10 @@ public class QRSCPSettings
 
 public class MoveDestination
 {
-    public string Name { get; set; } = "";
-    public string AeTitle { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
+    public string AeTitle { get; set; } = string.Empty;
     public string HostName { get; set; } = "localhost";
     public int Port { get; set; } = 11112;
-    public bool IsDefault { get; set; }
 }
 
 public class PrintSCPSettings
