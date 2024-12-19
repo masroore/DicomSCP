@@ -17,7 +17,7 @@
     <GenerateAssemblyVersionAttribute>true</GenerateAssemblyVersionAttribute>
     <GenerateAssemblyProductAttribute>true</GenerateAssemblyProductAttribute>
     <GenerateAssemblyCopyrightAttribute>true</GenerateAssemblyCopyrightAttribute>
-    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationIcon>wwwroot\favicon.ico</ApplicationIcon>
   </PropertyGroup>
 
     <ItemGroup>
@@ -45,10 +45,5 @@
     <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
   </ItemGroup>
   
-  <ItemGroup>
-    <Content Include="app.ico">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
 
 </Project> 
