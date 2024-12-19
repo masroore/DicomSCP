@@ -695,6 +695,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         catch (Exception ex)
                         {
                             DicomLogger.Error("StoreSCP", ex, "保存DICOM数据到数据库失败");
+                            return new DicomCStoreResponse(request, DicomStatus.Success);
                         }
                     }
 
@@ -853,7 +854,16 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 return string.Empty;
 
             var bytes = element.Buffer.Data;
-            var originalText = dataset.GetString(tag);
+            string originalText;
+            try 
+            {
+                originalText = dataset.GetString(tag);
+            }
+            catch (DicomDataException)
+            {
+                // 如果获取失败，尝试直接从buffer解码
+                originalText = Encoding.UTF8.GetString(bytes);
+            }
 
             // 检查原始文本是否包含乱码（通过检查是否包含特殊字符）
             bool hasPotentialGarbledText = originalText.Any(c => 
@@ -901,7 +911,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             DicomLogger.Warning("StoreSCP", 
                 "无法正确解码，使用原始文本 - 标签: {Tag}, 字符集: {CharSet}, 文本: {Text}", 
                 tag, 
-                dataset.GetString(DicomTag.SpecificCharacterSet) ?? "未指定", 
+                dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "未指定"), 
                 originalText);
             return originalText;
         }
@@ -909,7 +919,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         {
             DicomLogger.Error("StoreSCP", ex, 
                 "解码文本失败 - 标签: {Tag}, 字符集: {CharSet}", 
-                tag, dataset.GetString(DicomTag.SpecificCharacterSet));
+                tag, dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "未指定"));
             return string.Empty;
         }
     }
