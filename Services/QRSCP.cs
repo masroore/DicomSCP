@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using DicomSCP.Configuration;
 using DicomSCP.Data;
 using DicomSCP.Models;
+using System.Collections.Concurrent;  // 添加这个引用
 
 namespace DicomSCP.Services;
 
@@ -1046,22 +1047,32 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
     private List<DicomFile> TranscodeFilesIfNeeded(List<DicomFile> files, DicomTransferSyntax targetSyntax)
     {
-        var results = new List<DicomFile>();
-        var transcoder = new DicomTranscoder(DicomTransferSyntax.ExplicitVRLittleEndian, targetSyntax);
+        // 1. 快速检查是否需要转码
+        if (files.All(f => f.Dataset.InternalTransferSyntax == targetSyntax))
+        {
+            return files;
+        }
 
-        foreach (var file in files)
+        var transcoder = new DicomTranscoder(DicomTransferSyntax.ExplicitVRLittleEndian, targetSyntax);
+        var results = new ConcurrentBag<DicomFile>();  // 使用线程安全的集合
+
+        // 2. 并行转码
+        Parallel.ForEach(files, 
+            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            file => 
         {
             try
             {
                 if (file.Dataset.InternalTransferSyntax != targetSyntax)
                 {
                     var transcodedFile = transcoder.Transcode(file);
+                    results.Add(transcodedFile);
+
                     DicomLogger.Debug("QRSCP", 
                         "语法转换 - UID: {SopInstanceUid}, {Original} -> {Target}", 
                         file.Dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID),
                         file.Dataset.InternalTransferSyntax.UID.Name,
                         targetSyntax.UID.Name);
-                    results.Add(transcodedFile);
                 }
                 else
                 {
@@ -1075,9 +1086,9 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     file.Dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID));
                 results.Add(file);
             }
-        }
+        });
 
-        return results;
+        return results.ToList();
     }
 
     private const int BatchSize = 10;  // 固定批量大小
