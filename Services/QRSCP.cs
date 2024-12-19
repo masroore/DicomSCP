@@ -674,7 +674,29 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             yield break;
         }
 
-        // 2. 获取实例列表
+        // 2. 测试目标 SCP 连接
+        var client = CreateDicomClient(moveDestination);
+        DicomResponse? response = null;
+        try 
+        {
+            var echoRequest = new DicomCEchoRequest();
+            await client.AddRequestAsync(echoRequest);
+            await client.SendAsync();
+            DicomLogger.Information("QRSCP", "目标SCP连接测试成功 - AET: {AET}", request.DestinationAE);
+        }
+        catch (Exception ex)
+        {
+            DicomLogger.Error("QRSCP", ex, "目标SCP连接测试失败 - AET: {AET}", request.DestinationAE);
+            response = new DicomCMoveResponse(request, DicomStatus.QueryRetrieveMoveDestinationUnknown);
+        }
+
+        if (response != null)
+        {
+            yield return (DicomCMoveResponse)response;
+            yield break;
+        }
+
+        // 3. 获取实例列表
         var instances = await GetRequestedInstances(request);
         if (!instances.Any())
         {
@@ -682,9 +704,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             yield return new DicomCMoveResponse(request, DicomStatus.Success);
             yield break;
         }
-
-        // 3. 创建 DICOM 客户端
-        var client = CreateDicomClient(moveDestination);
 
         // 4. 处理实例传输并返回进度
         var totalInstances = instances.Count();
@@ -1201,10 +1220,10 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 files = TranscodeFilesIfNeeded(files, requestedTransferSyntax);
             }
 
-            // 2. 批量发送
+            // 2. 逐个发送
             foreach (var file in files)
             {
-                await SendRequestAsync(new DicomCStoreRequest(file));
+                await SendRequestAsync(new DicomCStoreRequest(file));  // 使用基类的 SendRequestAsync
             }
             return (currentSuccess + files.Count, currentFailed, false);
         }
