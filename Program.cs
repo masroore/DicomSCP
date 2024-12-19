@@ -9,8 +9,36 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
+using System.Runtime.InteropServices;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 配置控制台（跨平台支持）
+if (Environment.UserInteractive)
+{
+    try
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows平台禁用快速编辑模式
+            var handle = ConsoleHelper.GetStdHandle(-10);
+            if (handle != IntPtr.Zero && ConsoleHelper.GetConsoleMode(handle, out uint mode))
+            {
+                mode &= ~((uint)(0x0040 | 0x0010));
+                ConsoleHelper.SetConsoleMode(handle, mode);
+            }
+        }
+        else
+        {
+            // Unix/Linux/MacOS 平台设置
+            Console.TreatControlCAsInput = true;
+        }
+    }
+    catch
+    {
+        // 忽略控制台配置错误
+    }
+}
 
 // 添加线程池配置
 ThreadPool.SetMinThreads(100, 100); // 设置最小工作线程和 I/O 线程数
@@ -286,3 +314,16 @@ app.MapGet("/", context =>
 app.UseCors("AllowAll");
 
 app.Run(); 
+
+// Windows控制台API定义
+internal static class ConsoleHelper
+{
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern IntPtr GetStdHandle(int nStdHandle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+} 
