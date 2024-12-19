@@ -116,12 +116,8 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
                 }
             }
 
-            var hasReceivedResponse = false;
-
             request.OnResponseReceived += (req, response) =>
             {
-                hasReceivedResponse = true;
-
                 if (response.Status == DicomStatus.Pending)
                 {
                     DicomLogger.Debug("QueryRetrieveSCU", 
@@ -137,10 +133,10 @@ public class QueryRetrieveSCU : IQueryRetrieveSCU
             };
 
             await client.AddRequestAsync(request);
-            await client.SendAsync();
+            // 异步发送，不等待完成
+            _ = Task.Run(async () => await client.SendAsync());
 
-            // 只要收到响应就返回成功
-            return hasReceivedResponse;
+            return true;  // 立即返回
         }
         catch (Exception ex)
         {
