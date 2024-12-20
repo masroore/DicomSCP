@@ -23,7 +23,8 @@ public class Study
     public string? StudyTime { get; set; }
     public string? StudyDescription { get; set; }
     public string? AccessionNumber { get; set; }
-    public string Modality { get; set; } = string.Empty;
+    public string? Modality { get; set; }
+    public string? InstitutionName { get; set; }
     public DateTime CreateTime { get; set; }
     public int NumberOfStudyRelatedSeries { get; set; }
     public int NumberOfStudyRelatedInstances { get; set; }

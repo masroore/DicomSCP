@@ -35,8 +35,10 @@ public class DicomRepository : BaseRepository, IDisposable
 
         public const string InsertStudy = @"
             INSERT OR IGNORE INTO Studies 
-            (StudyInstanceUid, PatientId, StudyDate, StudyTime, StudyDescription, AccessionNumber, Modality, CreateTime)
-            VALUES (@StudyInstanceUid, @PatientId, @StudyDate, @StudyTime, @StudyDescription, @AccessionNumber, @Modality, @CreateTime)";
+            (StudyInstanceUid, PatientId, StudyDate, StudyTime, StudyDescription, 
+             AccessionNumber, Modality, InstitutionName, CreateTime)
+            VALUES (@StudyInstanceUid, @PatientId, @StudyDate, @StudyTime, @StudyDescription, 
+                    @AccessionNumber, @Modality, @InstitutionName, @CreateTime)";
 
         public const string InsertSeries = @"
             INSERT OR IGNORE INTO Series 
@@ -130,6 +132,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 StudyDescription TEXT,
                 AccessionNumber TEXT,
                 Modality TEXT,
+                InstitutionName TEXT,
                 CreateTime DATETIME,
                 FOREIGN KEY(PatientId) REFERENCES Patients(PatientId)
             )";
@@ -424,6 +427,7 @@ public class DicomRepository : BaseRepository, IDisposable
             StudyDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDescription, string.Empty),
             AccessionNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty),
             Modality = GetStudyModality(dataset),
+            InstitutionName = dataset.GetSingleValueOrDefault<string>(DicomTag.InstitutionName, string.Empty),
             CreateTime = now
         });
 
@@ -453,20 +457,48 @@ public class DicomRepository : BaseRepository, IDisposable
             BitsStored = dataset.GetSingleValueOrDefault<int>(DicomTag.BitsStored, 0),
             PixelRepresentation = dataset.GetSingleValueOrDefault<int>(DicomTag.PixelRepresentation, 0),
             SamplesPerPixel = dataset.GetSingleValueOrDefault<int>(DicomTag.SamplesPerPixel, 0),
-            PixelSpacing = dataset.Contains(DicomTag.PixelSpacing) 
-                ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.PixelSpacing)) 
+            
+            // 处理可能是单值或多值的标签
+            PixelSpacing = dataset.Contains(DicomTag.PixelSpacing)
+                ? (dataset.GetValueCount(DicomTag.PixelSpacing) > 1
+                    ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.PixelSpacing))
+                    : dataset.GetSingleValueOrDefault<decimal>(DicomTag.PixelSpacing, 0).ToString())
                 : string.Empty,
+            
             HighBit = dataset.GetSingleValueOrDefault<int>(DicomTag.HighBit, 0),
+            
             ImageOrientationPatient = dataset.Contains(DicomTag.ImageOrientationPatient)
-                ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.ImageOrientationPatient))
+                ? (dataset.GetValueCount(DicomTag.ImageOrientationPatient) > 1
+                    ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.ImageOrientationPatient))
+                    : dataset.GetSingleValueOrDefault<decimal>(DicomTag.ImageOrientationPatient, 0).ToString())
                 : string.Empty,
+            
             ImagePositionPatient = dataset.Contains(DicomTag.ImagePositionPatient)
-                ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.ImagePositionPatient))
+                ? (dataset.GetValueCount(DicomTag.ImagePositionPatient) > 1
+                    ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.ImagePositionPatient))
+                    : dataset.GetSingleValueOrDefault<decimal>(DicomTag.ImagePositionPatient, 0).ToString())
                 : string.Empty,
+            
             FrameOfReferenceUID = dataset.GetSingleValueOrDefault<string>(DicomTag.FrameOfReferenceUID, string.Empty),
-            ImageType = dataset.GetSingleValueOrDefault<string>(DicomTag.ImageType, string.Empty),
-            WindowCenter = dataset.GetSingleValueOrDefault<string>(DicomTag.WindowCenter, string.Empty),
-            WindowWidth = dataset.GetSingleValueOrDefault<string>(DicomTag.WindowWidth, string.Empty),
+            
+            ImageType = dataset.Contains(DicomTag.ImageType)
+                ? (dataset.GetValueCount(DicomTag.ImageType) > 1
+                    ? string.Join("\\", dataset.GetValues<string>(DicomTag.ImageType))
+                    : dataset.GetSingleValueOrDefault<string>(DicomTag.ImageType, string.Empty))
+                : string.Empty,
+            
+            WindowCenter = dataset.Contains(DicomTag.WindowCenter)
+                ? (dataset.GetValueCount(DicomTag.WindowCenter) > 1
+                    ? string.Join("\\", dataset.GetValues<string>(DicomTag.WindowCenter))
+                    : dataset.GetSingleValueOrDefault<string>(DicomTag.WindowCenter, string.Empty))
+                : string.Empty,
+            
+            WindowWidth = dataset.Contains(DicomTag.WindowWidth)
+                ? (dataset.GetValueCount(DicomTag.WindowWidth) > 1
+                    ? string.Join("\\", dataset.GetValues<string>(DicomTag.WindowWidth))
+                    : dataset.GetSingleValueOrDefault<string>(DicomTag.WindowWidth, string.Empty))
+                : string.Empty,
+            
             CreateTime = now
         });
     }
