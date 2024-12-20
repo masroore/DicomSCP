@@ -36,6 +36,8 @@ public class Series
     public string? Modality { get; set; }
     public string? SeriesNumber { get; set; }
     public string? SeriesDescription { get; set; }
+    public string? SliceThickness { get; set; }
+    public string? SeriesDate { get; set; }
     public DateTime CreateTime { get; set; }
     public int NumberOfInstances { get; set; }
     public string? StudyModality { get; set; }
@@ -48,6 +50,21 @@ public class Instance
     public string SopClassUid { get; set; } = null!;
     public string? InstanceNumber { get; set; }
     public string FilePath { get; set; } = null!;
+    public int Columns { get; set; }
+    public int Rows { get; set; }
+    public string? PhotometricInterpretation { get; set; }
+    public int BitsAllocated { get; set; }
+    public int BitsStored { get; set; }
+    public int PixelRepresentation { get; set; }
+    public int SamplesPerPixel { get; set; }
+    public string? PixelSpacing { get; set; }
+    public int HighBit { get; set; }
+    public string? ImageOrientationPatient { get; set; }
+    public string? ImagePositionPatient { get; set; }
+    public string? FrameOfReferenceUID { get; set; }
+    public string? ImageType { get; set; }
+    public string? WindowCenter { get; set; }
+    public string? WindowWidth { get; set; }
     public DateTime CreateTime { get; set; }
 }
 

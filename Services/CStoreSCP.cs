@@ -53,30 +53,49 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         { "JPEGProcess14", DicomTransferSyntax.JPEGProcess14SV1 }
     };
 
-    // 定义常用的文本标签
+    // 需要中文处理的标签
     private static readonly DicomTag[] TextTags = new[]
     {
-        DicomTag.PatientName,
+        DicomTag.PatientName,           // 患者姓名
+        DicomTag.StudyDescription,      // 检查描述
+        DicomTag.SeriesDescription,     // 序列描述
+        DicomTag.InstitutionName       // 机构名称
+
+    };
+
+    // 需要直接复制的标签（对应数据库字段）
+    private static readonly DicomTag[] RequiredTags = new[]
+    {
+        // 患者基本信息
         DicomTag.PatientID,
-        DicomTag.StudyDescription,
-        DicomTag.SeriesDescription,
-        DicomTag.InstitutionName,
-        DicomTag.ReferringPhysicianName,
-        DicomTag.PerformingPhysicianName,
+        DicomTag.PatientBirthDate,
+        DicomTag.PatientSex,
         DicomTag.AccessionNumber,
         DicomTag.Modality,
         DicomTag.StudyDate,
         DicomTag.StudyTime,
-        DicomTag.SeriesNumber,
-        DicomTag.PatientBirthDate,
-        DicomTag.PatientSex,
         DicomTag.StudyID,
-        DicomTag.ModalitiesInStudy,
+        DicomTag.SeriesNumber,
         DicomTag.InstanceNumber,
-        DicomTag.SOPClassUID,
-        DicomTag.SOPInstanceUID,
-        DicomTag.StudyInstanceUID,
-        DicomTag.SeriesInstanceUID
+        
+        // 图像相关字段
+        DicomTag.Columns,
+        DicomTag.Rows,
+        DicomTag.BitsAllocated,
+        DicomTag.BitsStored,
+        DicomTag.HighBit,
+        DicomTag.PixelRepresentation,
+        DicomTag.SamplesPerPixel,
+        DicomTag.PhotometricInterpretation,
+        DicomTag.SliceThickness,
+        DicomTag.SeriesDate,
+        DicomTag.ImageType,
+        DicomTag.WindowCenter,
+        DicomTag.WindowWidth,
+        DicomTag.PixelSpacing,
+        DicomTag.ImageOrientationPatient,
+        DicomTag.ImagePositionPatient,
+        DicomTag.FrameOfReferenceUID
     };
 
     public static void Configure(string storagePath, string tempPath, DicomSettings settings, DicomRepository repository)
@@ -178,19 +197,17 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
             foreach (var pc in association.PresentationContexts)
             {
-                // 检查是否支持请求的服务
-                if (pc.AbstractSyntax == DicomUID.Verification ||                    // C-ECHO
-                    pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)  // Storage
+                if (pc.AbstractSyntax == DicomUID.Verification)  // C-ECHO
                 {
                     pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
-                    DicomLogger.Debug("StoreSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
-                        association.CallingAE, pc.AbstractSyntax.Name);
                 }
-                else
+                else if (IsImageStorage(pc.AbstractSyntax))  // 图像存储
                 {
-                    pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
-                    DicomLogger.Warning("StoreSCP", "拒绝不支持的服务 - AET: {CallingAE}, 服务: {Service}", 
-                        association.CallingAE, pc.AbstractSyntax.Name);
+                    pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);  // 使用图像传输语法
+                }
+                else if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)  // 其他存储
+                {
+                    pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
                 }
             }
 
@@ -501,28 +518,27 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     }
 
     // 添加一个辅助方法来处理数据集中的 UID
-    private void ProcessUID(DicomDataset dataset, DicomTag tag)
+    private void ProcessUID(DicomDataset targetDataset, DicomDataset sourceDataset, DicomTag tag)
     {
         try
         {
-            if (!dataset.Contains(tag))
-                return;
-
-            var originalUid = dataset.GetSingleValue<string>(tag);
-            var formattedUid = FormatUID(originalUid);
-
-            if (originalUid != formattedUid)
+            if (!sourceDataset.Contains(tag))
             {
-                DicomLogger.Debug("StoreSCP", "UID已格式化 - Tag: {Tag}, 原始值: {Original} -> 新值: {Formatted}",
-                    tag, originalUid, formattedUid);
+                DicomLogger.Warning("StoreSCP", "UID标签不存在 - Tag: {Tag}", tag);
+                return;
             }
 
-            // 使用 AddOrUpdate 而不是 Add
-            dataset.AddOrUpdate(tag, formattedUid);
+            var originalUid = sourceDataset.GetSingleValue<string>(tag);
+            var formattedUid = FormatUID(originalUid);
+
+            targetDataset.AddOrUpdate(tag, formattedUid);
+
+            // 添加验证日志
+            DicomLogger.Debug("StoreSCP", "UID处理完成 - Tag: {Tag}, 值: {Value}", tag, formattedUid);
         }
         catch (Exception ex)
         {
-            DicomLogger.Warning("StoreSCP", ex, "处理UID失败 - Tag: {Tag}", tag);
+            DicomLogger.Error("StoreSCP", ex, "处理UID失败 - Tag: {Tag}", tag);
         }
     }
 
@@ -568,9 +584,9 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 var day = studyDate.Substring(6, 2);
 
                 // 获取并格式化 UID
-                ProcessUID(request.Dataset, DicomTag.StudyInstanceUID);
-                ProcessUID(request.Dataset, DicomTag.SeriesInstanceUID);
-                ProcessUID(request.Dataset, DicomTag.SOPInstanceUID);
+                ProcessUID(request.Dataset, request.Dataset, DicomTag.StudyInstanceUID);
+                ProcessUID(request.Dataset, request.Dataset, DicomTag.SeriesInstanceUID);
+                ProcessUID(request.Dataset, request.Dataset, DicomTag.SOPInstanceUID);
 
                 var studyUid = request.Dataset.GetSingleValue<string>(DicomTag.StudyInstanceUID);
                 var seriesUid = request.Dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID);
@@ -650,30 +666,18 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         try
                         {
                             var processedDataset = new DicomDataset();
-                            processedDataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
+                            processedDataset.AddOrUpdate(DicomTag.SpecificCharacterSet, "ISO_IR 192");
 
-                            // 先处理所有 UID
+                            // 1. 处理UID
                             foreach (var item in request.Dataset)
                             {
                                 if (item.ValueRepresentation == DicomVR.UI)
                                 {
-                                    ProcessUID(processedDataset, item.Tag);
+                                    ProcessUID(processedDataset, request.Dataset, item.Tag);
                                 }
                             }
 
-                            // 然后处理其他字段
-                            foreach (var item in request.Dataset)
-                            {
-                                if (item.ValueRepresentation != DicomVR.UI)
-                                {
-                                    if (!TextTags.Contains(item.Tag) && !IsTextVR(item.ValueRepresentation))
-                                    {
-                                        processedDataset.Add(item);
-                                    }
-                                }
-                            }
-
-                            // 处理文本字段
+                            // 2. 处理中文字段
                             foreach (var tag in TextTags)
                             {
                                 if (request.Dataset.Contains(tag))
@@ -683,6 +687,15 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                                     {
                                         processedDataset.AddOrUpdate(tag, value);
                                     }
+                                }
+                            }
+
+                            // 3. 处理其他必需字段
+                            foreach (var tag in RequiredTags)
+                            {
+                                if (request.Dataset.Contains(tag) && !processedDataset.Contains(tag))  // 避免重复添加
+                                {
+                                    processedDataset.Add(request.Dataset.GetDicomItem<DicomItem>(tag));
                                 }
                             }
 
@@ -828,17 +841,6 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     ~CStoreSCP()
     {
         Dispose(false);
-    }
-
-    /// <summary>
-    /// 检查是否是文本类型的VR
-    /// </summary>
-    private bool IsTextVR(DicomVR vr)
-    {
-        return vr == DicomVR.AE || vr == DicomVR.AS || vr == DicomVR.CS ||
-               vr == DicomVR.DS || vr == DicomVR.IS || vr == DicomVR.LO ||
-               vr == DicomVR.LT || vr == DicomVR.PN || vr == DicomVR.SH ||
-               vr == DicomVR.ST || vr == DicomVR.UT;
     }
 
     /// <summary>

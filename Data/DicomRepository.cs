@@ -40,13 +40,42 @@ public class DicomRepository : BaseRepository, IDisposable
 
         public const string InsertSeries = @"
             INSERT OR IGNORE INTO Series 
-            (SeriesInstanceUid, StudyInstanceUid, Modality, SeriesNumber, SeriesDescription, CreateTime)
-            VALUES (@SeriesInstanceUid, @StudyInstanceUid, @Modality, @SeriesNumber, @SeriesDescription, @CreateTime)";
+            (
+                SeriesInstanceUid, 
+                StudyInstanceUid, 
+                Modality, 
+                SeriesNumber, 
+                SeriesDescription,
+                SliceThickness,
+                SeriesDate,        
+                CreateTime
+            )
+            VALUES 
+            (
+                @SeriesInstanceUid, 
+                @StudyInstanceUid, 
+                @Modality, 
+                @SeriesNumber, 
+                @SeriesDescription,
+                @SliceThickness,
+                @SeriesDate,
+                @CreateTime
+            )";
 
         public const string InsertInstance = @"
-            INSERT OR IGNORE INTO Instances 
-            (SopInstanceUid, SeriesInstanceUid, SopClassUid, InstanceNumber, FilePath, CreateTime)
-            VALUES (@SopInstanceUid, @SeriesInstanceUid, @SopClassUid, @InstanceNumber, @FilePath, @CreateTime)";
+            INSERT INTO Instances (
+                SopInstanceUid, SeriesInstanceUid, SopClassUid, InstanceNumber, FilePath,
+                Columns, Rows, PhotometricInterpretation, BitsAllocated, BitsStored,
+                PixelRepresentation, SamplesPerPixel, PixelSpacing, HighBit,
+                ImageOrientationPatient, ImagePositionPatient, FrameOfReferenceUID,
+                ImageType, WindowCenter, WindowWidth, CreateTime
+            ) VALUES (
+                @SopInstanceUid, @SeriesInstanceUid, @SopClassUid, @InstanceNumber, @FilePath,
+                @Columns, @Rows, @PhotometricInterpretation, @BitsAllocated, @BitsStored,
+                @PixelRepresentation, @SamplesPerPixel, @PixelSpacing, @HighBit,
+                @ImageOrientationPatient, @ImagePositionPatient, @FrameOfReferenceUID,
+                @ImageType, @WindowCenter, @WindowWidth, @CreateTime
+            )";
 
         public const string CreateWorklistTable = @"
             CREATE TABLE IF NOT EXISTS Worklist (
@@ -112,6 +141,8 @@ public class DicomRepository : BaseRepository, IDisposable
                 Modality TEXT,
                 SeriesNumber TEXT,
                 SeriesDescription TEXT,
+                SliceThickness TEXT,
+                SeriesDate TEXT,
                 CreateTime DATETIME,
                 FOREIGN KEY(StudyInstanceUid) REFERENCES Studies(StudyInstanceUid)
             )";
@@ -123,6 +154,21 @@ public class DicomRepository : BaseRepository, IDisposable
                 SopClassUid TEXT,
                 InstanceNumber TEXT,
                 FilePath TEXT,
+                Columns INTEGER,
+                Rows INTEGER,
+                PhotometricInterpretation TEXT,
+                BitsAllocated INTEGER,
+                BitsStored INTEGER,
+                PixelRepresentation INTEGER,
+                SamplesPerPixel INTEGER,
+                PixelSpacing TEXT,
+                HighBit INTEGER,
+                ImageOrientationPatient TEXT,
+                ImagePositionPatient TEXT,
+                FrameOfReferenceUID TEXT,
+                ImageType TEXT,
+                WindowCenter TEXT,
+                WindowWidth TEXT,
                 CreateTime DATETIME,
                 FOREIGN KEY(SeriesInstanceUid) REFERENCES Series(SeriesInstanceUid)
             )";
@@ -342,7 +388,7 @@ public class DicomRepository : BaseRepository, IDisposable
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            LogError(ex, "始化数据库表失败");
+            LogError(ex, "初始化数据库表失败");
             throw;
         }
     }
@@ -388,6 +434,8 @@ public class DicomRepository : BaseRepository, IDisposable
             Modality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty),
             SeriesNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesNumber, string.Empty),
             SeriesDescription = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesDescription, string.Empty),
+            SliceThickness = dataset.GetSingleValueOrDefault<string>(DicomTag.SliceThickness, string.Empty),
+            SeriesDate = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesDate, string.Empty),
             CreateTime = now
         });
 
@@ -398,6 +446,27 @@ public class DicomRepository : BaseRepository, IDisposable
             SopClassUid = dataset.GetSingleValue<string>(DicomTag.SOPClassUID),
             InstanceNumber = dataset.GetSingleValueOrDefault<string>(DicomTag.InstanceNumber, string.Empty),
             FilePath = filePath,
+            Columns = dataset.GetSingleValueOrDefault<int>(DicomTag.Columns, 0),
+            Rows = dataset.GetSingleValueOrDefault<int>(DicomTag.Rows, 0),
+            PhotometricInterpretation = dataset.GetSingleValueOrDefault<string>(DicomTag.PhotometricInterpretation, string.Empty),
+            BitsAllocated = dataset.GetSingleValueOrDefault<int>(DicomTag.BitsAllocated, 0),
+            BitsStored = dataset.GetSingleValueOrDefault<int>(DicomTag.BitsStored, 0),
+            PixelRepresentation = dataset.GetSingleValueOrDefault<int>(DicomTag.PixelRepresentation, 0),
+            SamplesPerPixel = dataset.GetSingleValueOrDefault<int>(DicomTag.SamplesPerPixel, 0),
+            PixelSpacing = dataset.Contains(DicomTag.PixelSpacing) 
+                ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.PixelSpacing)) 
+                : string.Empty,
+            HighBit = dataset.GetSingleValueOrDefault<int>(DicomTag.HighBit, 0),
+            ImageOrientationPatient = dataset.Contains(DicomTag.ImageOrientationPatient)
+                ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.ImageOrientationPatient))
+                : string.Empty,
+            ImagePositionPatient = dataset.Contains(DicomTag.ImagePositionPatient)
+                ? string.Join("\\", dataset.GetValues<decimal>(DicomTag.ImagePositionPatient))
+                : string.Empty,
+            FrameOfReferenceUID = dataset.GetSingleValueOrDefault<string>(DicomTag.FrameOfReferenceUID, string.Empty),
+            ImageType = dataset.GetSingleValueOrDefault<string>(DicomTag.ImageType, string.Empty),
+            WindowCenter = dataset.GetSingleValueOrDefault<string>(DicomTag.WindowCenter, string.Empty),
+            WindowWidth = dataset.GetSingleValueOrDefault<string>(DicomTag.WindowWidth, string.Empty),
             CreateTime = now
         });
     }
@@ -1301,7 +1370,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 GROUP BY p.PatientId, p.PatientName, p.PatientBirthDate, p.PatientSex, p.CreateTime
                 ORDER BY p.PatientName";
 
-            LogDebug("执Patient查询 - SQL: {Sql}, PatientId: {PatientId}, PatientName: {PatientName}", 
+            LogDebug("执行Patient查询 - SQL: {Sql}, PatientId: {PatientId}, PatientName: {PatientName}", 
                 sql, patientId, patientName);
 
             var patients = connection.Query<Patient>(sql, parameters).ToList();
