@@ -63,7 +63,9 @@ function displayImages(items) {
     const tbody = document.getElementById('images-table-body');
     if (!tbody) return;
 
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
     const fragment = document.createDocumentFragment();
+    
     items.forEach(item => {
         const tr = document.createElement('tr');
         tr.setAttribute('onclick', 'toggleSeriesInfo(this)');
@@ -77,6 +79,9 @@ function displayImages(items) {
             <td>${item.studyDescription || ''}</td>
             <td>${item.numberOfInstances || 0}</td>
             <td>
+                <button class="btn btn-sm btn-primary me-1" onclick="openWeasis('${item.studyInstanceUid}', event)" title="Weasis预览">
+                    <i class="bi bi-eye me-1"></i>Weasis
+                </button>
                 <button class="btn btn-sm btn-danger" onclick="deleteStudy('${item.studyInstanceUid}', event)" title="删除">
                     <i class="bi bi-trash me-1"></i>删除
                 </button>
@@ -340,4 +345,38 @@ function previewSeries(studyUid, seriesUid) {
 function formatDate(dateStr) {
     if (!dateStr) return '';
     return dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+}
+
+// 添加打开Weasis的函数
+function openWeasis(studyUid, event) {
+    try {
+        if (event) {
+            event.stopPropagation();
+        }
+
+        const baseUrl = `${window.location.protocol}//${window.location.host}`;
+        const manifestUrl = `${baseUrl}/viewer/weasis/${studyUid}`;
+        const weasisUrl = `weasis://?$dicom:get -w "${manifestUrl}"`;
+        
+        console.log('Opening Weasis URL:', weasisUrl);
+
+        // 创建并点击隐藏的链接
+        const link = document.createElement('a');
+        link.style.display = 'none';
+        link.href = weasisUrl;
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        
+        // 延迟移除链接
+        setTimeout(() => {
+            document.body.removeChild(link);
+        }, 100);
+
+        // 显示提示
+        window.showToast('正在启动Weasis...', 'info');
+    } catch (error) {
+        console.error('打开Weasis失败:', error);
+        window.showToast('打开Weasis失败', 'error');
+    }
 } 
