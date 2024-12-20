@@ -1533,4 +1533,19 @@ public class DicomRepository : BaseRepository, IDisposable
     {
         return _settings.PrintSCU?.Printers ?? new List<Configuration.PrinterConfig>();
     }
+
+    public async Task<IEnumerable<Series>> GetSeriesAsync(string studyInstanceUid)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = @"
+            SELECT s.*, COUNT(i.SopInstanceUid) as NumberOfInstances
+            FROM Series s
+            LEFT JOIN Instances i ON s.SeriesInstanceUid = i.SeriesInstanceUid
+            WHERE s.StudyInstanceUid = @StudyInstanceUid
+            GROUP BY s.SeriesInstanceUid, s.StudyInstanceUid, s.Modality, 
+                     s.SeriesNumber, s.SeriesDescription, s.SliceThickness, 
+                     s.SeriesDate, s.CreateTime";
+
+        return await connection.QueryAsync<Series>(sql, new { StudyInstanceUid = studyInstanceUid });
+    }
 }

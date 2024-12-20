@@ -266,6 +266,7 @@ app.Use(async (context, next) =>
     
     // 公共路径
     if (path?.StartsWith("/login.html") == true || 
+        path?.StartsWith("/viewer/") == true ||  // 添加viewer路径
         path?.StartsWith("/api/auth/login") == true ||
         path?.StartsWith("/lib/") == true ||
         path?.StartsWith("/css/") == true ||
