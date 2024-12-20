@@ -134,7 +134,14 @@ public class StoreSCU : IStoreSCU
 
                     request.OnResponseReceived += (req, response) =>
                     {
-                        if (response.Status.State != DicomState.Success)
+                        // 检查是否是重复实例的状态码 (273 = 0x0111)
+                        if (response.Status.Code == 273)  // Duplicate SOP Instance
+                        {
+                            DicomLogger.Warning("StoreSCU", 
+                                "图像已存在 - 文件: {FilePath}", filePath);
+                            // 不将重复实例添加到失败列表
+                        }
+                        else if (response.Status.State != DicomState.Success)
                         {
                             var errorMessage = $"{response.Status.State} [{response.Status.Code}: {response.Status.Description}]";
                             DicomLogger.Error("StoreSCU", 

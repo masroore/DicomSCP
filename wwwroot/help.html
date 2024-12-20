@@ -147,7 +147,7 @@
             <div class="accordion-item">
                 <h2 class="accordion-header">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#qrscuHelp">
-                        查询检索客户端配置 (QueryRetrieveConfig)
+                        QRSCU/STORESCU配置 (RemoteNodes节点配置)
                     </button>
                 </h2>
                 <div id="qrscuHelp" class="accordion-collapse collapse">
@@ -166,8 +166,15 @@
                                     <li>AeTitle - 节点AE Title</li>
                                     <li>HostName - 主机名或IP地址</li>
                                     <li>Port - 端口号</li>
-                                    <li>IsDefault - 是否为默认节点</li>
+                                    <li>Type - 节点类型，可选值：
+                                        <ul>
+                                            <li>store - 仅支持存储</li>
+                                            <li>qr - 仅支持查询检索</li>
+                                            <li>all - 支持所有操作（存储和查询检索）</li>
+                                        </ul>
+                                    </li>
                                 </ul>
+                                <p>注意：发送图像和查询检索功能会根据节点的 Type 自动过滤显示对应的节点。</p>
                             </dd>
                         </dl>
                     </div>
