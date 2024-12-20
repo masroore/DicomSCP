@@ -27,7 +27,9 @@ public class StoreSCUController : ControllerBase
     [HttpGet("nodes")]
     public ActionResult<IEnumerable<RemoteNode>> GetNodes()
     {
-        return Ok(_config.RemoteNodes);
+        // 只返回支持存储的节点
+        var storeNodes = _config.RemoteNodes.Where(n => n.SupportsStore());
+        return Ok(storeNodes);
     }
 
     [HttpPost("verify/{remoteName}")]
@@ -54,6 +56,18 @@ public class StoreSCUController : ControllerBase
     {
         try
         {
+            var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == remoteName);
+            if (node == null)
+            {
+                return NotFound($"未找到节点: {remoteName}");
+            }
+
+            // 验证节点是否支持存储
+            if (!node.SupportsStore())
+            {
+                return BadRequest($"节点 {remoteName} 不支持存储操作");
+            }
+
             if (!string.IsNullOrEmpty(folderPath))
             {
                 DicomLogger.Information("Api", "开始发送文件夹 - 路径: {FolderPath}, 目标: {RemoteName}", 
@@ -121,6 +135,18 @@ public class StoreSCUController : ControllerBase
     {
         try
         {
+            var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == remoteName);
+            if (node == null)
+            {
+                return NotFound($"未找到节点: {remoteName}");
+            }
+
+            // 验证节点是否支持存储
+            if (!node.SupportsStore())
+            {
+                return BadRequest($"节点 {remoteName} 不支持存储操作");
+            }
+
             // 获取研究相关的所有文件路径
             var repository = HttpContext.RequestServices.GetRequiredService<DicomRepository>();
             var instances = repository.GetInstancesByStudyUid(studyInstanceUid);

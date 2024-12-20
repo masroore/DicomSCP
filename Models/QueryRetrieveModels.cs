@@ -1,8 +1,5 @@
 using System.Text.Json.Serialization;
-using DicomSCP.Configuration;
 using FellowOakDicom;
-using System.ComponentModel.DataAnnotations;
-using FellowOakDicom.Network;
 
 namespace DicomSCP.Models;
 
@@ -20,8 +17,8 @@ public class DicomNodeConfig
     [JsonPropertyName("port")]
     public int Port { get; set; }
     
-    [JsonPropertyName("isDefault")]
-    public bool IsDefault { get; set; }
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "all";  // 可选值: "store", "qr", "all"
 }
 
 public class QueryRequest

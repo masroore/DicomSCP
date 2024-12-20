@@ -72,18 +72,19 @@ async function loadQRNodes() {
         }
 
         select.innerHTML = nodes.map(node => `
-            <option value="${node.name}">${node.name} (${node.aeTitle}@${node.hostName})</option>
+            <option value="${node.name}">
+                ${node.name} (${node.aeTitle}@${node.hostName})
+            </option>
         `).join('');
         
-        // 恢复之前选择的节点，如果没有则使用默认节点
+        // 恢复之前选择的节点，如果没有则使用第一个节点
         if (selectedQRNode) {
             select.value = selectedQRNode;
         } else {
-            const defaultNode = nodes.find(n => n.isDefault);
-            if (defaultNode) {
-                select.value = defaultNode.name;
+            selectedQRNode = nodes[0]?.name;
+            if (selectedQRNode) {
+                select.value = selectedQRNode;
             }
-            selectedQRNode = select.value;
         }
 
         // 监听节点选择变化

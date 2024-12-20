@@ -394,12 +394,12 @@ function clearSelection() {
 
 // 加载节点列表
 async function loadStoreNodes() {
-    const select = document.getElementById('storeNode');
-    if (!select) return;
-
     try {
         const response = await axios.get('/api/StoreScu/nodes');
         const nodes = response.data;
+
+        const select = document.getElementById('storeNode');
+        if (!select) return;
 
         if (nodes.length === 0) {
             select.innerHTML = '<option value="">未配置DICOM节点</option>';
@@ -408,7 +408,7 @@ async function loadStoreNodes() {
 
         // 生成节点选项
         select.innerHTML = nodes.map(node => `
-            <option value="${node.name}" ${node.isDefault ? 'selected' : ''}>
+            <option value="${node.name}">
                 ${node.name} (${node.aeTitle}@${node.hostName})
             </option>
         `).join('');
@@ -417,9 +417,8 @@ async function loadStoreNodes() {
         if (selectedStoreNode) {
             select.value = selectedStoreNode;
         } else {
-            // 否则使用默认节点或第一个节点
-            const defaultNode = nodes.find(n => n.isDefault);
-            selectedStoreNode = defaultNode ? defaultNode.name : nodes[0]?.name;
+            // 否则使用第一个节点
+            selectedStoreNode = nodes[0]?.name;
             if (selectedStoreNode) {
                 select.value = selectedStoreNode;
             }

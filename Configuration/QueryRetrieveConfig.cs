@@ -20,5 +20,15 @@ public class RemoteNode
     public string AeTitle { get; set; } = string.Empty;
     public string HostName { get; set; } = "localhost";
     public int Port { get; set; } = 104;
-    public bool IsDefault { get; set; }
+    public string Type { get; set; } = "all";
+
+    public bool SupportsStore()
+    {
+        return Type.ToLower() is "store" or "all";
+    }
+
+    public bool SupportsQueryRetrieve()
+    {
+        return Type.ToLower() is "qr" or "all";
+    }
 } 

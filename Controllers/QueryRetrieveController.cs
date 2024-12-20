@@ -198,7 +198,9 @@ public class QueryRetrieveController : ControllerBase
     [HttpGet("nodes")]
     public ActionResult<IEnumerable<RemoteNode>> GetNodes()
     {
-        return Ok(_config.RemoteNodes);
+        // 只返回支持查询检索的节点
+        var qrNodes = _config.RemoteNodes.Where(n => n.SupportsQueryRetrieve());
+        return Ok(qrNodes);
     }
 
     // 统一的查询接口
@@ -212,6 +214,12 @@ public class QueryRetrieveController : ControllerBase
         if (node == null)
         {
             return NotFound($"未找到节点: {nodeId}");
+        }
+
+        // 验证节点是否支持查询检索
+        if (!node.SupportsQueryRetrieve())
+        {
+            return BadRequest($"节点 {nodeId} 不支持查询检索操作");
         }
 
         // 解析查询级别
@@ -364,127 +372,145 @@ public class QueryRetrieveController : ControllerBase
         [FromQuery] string level,
         [FromBody] MoveRequest moveRequest)
     {
-        var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
-        if (node == null)
-        {
-            return NotFound($"未找到节点: {nodeId}");
-        }
-
-        // 解析级别
-        if (!Enum.TryParse<DicomQueryRetrieveLevel>(level, true, out var queryLevel))
-        {
-            return BadRequest(new MoveResponse 
-            { 
-                Success = false,
-                Message = $"无效的获取级别: {level}。有效值为: Patient, Study, Series, Image"
-            });
-        }
-
-        // 验证请求参数
-        var (isValid, errorMessage) = ValidateMoveRequest(queryLevel, moveRequest);
-        if (!isValid)
-        {
-            return BadRequest(new MoveResponse 
-            { 
-                Success = false,
-                Message = errorMessage
-            });
-        }
-
         try
         {
-            // 构建数据集
-            var dataset = new DicomDataset();
-            dataset.Add(DicomTag.QueryRetrieveLevel, queryLevel.ToString().ToUpper());
-
-            // 根据不同级别添加必要的字段
-            switch (queryLevel)
+            var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
+            if (node == null)
             {
-                case DicomQueryRetrieveLevel.Patient:
-                    dataset.Add(DicomTag.PatientID, moveRequest.PatientId);
-                    break;
-
-                case DicomQueryRetrieveLevel.Study:
-                    dataset.Add(DicomTag.StudyInstanceUID, moveRequest.StudyInstanceUid);
-                    break;
-
-                case DicomQueryRetrieveLevel.Series:
-                    dataset.Add(DicomTag.StudyInstanceUID, moveRequest.StudyInstanceUid);
-                    dataset.Add(DicomTag.SeriesInstanceUID, moveRequest.SeriesInstanceUid);
-                    break;
-
-                case DicomQueryRetrieveLevel.Image:
-                    dataset.Add(DicomTag.StudyInstanceUID, moveRequest.StudyInstanceUid);
-                    dataset.Add(DicomTag.SeriesInstanceUID, moveRequest.SeriesInstanceUid);
-                    dataset.Add(DicomTag.SOPInstanceUID, moveRequest.SopInstanceUid);
-                    break;
+                return NotFound($"未找到节点: {nodeId}");
             }
 
-            DicomLogger.Debug(LogPrefix, "Move请求数据集: {0}", dataset.ToString());
-
-            // 解析传输语法
-            string? transferSyntax = null;
-            if (!string.IsNullOrEmpty(moveRequest.TransferSyntax))
+            // 验证节点是否支持查询检索
+            if (!node.SupportsQueryRetrieve())
             {
-                try
-                {
-                    var syntaxType = DicomTransferSyntaxParser.Parse(moveRequest.TransferSyntax);
-                    if (syntaxType.HasValue)
-                    {
-                        transferSyntax = syntaxType.Value.GetUID();
-                        DicomLogger.Debug(LogPrefix, 
-                            "使用指定的传输语法: {0} ({1}) [输入: {2}]", 
-                            syntaxType.Value.GetDescription(),
-                            transferSyntax,
-                            moveRequest.TransferSyntax);
-                    }
-                }
-                catch (ArgumentException ex)
-                {
-                    return BadRequest(new MoveResponse 
-                    { 
-                        Success = false,
-                        Message = ex.Message
-                    });
-                }
+                return BadRequest($"节点 {nodeId} 不支持查询检索操作");
             }
 
-            // 直接使用本地 AE Title，并传入传输语法参数
-            var success = await _queryRetrieveScu.MoveAsync(
-                node, 
-                queryLevel, 
-                dataset, 
-                _settings.AeTitle,
-                transferSyntax);
-            
-            if (!success)
+            // 解析级别
+            if (!Enum.TryParse<DicomQueryRetrieveLevel>(level, true, out var queryLevel))
             {
-                // 根据不同情况返回不同的错误信息
-                return StatusCode(500, new MoveResponse 
+                return BadRequest(new MoveResponse 
                 { 
                     Success = false,
-                    Message = queryLevel == DicomQueryRetrieveLevel.Patient ? 
-                        "Patient级别获取未返回任何影像，该级别可能不被支持，请尝试使用Study级别获取" : 
-                        "获取请求被拒绝"
+                    Message = $"无效的获取级别: {level}。有效值为: Patient, Study, Series, Image"
                 });
             }
 
-            return Ok(new MoveResponse
+            // 验证请求参数
+            var (isValid, errorMessage) = ValidateMoveRequest(queryLevel, moveRequest);
+            if (!isValid)
             {
-                Success = true,
-                Message = queryLevel == DicomQueryRetrieveLevel.Patient ? 
-                    "Patient级别获取请求已发送，如果支持此级别操作，稍后可在影像管理中查看" : 
-                    "获取请求已发送，请稍后在影像管理中查看",
-                JobId = Guid.NewGuid().ToString()
-            });
+                return BadRequest(new MoveResponse 
+                { 
+                    Success = false,
+                    Message = errorMessage
+                });
+            }
+
+            try
+            {
+                // 构建数据集
+                var dataset = new DicomDataset();
+                dataset.Add(DicomTag.QueryRetrieveLevel, queryLevel.ToString().ToUpper());
+
+                // 根据不同级别添加必要的字段
+                switch (queryLevel)
+                {
+                    case DicomQueryRetrieveLevel.Patient:
+                        dataset.Add(DicomTag.PatientID, moveRequest.PatientId);
+                        break;
+
+                    case DicomQueryRetrieveLevel.Study:
+                        dataset.Add(DicomTag.StudyInstanceUID, moveRequest.StudyInstanceUid);
+                        break;
+
+                    case DicomQueryRetrieveLevel.Series:
+                        dataset.Add(DicomTag.StudyInstanceUID, moveRequest.StudyInstanceUid);
+                        dataset.Add(DicomTag.SeriesInstanceUID, moveRequest.SeriesInstanceUid);
+                        break;
+
+                    case DicomQueryRetrieveLevel.Image:
+                        dataset.Add(DicomTag.StudyInstanceUID, moveRequest.StudyInstanceUid);
+                        dataset.Add(DicomTag.SeriesInstanceUID, moveRequest.SeriesInstanceUid);
+                        dataset.Add(DicomTag.SOPInstanceUID, moveRequest.SopInstanceUid);
+                        break;
+                }
+
+                DicomLogger.Debug(LogPrefix, "Move请求数据集: {0}", dataset.ToString());
+
+                // 解析传输语法
+                string? transferSyntax = null;
+                if (!string.IsNullOrEmpty(moveRequest.TransferSyntax))
+                {
+                    try
+                    {
+                        var syntaxType = DicomTransferSyntaxParser.Parse(moveRequest.TransferSyntax);
+                        if (syntaxType.HasValue)
+                        {
+                            transferSyntax = syntaxType.Value.GetUID();
+                            DicomLogger.Debug(LogPrefix, 
+                                "使用指定的传输语法: {0} ({1}) [输入: {2}]", 
+                                syntaxType.Value.GetDescription(),
+                                transferSyntax,
+                                moveRequest.TransferSyntax);
+                        }
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        return BadRequest(new MoveResponse 
+                        { 
+                            Success = false,
+                            Message = ex.Message
+                        });
+                    }
+                }
+
+                // 直接使用本地 AE Title，并传入传输语法参数
+                var success = await _queryRetrieveScu.MoveAsync(
+                    node, 
+                    queryLevel, 
+                    dataset, 
+                    _settings.AeTitle,
+                    transferSyntax);
+                
+                if (!success)
+                {
+                    // 根据不同情况返回不同的错误信息
+                    return StatusCode(500, new MoveResponse 
+                    { 
+                        Success = false,
+                        Message = queryLevel == DicomQueryRetrieveLevel.Patient ? 
+                            "Patient级别获取未返回任何影像，该级别可能不被支持，请尝试使用Study级别获取" : 
+                            "获取请求被拒绝"
+                    });
+                }
+
+                return Ok(new MoveResponse
+                {
+                    Success = true,
+                    Message = queryLevel == DicomQueryRetrieveLevel.Patient ? 
+                        "Patient级别获取请求已发送，如果支持此级别操作，稍后可在影像管理中查看" : 
+                        "获取请求已发送，请稍后在影像管理中查看",
+                    JobId = Guid.NewGuid().ToString()
+                });
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error(LogPrefix, ex, "发送{Level}获取请求失败", level);
+                return StatusCode(500, new MoveResponse 
+                { 
+                    Success = false,
+                    Message = "发送获取请求失败" 
+                });
+            }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(LogPrefix, ex, "发送{Level}获取请求失败", level);
+            DicomLogger.Error(LogPrefix, ex, "执行{Level}获取请求失败", level);
             return StatusCode(500, new MoveResponse 
             { 
                 Success = false,
-                Message = "发送获取请求失败" 
+                Message = "执行获取请求失败" 
             });
         }
     }
@@ -784,16 +810,22 @@ public class QueryRetrieveController : ControllerBase
     }
 
     [HttpPost("{nodeId}/verify")]
-    public async Task<ActionResult> VerifyConnection(string nodeId)
+    public async Task<IActionResult> VerifyConnection(string nodeId)
     {
-        var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
-        if (node == null)
-        {
-            return NotFound($"未找到节点: {nodeId}");
-        }
-
         try
         {
+            var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
+            if (node == null)
+            {
+                return NotFound($"未找到节点: {nodeId}");
+            }
+
+            // 验证节点是否支持查询检索
+            if (!node.SupportsQueryRetrieve())
+            {
+                return BadRequest($"节点 {nodeId} 不支持查询检索操作");
+            }
+
             var success = await _queryRetrieveScu.VerifyConnectionAsync(node);
             
             if (!success)
