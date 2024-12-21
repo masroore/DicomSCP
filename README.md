@@ -1,7 +1,11 @@
 # DICOM 管理系统
 
 ## 携手CURSOR重磅发布，打造中文开源社区最完善PACS系统，医学影像工程师必备DICOM工具箱!
-基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO服务，并集成了功能强大的DICOM 查看器。
+基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO服务，集成了功能强大的DICOM 桌面和Web查看器。
+
+- [项目Gitee仓库](https://gitee.com/fightroad/DicomSCP)
+
+- [项目GitHub仓库](https://github.com/fightroad/DicomSCP)
 
 ## 支持项目
 
@@ -33,9 +37,10 @@
 ## 功能预览
 
 ![登录](about/登录.png)
-![影像管理](about/Dicom.png)
-![检查预览](about/weasis.png)
+![影像管理](about/pacslist.png)
+![weasis预览](about/weasis.png)
 ![3d预览](about/3D.png)
+![OHIF预览](about/ohif.png)
 ![序列预览](about/影像查看.png)
 ![工作列表](about/worklistscp.png)  
 ![查询检索](about/qrscu.png) 
@@ -154,6 +159,7 @@
 ### 前端
 - [Cornerstone.js](https://github.com/cornerstonejs/cornerstone) - 现代 Web DICOM 查看器
 - [weasis](https://github.com/nroduit/Weasis) - DICOM桌面查看器
+- [OHIF](https://github.com/OHIF/Viewers) - DICOM Web查看器
 - [dicomParser](https://github.com/cornerstonejs/dicomParser) - DICOM 解析器
 - [Hammer.js](https://github.com/hammerjs/hammer.js) - 触摸手势库
 - [Axios](https://github.com/axios/axios) - 基于 Promise 的 HTTP 客户端
