@@ -10,6 +10,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +58,16 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxConcurrentConnections = 100;
     options.Limits.MaxConcurrentUpgradedConnections = 100;
     options.Limits.MaxRequestBodySize = 52428800; // 50MB
+});
+
+// 配置转发头
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
+                              Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    // 清除默认网络，否则会因为安全检查而被忽略
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // 获取配置
@@ -216,6 +227,9 @@ var app = builder.Build();
 
 // 初始化服务提供者
 DicomServiceProvider.Initialize(app.Services);
+
+// 添加转发头中间件（必须在其他中间件之前）
+app.UseForwardedHeaders();
 
 // 添加API日志中间件
 app.UseMiddleware<ApiLoggingMiddleware>();

@@ -831,6 +831,7 @@ public class QueryRetrieveController : ControllerBase
             if (!success)
             {
                 return StatusCode(500, new { 
+                    success = false,
                     message = "连接测试失败",
                     details = new {
                         localAe = _config.LocalAeTitle,
@@ -842,6 +843,7 @@ public class QueryRetrieveController : ControllerBase
             }
 
             return Ok(new { 
+                success = true,
                 message = "连接测试成功",
                 details = new {
                     localAe = _config.LocalAeTitle,
@@ -854,7 +856,7 @@ public class QueryRetrieveController : ControllerBase
         catch (Exception ex)
         {
             DicomLogger.Error(LogPrefix, ex, "执行连接测试失败");
-            return StatusCode(500, new { message = "执行连接测试失败", error = ex.Message });
+            return StatusCode(500, new { success = false, message = "执行连接测试失败", error = ex.Message });
         }
     }
 

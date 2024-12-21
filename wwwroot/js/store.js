@@ -27,7 +27,6 @@ function initDropZone() {
         dropZone.addEventListener(eventName, unhighlight, false);
     });
 
-    // 直接绑定到外部定义的 handleDrop 函数
     dropZone.addEventListener('drop', handleDrop, false);
 
     function highlight(e) {
@@ -103,10 +102,8 @@ async function processEntry(entry, counts = { added: 0, skipped: 0 }) {
             if (file.name.toLowerCase().endsWith('.dcm')) {
                 addFileToSelection(file);
                 counts.added++;
-                console.log(`添加DICOM文件: ${file.name}, 当前计数:`, counts); // 添加日志
             } else {
                 counts.skipped++;
-                console.log(`跳过非DICOM文件: ${file.name}, 当前计数:`, counts); // 添加日志
             }
         } else if (entry.isDirectory) {
             await processDirectory(entry, counts);
@@ -121,18 +118,9 @@ async function processEntry(entry, counts = { added: 0, skipped: 0 }) {
 // 处理目录
 async function processDirectory(dirEntry, counts) {
     try {
-        console.log(`开始处理目录: ${dirEntry.fullPath}`); // 添加日志
         const entries = await readDirectoryEntries(dirEntry);
-        console.log(`目录 ${dirEntry.fullPath} 中找到 ${entries.length} 个条目`); // 添加日志
-        
-        // 并行处理所有条目
-        const promises = entries.map(entry => {
-            console.log(`处理条目: ${entry.fullPath}`); // 添加日志
-            return processEntry(entry, counts);
-        });
-        
+        const promises = entries.map(entry => processEntry(entry, counts));
         await Promise.all(promises);
-        console.log(`目录 ${dirEntry.fullPath} 处理完成，当前计数:`, counts); // 添加日志
     } catch (error) {
         console.error('处理目录失败:', error);
         throw error;
@@ -145,16 +133,13 @@ function readDirectoryEntries(dirEntry) {
         const reader = dirEntry.createReader();
         const allEntries = [];
 
-        // 递归读取所有条目
         function readAllEntries() {
             reader.readEntries(
                 (results) => {
                     if (results.length) {
                         allEntries.push(...results);
-                        // 继续读取，直到返回空数组
                         readAllEntries();
                     } else {
-                        // 所有条目都已读取完成
                         resolve(allEntries);
                     }
                 },
@@ -183,7 +168,6 @@ function initFileInputs() {
     const clearButton = document.getElementById('clearButton');
     const sendButton = document.getElementById('sendButton');
 
-    // 文件选择处理
     fileInput.addEventListener('click', function(e) {
         e.preventDefault();
         const tempInput = document.createElement('input');
@@ -196,13 +180,11 @@ function initFileInputs() {
         document.body.appendChild(tempInput);
         tempInput.click();
         
-        // 选择完成后移除临时元素
         setTimeout(() => {
             document.body.removeChild(tempInput);
         }, 100);
     });
 
-    // 文件夹选择处理
     folderInput.addEventListener('click', function(e) {
         e.preventDefault();
         const tempInput = document.createElement('input');
@@ -215,7 +197,6 @@ function initFileInputs() {
         document.body.appendChild(tempInput);
         tempInput.click();
         
-        // 选择完成后移除临时元素
         setTimeout(() => {
             document.body.removeChild(tempInput);
         }, 100);
@@ -240,13 +221,12 @@ function handleFileSelect(e) {
         }
     });
     
-    // 修改这里的 showToast 调用
     if (addedCount > 0 || skippedCount > 0) {
         let message = `已添加 ${addedCount} 个DICOM文件`;
         if (skippedCount > 0) {
             message += `，跳过 ${skippedCount} 个非DICOM文件`;
         }
-        window.showToast(message, 'success');  // 改为使用 'success' 而不是 true
+        window.showToast(message, 'success');
     }
     
     updateUI();
@@ -261,7 +241,6 @@ function addFileToSelection(file) {
             status: 'pending',
             message: ''
         });
-        window.showToast(`已添加文件: ${file.name}`, 'success');
     }
     updateUI();
 }
@@ -392,6 +371,16 @@ function clearSelection() {
     updateUI();
 }
 
+// 重试文件
+function retryFile(fileId) {
+    const fileInfo = selectedFiles.get(fileId);
+    if (fileInfo) {
+        fileInfo.status = 'pending';
+        fileInfo.message = '';
+        updateUI();
+    }
+}
+
 // 加载节点列表
 async function loadStoreNodes() {
     try {
@@ -412,6 +401,27 @@ async function loadStoreNodes() {
                 ${node.name} (${node.aeTitle}@${node.hostName})
             </option>
         `).join('');
+
+        // 在目标节点文字后添加测试按钮
+        const label = select.previousElementSibling;
+        if (label && label.classList.contains('form-label')) {
+            // 将文本节点和按钮分开
+            label.textContent = '目标节点';
+            
+            // 添加测试按钮
+            const testButton = document.createElement('button');
+            testButton.type = 'button';
+            testButton.className = 'btn btn-outline-primary btn-sm ms-2';
+            testButton.style.padding = '0 0.5rem';
+            testButton.style.fontSize = '0.875rem';
+            testButton.style.lineHeight = '1.5';
+            testButton.style.verticalAlign = 'middle';
+            testButton.innerHTML = '<i class="bi bi-broadcast"></i> 测试';
+            testButton.onclick = verifyStoreNode;
+            
+            // 添加按钮到标签中
+            label.appendChild(testButton);
+        }
 
         // 如果有保存的选择，恢复它
         if (selectedStoreNode) {
@@ -435,6 +445,38 @@ async function loadStoreNodes() {
     }
 }
 
+// 测试存储节点连通性
+async function verifyStoreNode(event) {
+    const nodeId = document.getElementById('storeNode').value;
+    if (!nodeId) {
+        window.showToast('请选择要测试的节点', 'error');
+        return;
+    }
+
+    // 获取点击的按钮
+    const testButton = event.target.closest('button');
+    const originalHtml = testButton.innerHTML;
+    testButton.disabled = true;
+    testButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 测试中...';
+
+    try {
+        const response = await axios.post(`/api/StoreScu/verify/${nodeId}`);
+        const result = response.data;
+
+        if (result.success) {
+            window.showToast('节点连接测试成功', 'success');
+        } else {
+            window.showToast('节点连接测试失败', 'error');
+        }
+    } catch (error) {
+        console.error('测试节点连接失败:', error);
+        window.showToast(error.response?.data || '节点连接测试失败', 'error');
+    } finally {
+        testButton.disabled = false;
+        testButton.innerHTML = originalHtml;
+    }
+}
+
 // 发送文件
 async function sendFiles() {
     const nodeId = document.getElementById('storeNode').value;
@@ -453,7 +495,7 @@ async function sendFiles() {
             .filter(([_, fileInfo]) => fileInfo.status === 'pending' || fileInfo.status === 'error');
 
         if (pendingFiles.length === 0) {
-            window.showToast('没有需要发送的文件', false);
+            window.showToast('没有需要发送的文件', 'error');
             return;
         }
 
@@ -503,136 +545,6 @@ async function sendFiles() {
         sendButton.disabled = false;
         clearButton.disabled = false;
         updateUI();
-    }
-}
-
-// 添加重试功能
-function retryFile(fileId) {
-    const fileInfo = selectedFiles.get(fileId);
-    if (fileInfo) {
-        fileInfo.status = 'pending';
-        fileInfo.message = '';
-        updateUI();
-    }
-}
-
-class StoreManager {
-    constructor() {
-        this.selectedNode = null;  // 添加节点选择状态
-        this.selectedFiles = new Map();
-        this.init();
-    }
-
-    async init() {
-        try {
-            const response = await fetch('/api/StoreSCU/nodes');
-            if (!response.ok) {
-                throw new Error('获取节点列表失败');
-            }
-            this.nodes = await response.json();
-            
-            // 设置默认节点：优先使用配置中为默认的节点，如果没有则使用第一个节点
-            this.defaultNode = this.nodes.find(n => n.isDefault) || this.nodes[0];
-        } catch (error) {
-            console.error('加载节点失败:', error);
-        }
-    }
-
-    async sendFiles(files) {
-        try {
-            if (!files || files.length === 0) {
-                throw new Error('请选择要发送的文件');
-            }
-
-            // 使用默认节点
-            const remoteName = this.defaultNode?.name;
-            if (!remoteName) {
-                throw new Error('未找到可用的目标节点');
-            }
-
-            const formData = new FormData();
-            for (const file of files) {
-                formData.append('files', file);
-            }
-
-            const response = await fetch(`/api/StoreSCU/send/${remoteName}`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error('发送文件失败');
-            }
-
-            const result = await response.json();
-            console.log('发送成功:', result.message);
-        } catch (error) {
-            console.error('发送文件失败:', error);
-        }
-    }
-}
-
-// 创建全局实例
-const storeManager = new StoreManager();
-
-// 更新文件状态显示
-function updateFileStatus(fileId, status, message = '') {
-    const row = document.querySelector(`tr[data-file-id="${fileId}"]`);
-    if (!row) return;
-
-    const statusCell = row.querySelector('.file-status');
-    if (!statusCell) return;
-
-    const statusBadgeClass = {
-        'pending': 'bg-secondary',
-        'sending': 'bg-primary',
-        'success': 'bg-success',
-        'error': 'bg-danger'
-    }[status] || 'bg-secondary';
-
-    const statusText = {
-        'pending': '待发送',
-        'sending': '发送中',
-        'success': '已发送',
-        'error': '发送失败'
-    }[status] || status;
-
-    statusCell.innerHTML = `
-        <span class="badge ${statusBadgeClass}">${statusText}</span>
-        ${message ? `<small class="d-block text-muted mt-1">${message}</small>` : ''}
-    `;
-
-    // 更新操作按钮
-    const actionCell = row.querySelector('.file-actions');
-    if (actionCell) {
-        if (status === 'error') {
-            actionCell.innerHTML = `
-                <button class="btn btn-sm btn-primary" onclick="retryFile('${fileId}')">
-                    <i class="bi bi-arrow-clockwise me-1"></i>重试
-                </button>
-                <button class="btn btn-sm btn-danger ms-1" onclick="removeFile('${fileId}')">
-                    <i class="bi bi-trash me-1"></i>移除
-                </button>
-            `;
-        } else if (status === 'success') {
-            actionCell.innerHTML = `
-                <button class="btn btn-sm btn-danger" onclick="removeFile('${fileId}')">
-                    <i class="bi bi-trash me-1"></i>移除
-                </button>
-            `;
-        }
-    }
-}
-
-// 加载打印机列表
-async function loadPrinters() {
-    try {
-        const response = await axios.get('/api/PrintScu/printers');
-        this.printers = response.data;
-    } catch (error) {
-        console.error('加载打印机列表失败:', error);
-        window.showToast('加载打印机列表失败', 'error');
-        throw error;
     }
 }
  

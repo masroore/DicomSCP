@@ -71,16 +71,39 @@ async function loadQRNodes() {
             return;
         }
 
+        // 生成节点选项
         select.innerHTML = nodes.map(node => `
             <option value="${node.name}">
                 ${node.name} (${node.aeTitle}@${node.hostName})
             </option>
         `).join('');
-        
-        // 恢复之前选择的节点，如果没有则使用第一个节点
+
+        // 在PACS节点文字后添加测试按钮
+        const label = select.previousElementSibling;
+        if (label && label.classList.contains('form-label')) {
+            // 将文本节点和按钮分开
+            label.textContent = 'PACS节点';
+            
+            // 添加测试按钮
+            const testButton = document.createElement('button');
+            testButton.type = 'button';
+            testButton.className = 'btn btn-outline-primary btn-sm ms-2';
+            testButton.style.padding = '0 0.5rem';
+            testButton.style.fontSize = '0.875rem';
+            testButton.style.lineHeight = '1.5';
+            testButton.style.verticalAlign = 'middle';
+            testButton.innerHTML = '<i class="bi bi-broadcast"></i> 测试';
+            testButton.onclick = verifyQRNode;
+            
+            // 添加按钮到标签中
+            label.appendChild(testButton);
+        }
+
+        // 如果有保存的选择，恢复它
         if (selectedQRNode) {
             select.value = selectedQRNode;
         } else {
+            // 否则使用第一个节点
             selectedQRNode = nodes[0]?.name;
             if (selectedQRNode) {
                 select.value = selectedQRNode;
@@ -93,8 +116,41 @@ async function loadQRNodes() {
         });
 
     } catch (error) {
-        console.error('加载PACS节点失败:', error);
-        window.showToast('加载失败', 'error');
+        console.error('加载节点列表失败:', error);
+        window.showToast('加载节点列表失败', 'error');
+    }
+}
+
+// 测试查询检索节点连通性
+async function verifyQRNode(event) {
+    const nodeId = document.getElementById('qrNode').value;
+    if (!nodeId) {
+        window.showToast('请选择要测试的节点', 'error');
+        return;
+    }
+
+    // 获取点击的按钮
+    const testButton = event.target.closest('button');
+    const originalHtml = testButton.innerHTML;
+    testButton.disabled = true;
+    testButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 测试中...';
+
+    try {
+        const response = await axios.post(`/api/QueryRetrieve/${nodeId}/verify`);
+        const result = response.data;
+
+        if (result.message) {
+            window.showToast(result.message, result.message.includes('成功') ? 'success' : 'error');
+        } else {
+            window.showToast(result.success ? '节点连接测试成功' : '节点连接测试失败', result.success ? 'success' : 'error');
+        }
+    } catch (error) {
+        console.error('测试节点连接失败:', error);
+        const errorMessage = error.response?.data?.message || error.message || '节点连接测试失败';
+        window.showToast(errorMessage, 'error');
+    } finally {
+        testButton.disabled = false;
+        testButton.innerHTML = originalHtml;
     }
 }
 
