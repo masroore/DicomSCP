@@ -65,7 +65,7 @@ public class DicomRepository : BaseRepository, IDisposable
             )";
 
         public const string InsertInstance = @"
-            INSERT INTO Instances (
+            INSERT OR IGNORE INTO Instances (
                 SopInstanceUid, SeriesInstanceUid, SopClassUid, InstanceNumber, FilePath,
                 Columns, Rows, PhotometricInterpretation, BitsAllocated, BitsStored,
                 PixelRepresentation, SamplesPerPixel, PixelSpacing, HighBit,
@@ -304,14 +304,29 @@ public class DicomRepository : BaseRepository, IDisposable
 
                 foreach (var (dataset, filePath) in batchItems)
                 {
-                    ExtractDicomData(dataset, filePath, now, patients, studies, series, instances);
+                    try
+                    {
+                        ExtractDicomData(dataset, filePath, now, patients, studies, series, instances);
+                    }
+                    catch (Exception ex)
+                    {
+                        // 记录单条数据处理错误，但继续处理其他数据
+                        LogError(ex, "处理DICOM数据失败 - 文件: {FilePath}", filePath);
+                        continue;
+                    }
                 }
 
-                // 批量插入数据
-                await connection.ExecuteAsync(SqlQueries.InsertPatient, patients, transaction);
-                await connection.ExecuteAsync(SqlQueries.InsertStudy, studies, transaction);
-                await connection.ExecuteAsync(SqlQueries.InsertSeries, series, transaction);
-                await connection.ExecuteAsync(SqlQueries.InsertInstance, instances, transaction);
+                if (patients.Count == 0 && studies.Count == 0 && series.Count == 0 && instances.Count == 0)
+                {
+                    LogWarning("批处理中没有有效数据");
+                    return;
+                }
+
+                // 批量插入数据，使用 INSERT OR IGNORE
+                var insertedPatients = await connection.ExecuteAsync(SqlQueries.InsertPatient, patients, transaction);
+                var insertedStudies = await connection.ExecuteAsync(SqlQueries.InsertStudy, studies, transaction);
+                var insertedSeries = await connection.ExecuteAsync(SqlQueries.InsertSeries, series, transaction);
+                var insertedInstances = await connection.ExecuteAsync(SqlQueries.InsertInstance, instances, transaction);
 
                 await transaction.CommitAsync();
 
@@ -319,23 +334,37 @@ public class DicomRepository : BaseRepository, IDisposable
                 _lastProcessTime = DateTime.Now;
 
                 LogInformation(
-                    "批量处理完成 - 数量: {Count}, 耗时: {Time}ms, 队剩余: {Remaining}, 平均耗时: {AvgTime:F2}ms/条", 
+                    "批量处理完成 - 总数: {Count}, 新增: P={Patients}, S={Studies}, Se={Series}, I={Instances}, 耗时: {Time}ms, 队列剩余: {Remaining}", 
                     batchItems.Count,
+                    insertedPatients,
+                    insertedStudies,
+                    insertedSeries,
+                    insertedInstances,
                     _performanceTimer.ElapsedMilliseconds,
-                    _dataQueue.Count,
-                    _performanceTimer.ElapsedMilliseconds / (double)batchItems.Count);
+                    _dataQueue.Count);
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                LogError(ex, "批量处理失败 - 批次大小: {Count}, 将重新入队", batchItems.Count);
+                LogError(ex, "数据库操作失败 - 批次大小: {Count}", batchItems.Count);
                 
-                // 错误时重新入队，保持原有顺序
-                foreach (var item in batchItems)
+                // 记录失败的数据，但不重新入队
+                foreach (var (dataset, filePath) in batchItems)
                 {
-                    _dataQueue.Enqueue(item);
+                    try
+                    {
+                        var sopInstanceUid = dataset.GetSingleValueOrDefault<string>(DicomTag.SOPInstanceUID, "Unknown");
+                        var studyInstanceUid = dataset.GetSingleValueOrDefault<string>(DicomTag.StudyInstanceUID, "Unknown");
+                        var seriesInstanceUid = dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesInstanceUID, "Unknown");
+                        
+                        LogInformation("数据入库失败 - 文件: {FilePath}, Study: {Study}, Series: {Series}, Instance: {Instance}", 
+                            filePath, studyInstanceUid, seriesInstanceUid, sopInstanceUid);
+                    }
+                    catch
+                    {
+                        LogInformation("数据入库失败且无法获取标识信息 - 文件: {FilePath}", filePath);
+                    }
                 }
-                throw;
             }
         }
         catch (Exception ex)
