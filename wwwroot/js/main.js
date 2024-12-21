@@ -162,56 +162,114 @@ function addCopyright() {
 function switchPage(page) {
     try {
         // 隐藏所有页面
-        $('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page, #print-page').hide();
+        document.querySelectorAll('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page, #print-page')
+            .forEach(p => {
+                p.style.display = 'none';
+                p.classList.remove('show');
+            });
         
         // 移除所有导航链接的active类
-        $('.nav-link').removeClass('active');
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
         
         // 显示选中的页面
-        $(`#${page}-page`).show();
+        const targetPage = document.getElementById(page + '-page');
+        if (targetPage) {
+            targetPage.style.display = 'block';
+            // 使用 setTimeout 确保 display:block 生效后再添加 show 类
+            setTimeout(() => targetPage.classList.add('show'), 50);
+        }
         
         // 添加active类到当前导航链接
-        $(`.nav-link[data-page="${page}"]`).addClass('active');
+        const activeLink = document.querySelector(`.nav-link[data-page="${page}"]`);
+        if (activeLink) {
+            activeLink.classList.add('active');
+        }
 
-        // 关闭所有模态框
-        ModalManager.closeAll();
+        // 保存当前页面到 localStorage
+        localStorage.setItem('lastActivePage', page);
 
         // 根据页面类型加载数据
-        if (page === 'worklist') {
-            loadWorklistData();
-        } else if (page === 'images') {
-            initializeImages();
-        } else if (page === 'qr') {
-            initializeQR();
-        } else if (page === 'store') {
-            if (typeof loadStoreNodes === 'function') {
-                loadStoreNodes();
-            }
-        } else if (page === 'logs') {
-            if (!window.logManager) {
-                window.logManager = new LogManager();
-                window.logManager.init().catch(error => {
-                    console.error('初始化日志管理器失败:', error);
-                    window.showToast('初始化日志管理器失败', 'error');
-                });
-            } else {
-                window.logManager.loadLogTypes().catch(error => {
-                    console.error('加载日志类型失败:', error);
-                    window.showToast('加载日志类型失败', 'error');
-                });
-            }
-        } else if (page === 'print') {
-            if (!window.printManager) {
-                window.printManager = new PrintManager();
-            } else {
-                window.printManager.loadPrintJobs();
-            }
+        switch (page) {
+            case 'worklist':
+                loadWorklistData();
+                break;
+            case 'images':
+                initializeImages();
+                break;
+            case 'qr':
+                initializeQR();
+                break;
+            case 'store':
+                if (typeof loadStoreNodes === 'function') {
+                    loadStoreNodes();
+                }
+                break;
+            case 'logs':
+                if (!window.logManager) {
+                    window.logManager = new LogManager();
+                    window.logManager.init().catch(error => {
+                        console.error('初始化日志管理器失败:', error);
+                        window.showToast('初始化日志管理器失败', 'error');
+                    });
+                } else {
+                    window.logManager.loadLogTypes().catch(error => {
+                        console.error('加载日志类型失败:', error);
+                        window.showToast('加载日志类型失败', 'error');
+                    });
+                }
+                break;
+            case 'print':
+                if (!window.printManager) {
+                    window.printManager = new PrintManager();
+                } else {
+                    window.printManager.loadPrintJobs();
+                }
+                break;
         }
     } catch (error) {
         console.error('切换页面失败:', error);
         window.showToast('页面切换失败', 'error');
     }
 }
+
+// 路由处理
+function handleRoute() {
+    const path = window.location.hash.slice(1) || defaultRoute;
+    switchPage(path);
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 获取上次访问的页面或使用默认页面
+    const lastPage = location.hash.slice(1) || localStorage.getItem('lastActivePage') || defaultRoute;
+    
+    // 隐藏加载遮罩
+    const loadingMask = document.getElementById('loading-mask');
+    if (loadingMask) {
+        // 等待一小段时间再隐藏，确保页面内容已经渲染
+        setTimeout(() => {
+            loadingMask.classList.add('hide');
+            // 切换到目标页面
+            switchPage(lastPage);
+        }, 500);
+    } else {
+        // 如果没有加载遮罩，直接切换页面
+        switchPage(lastPage);
+    }
+    
+    // 处理导航点击事件
+    document.querySelectorAll('.nav-link[data-page]').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const pageId = this.getAttribute('data-page');
+            history.pushState(null, '', `#${pageId}`);
+            switchPage(pageId);
+        });
+    });
+
+    // 处理浏览器前进后退
+    window.addEventListener('popstate', handleRoute);
+});
 
 // ================ 用户相关函数 ================
 // 登出
@@ -400,12 +458,6 @@ function showDialog({
             resolve(false);
         }
     });
-}
-
-// 路由处理
-function handleRoute() {
-    const path = window.location.hash.slice(1) || defaultRoute;
-    switchPage(path);
 }
 
 

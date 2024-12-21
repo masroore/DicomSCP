@@ -8,9 +8,15 @@
     <link href="lib/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    
 </head>
 <body>
+    <!-- 添加加载遮罩 -->
+    <div id="loading-mask">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+    </div>
+
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-0">
         <div class="container">
             <a class="navbar-brand py-2" href="#">DICOM管理系统</a>
@@ -352,7 +358,7 @@
                                 <input type="text" class="form-control" id="qrAccessionNumber" style="width: 180px;">
                             </div>
                             <div class="col-auto me-4" style="width: 180px;">
-                                <label class="form-label">检查类型</label>
+                                <label class="form-label">��查类型</label>
                                 <select class="form-select" id="qrModality" style="width: 180px;">
                                     <option value="">全部</option>
                                     <option value="CT">CT</option>
