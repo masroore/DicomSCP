@@ -181,8 +181,8 @@ public class ViewerController : ControllerBase
                         SamplesPerPixel = i.SamplesPerPixel,
                         PixelSpacing = ParsePixelSpacing(i.PixelSpacing),
                         HighBit = i.HighBit,
-                        ImageOrientationPatient = ParseVectorValues(i.ImageOrientationPatient),
-                        ImagePositionPatient = ParseVectorValues(i.ImagePositionPatient),
+                        ImageOrientationPatient = ParseImageOrientationPatient(i.ImageOrientationPatient),
+                        ImagePositionPatient = ParseImagePositionPatient(i.ImagePositionPatient),
                         FrameOfReferenceUID = i.FrameOfReferenceUID,
                         ImageType = ParseMultiValue(i.ImageType),
                         Modality = series.Modality,
@@ -240,6 +240,24 @@ public class ViewerController : ControllerBase
                $"&seriesUID={seriesUid}" +
                $"&objectUID={instanceUid}" +
                $"&contentType=application/dicom";
+    }
+
+    private decimal[] ParseImageOrientationPatient(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return new decimal[] { 1, 0, 0, 0, 1, 0 };
+        }
+        return value.Split('\\').Select(v => decimal.TryParse(v, out var result) ? result : 0).ToArray();
+    }
+
+    private decimal[] ParseImagePositionPatient(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return new decimal[] { 0, 0, 0 };
+        }
+        return value.Split('\\').Select(v => decimal.TryParse(v, out var result) ? result : 0).ToArray();
     }
 }
 
