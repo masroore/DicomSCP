@@ -79,6 +79,9 @@ function displayImages(items) {
             <td>${item.studyDescription || ''}</td>
             <td>${item.numberOfInstances || 0}</td>
             <td>
+                <button class="btn btn-sm btn-primary me-1" onclick="openOHIF('${item.studyInstanceUid}', event)" title="OHIF预览">
+                    <i class="bi bi-eye me-1"></i>OHIF
+                </button>
                 <button class="btn btn-sm btn-primary me-1" onclick="openWeasis('${item.studyInstanceUid}', event)" title="Weasis预览">
                     <i class="bi bi-eye me-1"></i>Weasis
                 </button>
@@ -378,5 +381,121 @@ function openWeasis(studyUid, event) {
     } catch (error) {
         console.error('打开Weasis失败:', error);
         window.showToast('打开Weasis失败', 'error');
+    }
+}
+
+// 添加打开 OHIF 的函数
+function openOHIF(studyUid, event) {
+    try {
+        if (event) {
+            event.stopPropagation();
+        }
+
+        // 移除已存在的对话框
+        const existingDialog = document.getElementById('ohifViewerDialog');
+        if (existingDialog) {
+            existingDialog.remove();
+        }
+
+        const baseUrl = `${window.location.protocol}//${window.location.host}`;
+        const ohifUrl = `${baseUrl}/dicomviewer/viewer/dicomjson?url=${encodeURIComponent(`${baseUrl}/viewer/ohif/${studyUid}`)}`;
+        
+        console.log('Opening OHIF URL:', ohifUrl);
+
+        // 创建对话框 HTML
+        const dialogHtml = `
+            <div class="modal fade" id="ohifViewerDialog" tabindex="-1" aria-labelledby="ohifViewerDialogLabel" aria-hidden="true">
+                <div class="modal-dialog modal-fullscreen p-0 m-0">
+                    <div class="modal-content border-0 rounded-0 vh-100" style="background: #000;">
+                        <div class="modal-header border-0 p-0 d-flex align-items-center justify-content-between" style="background: #090c3b; height: 40px; min-height: 40px;">
+                            <h5 class="modal-title text-white m-0 ps-3" id="ohifViewerDialogLabel" style="font-size: 14px; font-weight: normal;">OHIF 查看器</h5>
+                            <button type="button" class="btn-close-custom me-3" data-bs-dismiss="modal" aria-label="Close">
+                                <svg width="14" height="14" fill="currentColor" style="color: #91b9cd;" viewBox="0 0 16 16">
+                                    <path d="M2.146 2.146a.5.5 0 0 1 .708 0L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854a.5.5 0 0 1 0-.708z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="modal-body p-0 h-100" style="height: calc(100vh - 40px) !important;">
+                            <iframe 
+                                src="${ohifUrl}"
+                                style="width: 100%; height: 100%; border: none; display: block; background: #000;"
+                                onload="this.style.opacity='1'"
+                            ></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 添加自定义样式
+        const styleId = 'ohif-viewer-styles';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                #ohifViewerDialog {
+                    padding: 0 !important;
+                }
+                #ohifViewerDialog .modal-dialog {
+                    margin: 0 !important;
+                    max-width: 100% !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                }
+                #ohifViewerDialog .modal-content {
+                    min-height: 100vh !important;
+                }
+                #ohifViewerDialog .modal-header {
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                }
+                #ohifViewerDialog .modal-body {
+                    overflow: hidden !important;
+                }
+                #ohifViewerDialog .btn-close-custom {
+                    background: none;
+                    border: none;
+                    padding: 8px;
+                    cursor: pointer;
+                    opacity: 0.8;
+                    transition: all 0.2s ease;
+                    line-height: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                #ohifViewerDialog .btn-close-custom:hover {
+                    opacity: 1;
+                    transform: scale(1.1);
+                }
+                #ohifViewerDialog .btn-close-custom svg {
+                    display: block;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // 添加对话框到 body
+        document.body.insertAdjacentHTML('beforeend', dialogHtml);
+
+        // 获取对话框元素
+        const dialogEl = document.getElementById('ohifViewerDialog');
+        
+        // 创建 Bootstrap 模态框实例
+        const modal = new bootstrap.Modal(dialogEl, {
+            backdrop: 'static',
+            keyboard: false
+        });
+
+        // 显示对话框
+        modal.show();
+
+        // 监听对话框关闭事件
+        dialogEl.addEventListener('hidden.bs.modal', function () {
+            dialogEl.remove();
+        });
+
+    } catch (error) {
+        console.error('打开OHIF失败:', error);
+        window.showToast('打开OHIF失败', 'error');
     }
 } 

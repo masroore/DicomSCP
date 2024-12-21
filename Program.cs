@@ -10,6 +10,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
+using Microsoft.AspNetCore.Rewrite;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -219,6 +220,15 @@ builder.Services.AddCors(options =>
         });
 });
 
+// 配置 URL 重写规则
+var rewriteOptions = new RewriteOptions()
+    //将dicomviewer路径下非直接文件的访问重写到dicomviewer/index.html上，解决spa单应用路由问题
+    .AddRewrite(
+        @"^dicomviewer/(?!.*\.(js|css|png|jpe?g|gif|ico|svg|woff2?|ttf|otf|eot|map|json|mp[34]|webm|mkv|avi|mov|pdf|docx?|xlsx?|pptx?|zip|rar|tar|gz|7z|ts|sh|bat|py|xml|ya?ml|ini|wasm|aac)).*$", 
+        "/dicomviewer/index.html", 
+        skipRemainingRules: true
+    );
+
 var app = builder.Build();
 
 // 初始化服务提供者
@@ -253,27 +263,30 @@ app.UseForwardedHeaders();
 // 2. API 日志中间件
 app.UseMiddleware<ApiLoggingMiddleware>();
 
-// 3. 静态文件处理
+// 3. URL 重写（在静态文件之前）
+app.UseRewriter(rewriteOptions);
+
+// 4. 静态文件处理
 app.UseDefaultFiles(new DefaultFilesOptions
 {
     DefaultFileNames = new List<string> { "index.html", "login.html" }
 });
 app.UseStaticFiles();
 
-// 4. Swagger
+// 5. Swagger
 if (swaggerSettings.Enabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// 5. 路由和认证
+// 6. 路由和认证
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseCors("AllowAll");  // CORS 应该在这里
 
-// 6. API 认证中间件
+// 7. API 认证中间件
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value?.ToLower();
@@ -290,10 +303,10 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// 7. 控制器
+// 8. 控制器
 app.MapControllers();
 
-// 8. 根路径处理
+// 9. 根路径处理
 app.MapGet("/", context =>
 {
     if (!context.User.Identity?.IsAuthenticated == true)
