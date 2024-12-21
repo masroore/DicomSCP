@@ -244,7 +244,7 @@ ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 增加�
 ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加最大线程数
 
 // 配置中间件
-if (app.Environment.IsDevelopment() && swaggerSettings.Enabled)
+if (swaggerSettings.Enabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
