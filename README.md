@@ -33,10 +33,10 @@
 ## 功能预览
 
 ![登录](about/登录.png)
-![影像管理](about/dicom.png)  
+![影像管理](about/Dicom.png)
 ![检查预览](about/weasis.png)
-![3d预览](about/3d.png)      
-![序列预览](about/影像查看.png)  
+![3d预览](about/3D.png)
+![序列预览](about/影像查看.png)
 ![工作列表](about/worklistscp.png)  
 ![查询检索](about/qrscu.png) 
 ![发送图像](about/发送图像.png)  
