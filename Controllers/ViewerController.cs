@@ -12,12 +12,10 @@ namespace DicomSCP.Controllers;
 public class ViewerController : ControllerBase
 {
     private readonly DicomRepository _repository;
-    private readonly IConfiguration _configuration;
 
-    public ViewerController(DicomRepository repository, IConfiguration configuration)
+    public ViewerController(DicomRepository repository)
     {
         _repository = repository;
-        _configuration = configuration;
     }
 
     [HttpGet("ohif/{studyInstanceUid}")]
@@ -88,8 +86,7 @@ public class ViewerController : ControllerBase
             var seriesList = await _repository.GetSeriesAsync(studyInstanceUid);
 
             // 构建XML
-            var baseUrl = _configuration["DicomSettings:BaseUrl"] ?? 
-                $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
             // 定义命名空间
             XNamespace ns = "http://www.weasis.org/xsd/2.5";
@@ -235,8 +232,8 @@ public class ViewerController : ControllerBase
 
     private string GenerateWadoUrl(string studyUid, string seriesUid, string instanceUid)
     {
-        var baseUrl = _configuration["DicomSettings:BaseUrl"] ?? 
-            $"{Request.Scheme}://{Request.Host}";
+        // 直接使用请求中的 Host（包含域名和端口）
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
             
         return $"dicomweb:{baseUrl}/wado?requestType=WADO" +
                $"&studyUID={studyUid}" +
