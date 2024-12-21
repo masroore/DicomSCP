@@ -10,7 +10,6 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
-using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,7 +24,7 @@ if (Environment.UserInteractive)
             var handle = ConsoleHelper.GetStdHandle(-10);
             if (handle != IntPtr.Zero && ConsoleHelper.GetConsoleMode(handle, out uint mode))
             {
-                mode &= ~((uint)(0x0040 | 0x0010));
+                mode &= ~(uint)(0x0040 | 0x0010);
                 ConsoleHelper.SetConsoleMode(handle, mode);
             }
         }
@@ -40,9 +39,6 @@ if (Environment.UserInteractive)
         // 忽略控制台配置错误
     }
 }
-
-// 添加线程池配置
-ThreadPool.SetMinThreads(100, 100); // 设置最小工作线程和 I/O 线程数
 
 // 注册编码提供程序
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -60,17 +56,7 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 52428800; // 50MB
 });
 
-// 配置转发头
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
-                              Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
-    // 清除默认网络，否则会因为安全检查而被忽略
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
-
-// 获取配置
+// 取配置
 var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
     ?? new DicomSettings();
 // 获取 Swagger 配置
@@ -211,6 +197,16 @@ builder.Services.AddAuthentication("CustomAuth")
 // 添加授权但不设置默认策略
 builder.Services.AddAuthorization();
 
+// 配置转发头
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
+                              Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    // 清除默认网络，否则会因为安全检查而被忽略
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // 在 ConfigureServices 部分添加
 builder.Services.AddCors(options =>
 {
@@ -227,12 +223,6 @@ var app = builder.Build();
 
 // 初始化服务提供者
 DicomServiceProvider.Initialize(app.Services);
-
-// 添加转发头中间件（必须在其他中间件之前）
-app.UseForwardedHeaders();
-
-// 添加API日志中间件
-app.UseMiddleware<ApiLoggingMiddleware>();
 
 // 获取服务
 var dicomRepository = app.Services.GetRequiredService<DicomRepository>();
@@ -254,79 +244,68 @@ app.Lifetime.ApplicationStopping.Register(() => dicomServer.StopAsync().GetAwait
 
 // 优化线程池 - 基于CPU核心数
 int processorCount = Environment.ProcessorCount;
-ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 增加最小线程数
-ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 增加最大线程数
+ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 最小线程数
+ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 最大线程数
 
-// 配置中间件
-if (swaggerSettings.Enabled)
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{swaggerSettings.Title} {swaggerSettings.Version}");
-        c.RoutePrefix = "swagger";
-    });
-}
+// 1. 转发头中间件（最先）
+app.UseForwardedHeaders();
 
-// 正确的中间件顺序
-app.UseRouting();
-app.UseAuthentication();
-app.UseAuthorization();
+// 2. API 日志中间件
+app.UseMiddleware<ApiLoggingMiddleware>();
 
-// 认证中间件
-app.Use(async (context, next) =>
-{
-    var path = context.Request.Path.Value?.ToLower();
-    
-    // 公共路径
-    if (path?.StartsWith("/login.html") == true || 
-        path?.StartsWith("/viewer/") == true ||  // 添加viewer路径
-        path?.StartsWith("/api/auth/login") == true ||
-        path?.StartsWith("/lib/") == true ||
-        path?.StartsWith("/css/") == true ||
-        path?.StartsWith("/js/login.js") == true ||
-        path?.StartsWith("/images/") == true ||
-        path?.StartsWith("/wado") == true ||
-        path?.StartsWith("/favicon.ico") == true)  // 移除 status 接口
-    {
-        await next();
-        return;
-    }
-
-    // 需要认证的路径
-    if (!context.User.Identity?.IsAuthenticated == true)
-    {
-        if (path?.StartsWith("/api/") == true)
-        {
-            context.Response.StatusCode = 401;
-            return;
-        }
-        context.Response.Redirect("/login.html");
-        return;
-    }
-
-    await next();
-});
-
-// 静态文件中间件
+// 3. 静态文件处理
 app.UseDefaultFiles(new DefaultFilesOptions
 {
     DefaultFileNames = new List<string> { "index.html", "login.html" }
 });
 app.UseStaticFiles();
 
-// 确保控制路由在认证后
-app.MapControllers();
-
-// 处理根路径
-app.MapGet("/", context =>
+// 4. Swagger
+if (swaggerSettings.Enabled)
 {
-    context.Response.Redirect("/index.html");
-    return Task.CompletedTask;
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// 5. 路由和认证
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseCors("AllowAll");  // CORS 应该在这里
+
+// 6. API 认证中间件
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.ToLower();
+    
+    // 只检查 API 路径的认证
+    if (path?.StartsWith("/api/") == true && 
+        !path.StartsWith("/api/auth/login") && 
+        !context.User.Identity?.IsAuthenticated == true)
+    {
+        context.Response.StatusCode = 401;
+        return;
+    }
+    
+    await next();
 });
 
-// 在中间件配置部分添加（在 UseRouting 之后，UseAuthorization 之前）
-app.UseCors("AllowAll");
+// 7. 控制器
+app.MapControllers();
+
+// 8. 根路径处理
+app.MapGet("/", context =>
+{
+    if (!context.User.Identity?.IsAuthenticated == true)
+    {
+        context.Response.Redirect("/login.html");
+    }
+    else
+    {
+        context.Response.Redirect("/index.html");
+    }
+    return Task.CompletedTask;
+});
 
 app.Run(); 
 
