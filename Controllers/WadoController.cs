@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Formats.Jpeg;
+using System.Runtime;
 
 namespace DicomSCP.Controllers
 {
@@ -94,17 +95,17 @@ namespace DicomSCP.Controllers
 
                     // 返回JPEG
                     var dicomImage = new DicomImage(dicomFile.Dataset);
-                    
-                    // 渲染图像 - 直接使用默认参数
                     var renderedImage = dicomImage.RenderImage();
                     
                     // 转换为JPEG
-                    using var memoryStream = new MemoryStream();
-                    using (var image = Image.LoadPixelData<Rgba32>(
-                        renderedImage.AsBytes(), 
-                        renderedImage.Width, 
-                        renderedImage.Height))
+                    byte[] jpegBytes;
+                    using (var memoryStream = new MemoryStream())
                     {
+                        using var image = Image.LoadPixelData<Rgba32>(
+                            renderedImage.AsBytes(), 
+                            renderedImage.Width, 
+                            renderedImage.Height);
+                            
                         // 配置JPEG编码器选项
                         var encoder = new JpegEncoder
                         {
@@ -113,9 +114,9 @@ namespace DicomSCP.Controllers
 
                         // 保存为JPEG
                         await image.SaveAsJpegAsync(memoryStream, encoder);
+                        jpegBytes = memoryStream.ToArray();
                     }
 
-                    var jpegBytes = memoryStream.ToArray();
                     DicomLogger.Information("WADO", "成功返回JPEG图像 - Size: {Size} bytes", jpegBytes.Length);
 
                     // 设置文件名为 SOP Instance UID
@@ -125,6 +126,13 @@ namespace DicomSCP.Controllers
                         Inline = false  // 使用 attachment 方式下载
                     };
                     Response.Headers["Content-Disposition"] = contentDisposition.ToString();
+
+                    // 主动触发GC
+                    if (jpegBytes.Length > 10 * 1024 * 1024) // 如果图像大于10MB
+                    {
+                        GC.Collect();
+                        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    }
 
                     return File(jpegBytes, JpegImageContentType);
                 }
@@ -138,8 +146,7 @@ namespace DicomSCP.Controllers
                     }
 
                     // 返回DICOM（包括传输语法转换）
-                    var dicomBytes = await GetDicomBytes(dicomFile, transferSyntax);
-                    DicomLogger.Information("WADO", "成功返回DICOM文件 - Size: {Size} bytes", dicomBytes.Length);
+                    var result = await GetDicomBytes(dicomFile, transferSyntax, filePath);
                     
                     // 设置文件名为 SOP Instance UID
                     var contentDisposition = new System.Net.Mime.ContentDisposition
@@ -149,7 +156,7 @@ namespace DicomSCP.Controllers
                     };
                     Response.Headers["Content-Disposition"] = contentDisposition.ToString();
                     
-                    return File(dicomBytes, AppDicomContentType);
+                    return result;
                 }
             }
             catch (Exception ex)
@@ -173,46 +180,57 @@ namespace DicomSCP.Controllers
             return contentType;
         }
 
-        private async Task<byte[]> GetDicomBytes(DicomFile dicomFile, string? transferSyntax)
+        private async Task<IActionResult> GetDicomBytes(DicomFile dicomFile, string? transferSyntax, string filePath)
         {
-            // 如果需要转换传输语法
-            if (!string.IsNullOrEmpty(transferSyntax))
+            try
             {
-                try 
+                // 如果需要转换传输语法
+                if (!string.IsNullOrEmpty(transferSyntax))
                 {
-                    var currentSyntax = dicomFile.Dataset.InternalTransferSyntax;
-                    var requestedSyntax = GetRequestedTransferSyntax(transferSyntax);
-
-                    DicomLogger.Information("WADO", "传输语法 - 当前: {CurrentSyntax}, 请求: {RequestedSyntax}", 
-                        currentSyntax.UID.Name,
-                        requestedSyntax.UID.Name);
-
-                    if (currentSyntax != requestedSyntax)
+                    try 
                     {
-                        try
+                        var currentSyntax = dicomFile.Dataset.InternalTransferSyntax;
+                        var requestedSyntax = GetRequestedTransferSyntax(transferSyntax);
+
+                        DicomLogger.Information("WADO", "传输语法 - 当前: {CurrentSyntax}, 请求: {RequestedSyntax}", 
+                            currentSyntax.UID.Name,
+                            requestedSyntax.UID.Name);
+
+                        if (currentSyntax != requestedSyntax)
                         {
-                            var transcoder = new DicomTranscoder(currentSyntax, requestedSyntax);
-                            dicomFile = transcoder.Transcode(dicomFile);
-                            DicomLogger.Information("WADO", "已转换传输语法为: {NewSyntax}", requestedSyntax.UID.Name);
-                        }
-                        catch (Exception ex)
-                        {
-                            DicomLogger.Error("WADO", ex, "传输语法转换失败: {TransferSyntax}", transferSyntax);
-                            // 如果转换失败，返回错误而不是使用原始语法
-                            throw new InvalidOperationException($"无法转换到请求的传输语法: {transferSyntax}", ex);
+                            try
+                            {
+                                var transcoder = new DicomTranscoder(currentSyntax, requestedSyntax);
+                                dicomFile = transcoder.Transcode(dicomFile);
+                                DicomLogger.Information("WADO", "已转换传输语法为: {NewSyntax}", requestedSyntax.UID.Name);
+                                
+                                // 转码后需要重新生成字节流
+                                using var ms = new MemoryStream();
+                                await dicomFile.SaveAsync(ms);
+                                return File(ms.ToArray(), AppDicomContentType);
+                            }
+                            catch (Exception ex)
+                            {
+                                DicomLogger.Error("WADO", ex, "传输语法转换失败: {TransferSyntax}", transferSyntax);
+                                throw new InvalidOperationException($"无法转换到请求的传输语法: {transferSyntax}", ex);
+                            }
                         }
                     }
+                    catch (Exception ex) when (ex is not InvalidOperationException)
+                    {
+                        DicomLogger.Warning("WADO", ex, "无效的传输语法请求: {TransferSyntax}", transferSyntax);
+                    }
                 }
-                catch (Exception ex) when (ex is not InvalidOperationException)
-                {
-                    DicomLogger.Warning("WADO", ex, "无效的传输语法请求: {TransferSyntax}", transferSyntax);
-                    // 如果是解析错误，继续使用原始语法
-                }
-            }
 
-            using var ms = new MemoryStream();
-            await dicomFile.SaveAsync(ms);
-            return ms.ToArray();
+                // 如果不需要转换传输语法，直接返回文件流
+                var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                DicomLogger.Information("WADO", "使用文件流返回DICOM文件: {FilePath}", filePath);
+                return File(fileStream, AppDicomContentType);
+            }
+            catch
+            {
+                throw;
+            }
         }
 
         private DicomTransferSyntax GetRequestedTransferSyntax(string syntax)
@@ -271,7 +289,7 @@ namespace DicomSCP.Controllers
             newDataset.Remove(DicomTag.PatientAddress);
             newDataset.Remove(DicomTag.PatientTelephoneNumbers);
             newDataset.Remove(DicomTag.PatientMotherBirthName);
-            newDataset.Remove(DicomTag.OtherPatientIDsSequence);  // 修正标签名
+            newDataset.Remove(DicomTag.OtherPatientIDsSequence);
             newDataset.Remove(DicomTag.OtherPatientNames);
             newDataset.Remove(DicomTag.PatientComments);
             newDataset.Remove(DicomTag.InstitutionName);
