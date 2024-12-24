@@ -107,13 +107,13 @@
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li>
-                                    <a class="dropdown-item" href="#" onclick="changePassword()">
+                                    <a class="dropdown-item" href="#" onclick="window.authManager.changePassword()">
                                         <i class="bi bi-key me-2"></i>修改密码
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <a class="dropdown-item" href="#" onclick="logout()">
+                                    <a class="dropdown-item" href="#" onclick="window.authManager.logout()">
                                         <i class="bi bi-box-arrow-right me-2"></i>退出系统
                                     </a>
                                 </li>
@@ -744,7 +744,7 @@
         </div>
     </div>
 
-    <!-- 添加修改密码的模态框 -->
+    <!-- 修改密码模态框 -->
     <div class="modal fade" id="changePasswordModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -753,32 +753,27 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="changePasswordForm" onsubmit="return false;">
-                        <input type="text" 
-                            name="username" 
-                            style="display: none;" 
-                            autocomplete="username" 
-                            aria-hidden="true">
+                    <form id="changePasswordForm" class="needs-validation" novalidate>
                         <div class="mb-3">
-                            <label class="form-label">旧密码</label>
-                            <input type="password" class="form-control" id="oldPassword" 
-                                autocomplete="current-password" required>
+                            <label for="oldPassword" class="form-label">当前密码</label>
+                            <input type="password" class="form-control" id="oldPassword" required>
+                            <div class="invalid-feedback">请输入当前密码</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">新密码</label>
-                            <input type="password" class="form-control" id="newPassword" 
-                                autocomplete="new-password" required>
+                            <label for="newPassword" class="form-label">新密码</label>
+                            <input type="password" class="form-control" id="newPassword" required>
+                            <div class="invalid-feedback">请输入新密码</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">确认新密码</label>
-                            <input type="password" class="form-control" id="confirmPassword" 
-                                autocomplete="new-password" required>
+                            <label for="confirmPassword" class="form-label">确认新密码</label>
+                            <input type="password" class="form-control" id="confirmPassword" required>
+                            <div class="invalid-feedback">请再次输入新密码</div>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="savePasswordChange()">确认修改</button>
+                    <button type="submit" form="changePasswordForm" class="btn btn-primary">确认修改</button>
                 </div>
             </div>
         </div>

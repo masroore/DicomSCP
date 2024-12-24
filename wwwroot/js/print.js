@@ -8,7 +8,7 @@ class PrintManager {
         this.printers = [];
         this.isLoading = false;
 
-       // 初始化事件和加载数据
+        // 初始化事件和加载数据
         this.init();
     }
 
@@ -712,10 +712,4 @@ class PrintManager {
             ` : '').join('')}
         `).join('');
     }
-}
-
-// 初始化打印管理器
-let printManager;
-document.addEventListener('DOMContentLoaded', () => {
-    printManager = new PrintManager();
-}); 
+} 

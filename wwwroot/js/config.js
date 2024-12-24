@@ -2,13 +2,7 @@ class ConfigManager {
     constructor() {
         this.editor = null;
         this.isLoading = false;
-        
-        // 等待 DOM 加载完成后再初始化
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.init());
-        } else {
-            this.init();
-        }
+        this.init();
     }
 
     init() {
@@ -27,29 +21,8 @@ class ConfigManager {
             this.editor.spellcheck = false;
         }
         
-        // 监听页面切换事件
-        document.querySelectorAll('.nav-link[data-page]').forEach(link => {
-            link.addEventListener('click', (e) => {
-                if (e.target.getAttribute('data-page') === 'settings') {
-                    this.loadConfig();
-                }
-            });
-        });
-
-        // 检查当前页面状态
-        const settingsPage = document.getElementById('settings-page');
-        if (settingsPage && (window.location.hash === '#settings' || 
-            settingsPage.style.display !== 'none')) {
-            // 延迟加载配置，确保页面已完全切换
-            setTimeout(() => this.loadConfig(), 100);
-        }
-
-        // 添加 hashchange 事件监听
-        window.addEventListener('hashchange', () => {
-            if (window.location.hash === '#settings') {
-                this.loadConfig();
-            }
-        });
+        // 加载配置
+        this.loadConfig();
     }
 
     async loadConfig() {
@@ -144,6 +117,5 @@ class ConfigManager {
     }
 }
 
-// 创建全局实例
-window.configManager = new ConfigManager();
+// 移除全局实例创建，由 main.js 统一管理初始化
 

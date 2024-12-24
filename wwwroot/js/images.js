@@ -2,20 +2,6 @@
 let imagesCurrentPage = 1;
 const imagesPageSize = 10;
 
-// 初始化影像管理模块
-function initializeImages() {
-    try {
-        // 绑定影像管理相关事件
-        bindImagesEvents();
-        
-        // 加载初始数据
-        loadImages();
-    } catch (error) {
-        console.error('初始化影像管理模块失败:', error);
-        window.showToast('初始化影像管理模块失败', 'error');
-    }
-}
-
 // 加载影像数据
 async function loadImages(page = 1) {
     const tbody = document.getElementById('images-table-body');
@@ -131,69 +117,51 @@ function updateImagesPagination(result) {
 // 绑定影像管理相关事件
 function bindImagesEvents() {
     try {
-        // 分页事件
-        const prevPageEl = document.getElementById('images-prevPage');
-        const nextPageEl = document.getElementById('images-nextPage');
+        // 分页按钮事件绑定
+        const prevPageBtn = document.getElementById('images-prevPage');
+        const nextPageBtn = document.getElementById('images-nextPage');
 
-        if (prevPageEl) {
-            prevPageEl.onclick = () => {
+        if (prevPageBtn) {
+            prevPageBtn.replaceWith(prevPageBtn.cloneNode(true));
+            const newPrevBtn = document.getElementById('images-prevPage');
+            newPrevBtn.addEventListener('click', () => {
                 if (imagesCurrentPage > 1) {
                     imagesCurrentPage--;
                     loadImages(imagesCurrentPage);
                 }
-            };
+            });
         }
 
-        if (nextPageEl) {
-            nextPageEl.onclick = () => {
-                imagesCurrentPage++;
-                loadImages(imagesCurrentPage);
-            };
+        if (nextPageBtn) {
+            nextPageBtn.replaceWith(nextPageBtn.cloneNode(true));
+            const newNextBtn = document.getElementById('images-nextPage');
+            newNextBtn.addEventListener('click', () => {
+                const totalPages = parseInt(newNextBtn.getAttribute('data-total-pages') || '1');
+                if (imagesCurrentPage < totalPages) {
+                    imagesCurrentPage++;
+                    loadImages(imagesCurrentPage);
+                }
+            });
         }
 
         // 搜索表单事件
         const searchForm = document.getElementById('imagesSearchForm');
         if (searchForm) {
-            // 搜索提交事件
-            searchForm.onsubmit = (e) => {
+            searchForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 imagesCurrentPage = 1;
-                loadImages(1);
-            };
+                loadImages();
+            });
 
             // 重置按钮事件
             const resetButton = searchForm.querySelector('button[type="reset"]');
             if (resetButton) {
-                resetButton.onclick = (e) => {
+                resetButton.addEventListener('click', (e) => {
                     e.preventDefault();
-                    try {
-                        // 先重置表单
-                        searchForm.reset();
-                        
-                        // 再手动清空所有搜索条件（以确保select等特殊控件也被重置）
-                        const inputs = {
-                            'images-searchPatientId': '',
-                            'images-searchPatientName': '',
-                            'images-searchAccessionNumber': '',
-                            'images-searchStudyDate': '',
-                            'images-searchModality': ''
-                        };
-                        
-                        Object.entries(inputs).forEach(([id, value]) => {
-                            const element = document.getElementById(id);
-                            if (element) {
-                                element.value = value;
-                            }
-                        });
-                        
-                        // 重置页码并重新加载数据
-                        imagesCurrentPage = 1;
-                        loadImages(1);
-                    } catch (error) {
-                        console.error('重置表单失败:', error);
-                        window.showToast('重置失败', 'error');
-                    }
-                };
+                    searchForm.reset();
+                    imagesCurrentPage = 1;
+                    loadImages();
+                });
             }
         }
     } catch (error) {

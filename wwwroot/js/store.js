@@ -3,12 +3,7 @@ let selectedFiles = new Map();
 // 存储选中的节点
 let selectedStoreNode = null;
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
-    initDropZone();
-    initFileInputs();
-    loadStoreNodes();
-});
+// 移除 DOMContentLoaded 事件监听，由 main.js 统一管理初始化
 
 // 初始化拖放区域
 function initDropZone() {

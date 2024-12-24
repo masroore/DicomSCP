@@ -97,26 +97,59 @@ function initAxiosInterceptors() {
     );
 }
 
-// 页面加载完成后执行
-$(document).ready(function() {
-    // 根据URL hash切换到对应页面
-    const currentTab = window.location.hash.slice(1) || defaultRoute;
-    switchPage(currentTab);
-    
-    // 导航链接点击事件
-    $('.nav-link[data-page]').click(function(e) {
-        e.preventDefault();
-        const page = $(this).data('page');
-        window.location.hash = page;
-        switchPage(page);
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化全局功能
+    initGlobalFeatures();
+    // 初始化路由
+    initRouting();
+});
+
+// 初始化全局功能
+function initGlobalFeatures() {
+    // 初始化服务管理器
+    if (!window.serviceManager) {
+        window.serviceManager = new ServiceManager();
+    }
+    // 初始化认证管理器
+    if (!window.authManager) {
+        window.authManager = new AuthManager();
+    }
+    // 初始化模态框管理器
+    ModalManager.init();
+    // 获取当前登录用户名
+    window.authManager.getCurrentUsername();
+    // 添加版权信息
+    addCopyright();
+    // 隐藏加载遮罩
+    const loadingMask = document.getElementById('loading-mask');
+    if (loadingMask) {
+        setTimeout(() => {
+            loadingMask.classList.add('hide');
+        }, 500);
+    }
+}
+
+// 初始化路由
+function initRouting() {
+    // 绑定导航事件
+    document.querySelectorAll('.nav-link[data-page]').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const pageId = this.getAttribute('data-page');
+            if (pageId !== location.hash.slice(1)) {
+                history.pushState(null, '', `#${pageId}`);
+                handleRoute();
+            }
+        });
     });
 
-    // 获取当前登录用户名
-    getCurrentUsername();
-    
-    // 添加版权信息到底部
-    addCopyright();
-});
+    // 处理浏览器前进后退
+    window.addEventListener('popstate', handleRoute);
+
+    // 初始化第一个页面
+    handleRoute();
+}
 
 // 添加版权信息
 function addCopyright() {
@@ -158,21 +191,103 @@ function addCopyright() {
 }
 
 // ================ 页面切换 ================
+// 定义页面配置
+const PAGE_CONFIG = {
+    worklist: { 
+        id: 'worklist-page', 
+        init: () => {
+            if (!window.moduleInitialized?.worklist) {
+                bindWorklistEvents();
+                window.moduleInitialized = window.moduleInitialized || {};
+                window.moduleInitialized.worklist = true;
+            }
+            loadWorklistData();
+        }
+    },
+    images: { 
+        id: 'images-page', 
+        init: () => {
+            if (!window.moduleInitialized?.images) {
+                bindImagesEvents();
+                window.moduleInitialized = window.moduleInitialized || {};
+                window.moduleInitialized.images = true;
+            }
+            loadImages();
+        }
+    },
+    qr: { 
+        id: 'qr-page', 
+        init: () => {
+            if (!window.moduleInitialized?.qr) {
+                bindQRPaginationEvents();
+                initQRSeriesModal();
+                window.moduleInitialized = window.moduleInitialized || {};
+                window.moduleInitialized.qr = true;
+            }
+            loadQRNodes();
+        }
+    },
+    store: { 
+        id: 'store-page', 
+        init: () => {
+            if (!window.moduleInitialized?.store) {
+                initDropZone();
+                initFileInputs();
+                window.moduleInitialized = window.moduleInitialized || {};
+                window.moduleInitialized.store = true;
+            }
+            loadStoreNodes();
+        }
+    },
+    logs: { 
+        id: 'logs-page', 
+        init: () => window.logManager?.init()
+    },
+    print: { 
+        id: 'print-page', 
+        init: () => {
+            if (!window.printManager) {
+                window.printManager = new PrintManager();
+            } else {
+                window.printManager.loadPrintJobs();
+            }
+        }
+    },
+    settings: { 
+        id: 'settings-page', 
+        init: () => {
+            if (!window.configManager) {
+                window.configManager = new ConfigManager();
+            } else {
+                window.configManager.loadConfig();
+            }
+        }
+    }
+};
+
 // 切换页面函数
 function switchPage(page) {
     try {
+        // 检查页面是否存在
+        if (!PAGE_CONFIG[page]) {
+            console.warn(`未知的页面: ${page}`);
+            page = defaultRoute;
+        }
+
         // 隐藏所有页面
-        document.querySelectorAll('#worklist-page, #images-page, #settings-page, #qr-page, #store-page, #logs-page, #print-page')
-            .forEach(p => {
-                p.style.display = 'none';
-                p.classList.remove('show');
-            });
+        Object.values(PAGE_CONFIG).forEach(config => {
+            const pageEl = document.getElementById(config.id);
+            if (pageEl) {
+                pageEl.style.display = 'none';
+                pageEl.classList.remove('show');
+            }
+        });
         
         // 移除所有导航链接的active类
         document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
         
         // 显示选中的页面
-        const targetPage = document.getElementById(page + '-page');
+        const targetPage = document.getElementById(PAGE_CONFIG[page].id);
         if (targetPage) {
             targetPage.style.display = 'block';
             // 使用 setTimeout 确保 display:block 生效后再添加 show 类
@@ -188,44 +303,14 @@ function switchPage(page) {
         // 保存当前页面到 localStorage
         localStorage.setItem('lastActivePage', page);
 
-        // 根据页面类型加载数据
-        switch (page) {
-            case 'worklist':
-                loadWorklistData();
-                break;
-            case 'images':
-                initializeImages();
-                break;
-            case 'qr':
-                initializeQR();
-                break;
-            case 'store':
-                if (typeof loadStoreNodes === 'function') {
-                    loadStoreNodes();
-                }
-                break;
-            case 'logs':
-                if (!window.logManager) {
-                    window.logManager = new LogManager();
-                    window.logManager.init().catch(error => {
-                        console.error('初始化日志管理器失败:', error);
-                        window.showToast('初始化日志管理器失败', 'error');
-                    });
-                } else {
-                    window.logManager.loadLogTypes().catch(error => {
-                        console.error('加载日志类型失败:', error);
-                        window.showToast('加载日志类型失败', 'error');
-                    });
-                }
-                break;
-            case 'print':
-                if (!window.printManager) {
-                    window.printManager = new PrintManager();
-                } else {
-                    window.printManager.loadPrintJobs();
-                }
-                break;
+        // 初始化并加载页面数据
+        try {
+            PAGE_CONFIG[page].init();
+        } catch (error) {
+            console.error(`初始化页面 ${page} 失败:`, error);
+            window.showToast(`初始化页面失败: ${error.message}`, 'error');
         }
+        
     } catch (error) {
         console.error('切换页面失败:', error);
         window.showToast('页面切换失败', 'error');
@@ -238,51 +323,8 @@ function handleRoute() {
     switchPage(path);
 }
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
-    // 获取上次访问的页面或使用默认页面
-    const lastPage = location.hash.slice(1) || localStorage.getItem('lastActivePage') || defaultRoute;
-    
-    // 隐藏加载遮罩
-    const loadingMask = document.getElementById('loading-mask');
-    if (loadingMask) {
-        // 等待一小段时间再隐藏，确保页面内容已经渲染
-        setTimeout(() => {
-            loadingMask.classList.add('hide');
-            // 切换到目标页面
-            switchPage(lastPage);
-        }, 500);
-    } else {
-        // 如果没有加载遮罩，直接切换页面
-        switchPage(lastPage);
-    }
-    
-    // 处理导航点击事件
-    document.querySelectorAll('.nav-link[data-page]').forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const pageId = this.getAttribute('data-page');
-            history.pushState(null, '', `#${pageId}`);
-            switchPage(pageId);
-        });
-    });
-
-    // 处理浏览器前进后退
-    window.addEventListener('popstate', handleRoute);
-});
-
 // ================ 用户相关函数 ================
-// 登出
-function logout() {
-    axios.post('/api/auth/logout')
-        .then(() => {
-            window.location.href = '/login.html';
-        })
-        .catch(error => {
-            console.error('登出失败:', error);
-            window.location.href = '/login.html';  // 登出失败也跳转到登录页
-        });
-}
+// 登出函数已移至 AuthManager 类中，通过 window.authManager.logout() 调用
 
 // ================ 对话框相关函数 ================
 // 显示节点选择对话框
@@ -315,37 +357,40 @@ function showConfirmDialog(title, message) {
 // 全局模态框管理器
 const ModalManager = {
     init() {
-        // 监听所有模态框的隐藏事件
-        $(document).on('hidden.bs.modal', '.modal', function() {
-            // 移除所有焦点
-            $(this).find('button, [role="button"], a, input, select, textarea').blur();
-            
-            // 如果是动态创建的模态框，清理它
-            if ($(this).data('dynamic')) {
-                const modal = bootstrap.Modal.getInstance(this);
-                if (modal) {
-                    modal.dispose();
+        try {
+            // 监听所有模态框的隐藏事件
+            $(document).on('hidden.bs.modal', '.modal', function() {
+                // 移除所有焦点
+                $(this).find('button, [role="button"], a, input, select, textarea').blur();
+                
+                // 如果是动态创建的模态框，清理它
+                if ($(this).data('dynamic')) {
+                    const modal = bootstrap.Modal.getInstance(this);
+                    if (modal) {
+                        modal.dispose();
+                    }
+                    $(this).remove();
                 }
-                $(this).remove();
-            }
-        });
+            });
+        } catch (error) {
+            console.error('初始化模态框管理器失败:', error);
+        }
     },
 
     // 关闭所有模态框
     closeAll() {
-        $('.modal.show').each(function() {
-            const modal = bootstrap.Modal.getInstance(this);
-            if (modal) {
-                modal.hide();
-            }
-        });
+        try {
+            $('.modal.show').each(function() {
+                const modal = bootstrap.Modal.getInstance(this);
+                if (modal) {
+                    modal.hide();
+                }
+            });
+        } catch (error) {
+            console.error('关闭所有模态框失败:', error);
+        }
     }
 };
-
-// 初始化模态框管理器
-document.addEventListener('DOMContentLoaded', () => {
-    ModalManager.init();
-});
 
 // ================ 工具函数 ================
 // 显示列表加载动画

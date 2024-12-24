@@ -5,12 +5,20 @@ class LogManager {
         this.currentPage = 1;
         this.allFiles = [];
         this.isLoading = false;
+        this.types = null;  // 缓存类型列表
     }
 
     async init() {
         try {
-            await this.loadLogTypes();
-            this.bindEvents();
+            if (!this.types) {
+                await this.loadLogTypes();
+                this.bindEvents();
+            } else {
+                // 如果类型已加载，只重新加载当前类型的文件
+                if (this.currentType) {
+                    await this.loadLogFiles(this.currentType);
+                }
+            }
         } catch (error) {
             console.error('初始化日志管理器失败:', error);
             window.showToast('初始化失败', 'error');
@@ -20,10 +28,10 @@ class LogManager {
     async loadLogTypes() {
         try {
             const response = await axios.get('/api/logs/types');
-            const types = response.data;
-            this.renderLogTypes(types);
-            if (types.length > 0) {
-                await this.loadLogFiles(types[0]);
+            this.types = response.data;
+            this.renderLogTypes(this.types);
+            if (this.types.length > 0) {
+                await this.loadLogFiles(this.types[0]);
             }
         } catch (error) {
             console.error('加载日志类型失败:', error);
@@ -378,7 +386,5 @@ class LogManager {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // 移除这里的初始化，由 main.js 控制
-    // window.logManager = new LogManager();
-}); 
+// 导出单个实例
+window.logManager = new LogManager(); 

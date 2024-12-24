@@ -5,18 +5,6 @@ let qrAllData = [];
 let qrSeriesModal;
 let selectedQRNode = null;
 
-// 初始化QR模块
-function initializeQR() {
-    try {
-        loadQRNodes();
-        bindQRPaginationEvents();
-        initQRSeriesModal();
-    } catch (error) {
-        console.error('初始化QR模块失败:', error);
-        window.showToast('初始化失败', 'error');
-    }
-}
-
 // 初始化序列模态框
 function initQRSeriesModal() {
     const modalElement = document.getElementById('seriesModal');

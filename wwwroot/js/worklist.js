@@ -4,15 +4,6 @@ const pageSize = 10;
 let currentPage = 1;
 let isLoading = false;
 
-// 修改 DOMContentLoaded 事件监听
-document.addEventListener('DOMContentLoaded', () => {
-    // 绑定事件
-    bindWorklistEvents();
-
-    // 加载第一页数据
-    loadWorklistData();
-});
-
 // 统一错误处理
 function handleError(error, message) {
     console.error(message, error);
@@ -72,20 +63,6 @@ function validateWorklistForm(form) {
     // }
 
     return true;
-}
-
-// 初始化预约模块
-function initializeWorklist() {
-    try {
-        // 绑定Worklist相关事件
-        bindWorklistEvents();
-        
-        // 加载初始数据
-        loadWorklistData();
-    } catch (error) {
-        console.error('初始化预约模块失败:', error);
-        window.showToast('初始化失败', 'error');
-    }
 }
 
 // 绑定Worklist相关事件
