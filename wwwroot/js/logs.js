@@ -1,27 +1,48 @@
 class LogManager {
     constructor() {
-        this.currentType = '';
-        this.pageSize = 10;
         this.currentPage = 1;
-        this.allFiles = [];
+        this.pageSize = 10;
+        this.totalPages = 0;
+        this.totalItems = 0;
+        this.currentLogs = [];
         this.isLoading = false;
-        this.types = null;  // 缓存类型列表
+        this.currentType = '';
+        this.types = null;
+        this.initializeEvents();
     }
 
-    async init() {
+    initializeEvents() {
         try {
-            if (!this.types) {
-                await this.loadLogTypes();
-                this.bindEvents();
-            } else {
-                // 如果类型已加载，只重新加载当前类型的文件
-                if (this.currentType) {
-                    await this.loadLogFiles(this.currentType);
-                }
+            // 绑定日志类型切换事件
+            const typeList = document.getElementById('logTypes');
+            if (typeList) {
+                typeList.addEventListener('click', async (e) => {
+                    const link = e.target.closest('.list-group-item');
+                    if (link && link.dataset.type) {
+                        e.preventDefault();
+                        const type = link.dataset.type;
+                        this.currentType = type;
+                        // 更新选中状态
+                        typeList.querySelectorAll('.list-group-item').forEach(item => {
+                            item.classList.remove('active');
+                        });
+                        link.classList.add('active');
+                        // 加载对应类型的日志
+                        await this.loadLogFiles(type);
+                    }
+                });
+            }
+
+            // 绑定刷新按钮事件
+            const refreshBtn = document.getElementById('logs-refresh');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', async () => {
+                    await this.loadLogTypes();
+                });
             }
         } catch (error) {
-            console.error('初始化日志管理器失败:', error);
-            window.showToast('初始化失败', 'error');
+            console.error('绑定日志事件失败:', error);
+            window.showToast('绑定日志事件失败: ' + error.message, 'error');
         }
     }
 
@@ -29,9 +50,35 @@ class LogManager {
         try {
             const response = await axios.get('/api/logs/types');
             this.types = response.data;
-            this.renderLogTypes(this.types);
-            if (this.types.length > 0) {
-                await this.loadLogFiles(this.types[0]);
+            
+            // 渲染日志类型列表
+            const fragment = document.createDocumentFragment();
+            this.types.forEach(type => {
+                const a = document.createElement('a');
+                a.href = '#';
+                a.className = 'list-group-item list-group-item-action';
+                a.dataset.type = type;
+                a.textContent = type;
+                if (type === this.currentType) {
+                    a.classList.add('active');
+                }
+                fragment.appendChild(a);
+            });
+            
+            const container = document.getElementById('logTypes');
+            if (container) {
+                container.innerHTML = '';
+                container.appendChild(fragment);
+            }
+
+            // 如果有类型且没有当前选中的类型，选中第一个并加载其日志
+            if (this.types && this.types.length > 0 && !this.currentType) {
+                this.currentType = this.types[0];
+                const firstType = container?.querySelector('.list-group-item');
+                if (firstType) {
+                    firstType.classList.add('active');
+                }
+                await this.loadLogFiles(this.currentType);
             }
         } catch (error) {
             console.error('加载日志类型失败:', error);
@@ -69,12 +116,17 @@ class LogManager {
             a.className = 'list-group-item list-group-item-action';
             a.dataset.type = type;
             a.textContent = type;
+            if (type === this.currentType) {
+                a.classList.add('active');
+            }
             fragment.appendChild(a);
         });
         
         const container = document.getElementById('logTypes');
-        container.innerHTML = '';
-        container.appendChild(fragment);
+        if (container) {
+            container.innerHTML = '';
+            container.appendChild(fragment);
+        }
     }
 
     renderLogFiles() {
@@ -136,22 +188,6 @@ class LogManager {
         return `${size.toFixed(2)} ${units[unitIndex]}`;
     }
 
-    bindEvents() {
-        document.getElementById('logTypes').addEventListener('click', e => {
-            e.preventDefault();
-            const type = e.target.dataset.type;
-            if (type) {
-                this.loadLogFiles(type);
-            }
-        });
-
-        document.body.addEventListener('change', e => {
-            if (e.target.id === 'logFileSelect') {
-                this.loadLogContent(e.target.value);
-            }
-        });
-    }
-
     async deleteLogFile(filename) {
         if (!await showConfirmDialog('确认删除', `确定要删除日志文件 ${filename} 吗？`)) {
             return;
@@ -163,25 +199,20 @@ class LogManager {
             });
             
             if (!response.ok) {
-                throw new Error(await response.text());
+                const errorText = await response.text();
+                throw new Error(errorText);
             }
             
             await this.loadLogFiles(this.currentType);
             window.showToast('日志文件已删除', 'success');
         } catch (error) {
-            window.showToast('删除日志失败', 'error');
+            console.error('删除日志失败:', error);
+            window.showToast('删除日志失败: ' + error.message, 'error');
         }
     }
 
     async viewLogContent(filename) {
         try {
-            const response = await fetch(`/api/logs/${this.currentType}/${filename}/content`);
-            if (!response.ok) {
-                throw new Error('获取日志内容失败');
-            }
-            
-            const data = await response.json();
-            
             const modalDiv = document.createElement('div');
             modalDiv.className = 'modal';
             modalDiv.setAttribute('tabindex', '-1');
@@ -199,9 +230,6 @@ class LogManager {
                                 <button type="button" class="btn btn-outline-primary btn-sm me-1" onclick="logManager.refreshLogContent()">
                                     刷新
                                 </button>
-                                <button type="button" class="btn btn-outline-warning btn-sm me-1" onclick="logManager.clearLogContent()">
-                                    清空
-                                </button>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
                         </div>
@@ -210,7 +238,7 @@ class LogManager {
                                 <pre class="log-content" style="height: 100%; margin: 0; padding: 1rem; color: #d4d4d4; 
                                     font-family: Consolas, monospace; font-size: 0.9rem; line-height: 1.5;
                                     background-color: #1e1e1e; overflow-y: auto; overflow-x: hidden;
-                                    white-space: pre-wrap;">${data.content.reverse().join('\n') || '暂无日志内容'}</pre>
+                                    white-space: pre-wrap;"></pre>
                             </div>
                         </div>
                     </div>
@@ -219,22 +247,31 @@ class LogManager {
             document.body.appendChild(modalDiv);
 
             const modal = new bootstrap.Modal(modalDiv);
+            modal.show();
+
+            // 显示加载动画
+            const preElement = modalDiv.querySelector('.log-content');
+            if (preElement) {
+                preElement.innerHTML = `
+                    <div style="height: 100%; display: flex; align-items: center; justify-content: center;">
+                        <div class="spinner-border text-secondary" role="status"></div>
+                    </div>
+                `;
+            }
 
             // 更新文件选择列表
             await this.updateLogFileSelect(filename);
 
+            // 加载日志内容
+            await this.loadLogContent(filename);
+
             // 监听关闭事件
             const handleHidden = () => {
-                // 移除事件监听
                 modalDiv.removeEventListener('hidden.bs.modal', handleHidden);
-                
-                // 确保模态框实例还存在
                 const instance = bootstrap.Modal.getInstance(modalDiv);
                 if (instance) {
                     instance.dispose();
                 }
-                
-                // 从 DOM 中移除
                 if (document.body.contains(modalDiv)) {
                     modalDiv.remove();
                 }
@@ -242,11 +279,9 @@ class LogManager {
 
             modalDiv.addEventListener('hidden.bs.modal', handleHidden);
 
-            modal.show();
-
         } catch (error) {
             console.error('获取日志内容失败:', error);
-            window.showToast('获取日志内容失败', 'error');
+            window.showToast('获取日志内容失败: ' + error.message, 'error');
         }
     }
 
@@ -259,29 +294,43 @@ class LogManager {
             const files = await response.json();
             
             const select = document.getElementById('logFileSelect');
+            if (!select) return;
+
             select.innerHTML = files.map(file => `
                 <option value="${file.name}" ${file.name === currentFile ? 'selected' : ''}>
                     ${file.name}
                 </option>
             `).join('');
+
+            // 绑定文件选择事件监听
+            select.onchange = (e) => {
+                if (e.target.value) {
+                    this.loadLogContent(e.target.value);
+                }
+            };
+
         } catch (error) {
             console.error('更新日志文件列表失败:', error);
-            window.showToast('更新日志文件列表失败', 'error');
+            window.showToast('更新日志文件列表失败: ' + error.message, 'error');
         }
     }
 
     async refreshLogContent() {
         const select = document.getElementById('logFileSelect');
-        if (select) {
-            await this.loadLogContent(select.value);
-        }
-    }
+        const refreshBtn = select?.closest('.modal-content')?.querySelector('.btn-outline-primary');
+        if (!select?.value || !refreshBtn) return;
 
-    async loadLogContent(filename) {
+        // 防止重复点击
+        if (refreshBtn.disabled) return;
+
         try {
+            // 设置按钮为加载状态
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            // 先清空内容显示加载动画
             const preElement = document.querySelector('.log-content');
             if (preElement) {
-                // 显示简单的加载动画
                 preElement.innerHTML = `
                     <div style="height: 100%; display: flex; align-items: center; justify-content: center;">
                         <div class="spinner-border text-secondary" role="status"></div>
@@ -289,51 +338,48 @@ class LogManager {
                 `;
             }
 
+            // 强制刷新文件列表
+            await this.updateLogFileSelect(select.value);
+
+            // 加载内容
+            await this.loadLogContent(select.value);
+        } catch (error) {
+            console.error('刷新日志内容失败:', error);
+            window.showToast('刷新日志内容失败: ' + error.message, 'error');
+        } finally {
+            // 恢复按钮状态
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '刷新';
+        }
+    }
+
+    async loadLogContent(filename) {
+        if (!filename) return;
+        
+        try {
+            const preElement = document.querySelector('.log-content');
+            if (!preElement) return;
+
             const response = await fetch(`/api/logs/${this.currentType}/${filename}/content`);
             if (!response.ok) {
                 throw new Error('获取日志内容失败');
             }
             
             const data = await response.json();
-            
-            if (preElement) {
-                preElement.innerHTML = data.content.reverse().join('\n') || '暂无日志内容';
+            if (!data.content || data.content.length === 0) {
+                preElement.innerHTML = '暂无日志内容';
+                return;
             }
+
+            // 确保内容是最新的
+            const content = data.content.reverse();
+            preElement.innerHTML = content.join('\n');
+
+            // 滚动到顶部，因为日志是倒序显示的
+            preElement.scrollTop = 0;
         } catch (error) {
             console.error('加载日志内容失败:', error);
-            window.showToast('加载日志内容失败', 'error');
-        }
-    }
-
-    async clearLogContent() {
-        const select = document.getElementById('logFileSelect');
-        if (!select) return;
-
-        try {
-            if (!await showConfirmDialog('确认清空', `确定要清空日志文件 ${select.value} 吗？`)) {
-                return;
-            }
-
-            const response = await fetch(`/api/logs/${this.currentType}/${select.value}/clear`, {
-                method: 'POST'
-            });
-            
-            if (response.status === 409) {
-                window.showToast('文件正在被使用，请稍后重试', 'warning');
-                return;
-            }
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText);
-            }
-            
-            await this.refreshLogContent();
-            await this.loadLogFiles(this.currentType);
-            window.showToast('日志文件已清空', 'success');
-        } catch (error) {
-            console.error('清空日志失败:', error);
-            window.showToast(error.message || '清空日志失败', 'error');
+            window.showToast('加载日志内容失败: ' + error.message, 'error');
         }
     }
 

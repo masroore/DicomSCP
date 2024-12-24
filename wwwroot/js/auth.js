@@ -1,11 +1,6 @@
 class AuthManager {
     constructor() {
-        try {
-            this.bindEvents();
-        } catch (error) {
-            console.error('初始化认证管理器失败:', error);
-            window.showToast('初始化失败', 'error');
-        }
+        this.bindEvents();
     }
 
     bindEvents() {
@@ -34,7 +29,7 @@ class AuthManager {
     }
 
     // 修改密码
-    async changePassword() {
+    changePassword() {
         try {
             const modal = $('#changePasswordModal');
             const form = document.getElementById('changePasswordForm');
@@ -126,12 +121,18 @@ class AuthManager {
         try {
             const response = await axios.get('/api/auth/check-session');
             const username = response.data.username;
-            document.getElementById('currentUsername').textContent = username;
+            const usernameElement = document.getElementById('currentUsername');
+            if (usernameElement) {
+                usernameElement.textContent = username;
+            }
         } catch (error) {
             // 401 错误会被全局拦截器处理，这里只处理其他错误
             if (error.response?.status !== 401) {
                 console.error('获取用户信息失败:', error);
-                document.getElementById('currentUsername').textContent = '未知用户';
+                const usernameElement = document.getElementById('currentUsername');
+                if (usernameElement) {
+                    usernameElement.textContent = '未知用户';
+                }
             }
         }
     }
@@ -143,7 +144,10 @@ class AuthManager {
             window.location.href = '/login.html';
         } catch (error) {
             console.error('登出失败:', error);
-            window.location.href = '/login.html';  // 登出失败也跳转到登录页
+            window.showToast('登出失败', 'error');
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 1500);
         }
     }
 } 

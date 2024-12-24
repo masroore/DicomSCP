@@ -241,15 +241,22 @@ const PAGE_CONFIG = {
     },
     logs: { 
         id: 'logs-page', 
-        init: () => window.logManager?.init()
+        init: async () => {
+            if (!window.logManager) {
+                window.logManager = new LogManager();
+            }
+            await window.logManager.loadLogTypes();
+        }
     },
     print: { 
         id: 'print-page', 
-        init: () => {
+        init: async () => {
             if (!window.printManager) {
                 window.printManager = new PrintManager();
+                await window.printManager.init();
             } else {
-                window.printManager.loadPrintJobs();
+                // 每次切换到打印页面时都重新加载数据
+                await window.printManager.loadPrintJobs();
             }
         }
     },

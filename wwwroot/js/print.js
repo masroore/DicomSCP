@@ -7,16 +7,12 @@ class PrintManager {
         this.currentJobs = [];
         this.printers = [];
         this.isLoading = false;
-
-        // 初始化事件和加载数据
-        this.init();
     }
 
     async init() {
         try {
             // 初始化事件绑定
             this.initializeEvents();
-            
             // 加载打印机列表
             await this.loadPrinters();
             // 加载任务列表
