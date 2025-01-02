@@ -75,7 +75,7 @@
   - 打印任务状态跟踪
   - 归档打印的原始文件和标签
 
-- **WADO 服务 (Web Access to DICOM Objects)**
+- **WADOURI 服务 (Web Access to DICOM Objects)**
   - 必需参数
     - `requestType`: 必须为 "WADO"
     - `studyUID`: 研究实例 UID
@@ -120,6 +120,75 @@
   - 个服务日志独立配置
   - 多日志级别配置
   - 服务预置详细日志 方便对接查找问题
+
+- **WADO-RS 服务 (Web Access to DICOM Objects - RESTful Services)**
+  - 实例检索 (Instance Retrieval)
+    ```
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}
+    ```
+    - 支持原始 DICOM 格式检索
+    - 支持传输语法转换
+    - 支持多帧图像检索
+    - 支持缩略图生成
+
+  - 元数据检索 (Metadata Retrieval)
+    ```
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}/metadata
+    ```
+    - 返回 DICOM JSON 格式
+    - 包含完整的 DICOM 标签信息
+
+  - 帧检索 (Frame Retrieval)
+    ```
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}/frames/{frames}
+    ```
+    - 支持单帧/多帧提取
+    - 保持原始像素数据
+    - 支持传输语法转换
+
+  - 缩略图服务 (Thumbnail)
+    ```
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}/thumbnail?size={size}
+    ```
+    - 支持自定义尺寸
+    - 保持图像宽高比
+    - JPEG 格式输出
+    - 优化的图像质量
+
+- **QIDO-RS 服务 (Query based on ID for DICOM Objects - RESTful Services)**
+  - 研究级查询 (Study Level Query)
+    ```
+    GET /dicomweb/studies?
+      PatientID={patientID}&
+      PatientName={patientName}&
+      StudyDate={date}&
+      _offset={offset}&
+      _limit={limit}&
+      includefield={fields}
+    ```
+    - 支持多种查询参数（PatientID、PatientName、StudyDate等）
+    - 支持分页功能（offset/limit）
+    - 支持字段过滤（includefield）
+    - 支持模糊匹配
+
+  - 序列级查询 (Series Level Query)
+    ```
+    GET /dicomweb/studies/{studyUID}/series?
+      SeriesInstanceUID={seriesUID}&
+      Modality={modality}
+    ```
+    - 支持序列 UID 过滤
+    - 支持模态过滤
+    - 返回序列详细信息
+
+  - 实例级查询 (Instance Level Query)
+    ```
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances?
+      SOPInstanceUID={instanceUID}
+    ```
+    - 支持 SOP 实例 UID 过滤
+    - 返回实例详细信息
+    - 包含图像参数信息
 
 ## 系统要求
 
