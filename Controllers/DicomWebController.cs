@@ -740,6 +740,219 @@ namespace DicomSCP.Controllers
             }
         }
 
+        // WADO-RS: 检索帧
+        [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}/instances/{sopInstanceUid}/frames/{frameNumbers}")]
+        [Produces("multipart/related")]
+        public async Task<IActionResult> RetrieveFrames(
+            string studyInstanceUid,
+            string seriesInstanceUid,
+            string sopInstanceUid,
+            string frameNumbers)
+        {
+            try
+            {
+                // 记录请求信息
+                var acceptHeader = Request.Headers["Accept"].ToString();
+                DicomLogger.Information("WADO", 
+                    "DICOMweb - 收到帧检索请求 - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, SopUID: {SopUID}, Frames: {Frames}, Accept: {Accept}",
+                    studyInstanceUid, seriesInstanceUid, sopInstanceUid, frameNumbers, acceptHeader);
+
+                // 验证帧号格式
+                if (!frameNumbers.Split(',').All(f => int.TryParse(f, out int n) && n >= 1))
+                {
+                    return BadRequest("Invalid frame numbers. Frame numbers must be positive integers.");
+                }
+
+                // 获取实例
+                var instances = await Task.FromResult(_repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid));
+                var instance = instances.FirstOrDefault(i => i.SopInstanceUid == sopInstanceUid);
+                if (instance == null)
+                {
+                    return NotFound("Instance not found");
+                }
+
+                // 读取 DICOM 文件
+                var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
+                if (!System.IO.File.Exists(filePath))
+                {
+                    return NotFound("DICOM file not found");
+                }
+
+                var dicomFile = await DicomFile.OpenAsync(filePath);
+                var dataset = dicomFile.Dataset;
+
+                // 修改这部分逻辑：如果不存在 NumberOfFrames，则认为是单帧图像
+                int numberOfFrames = 1;
+                if (dataset.Contains(DicomTag.NumberOfFrames))
+                {
+                    numberOfFrames = dataset.GetSingleValue<int>(DicomTag.NumberOfFrames);
+                }
+
+                var requestedFrames = frameNumbers.Split(',').Select(int.Parse).ToList();
+
+                // 验证帧号范围
+                if (requestedFrames.Any(f => f < 1 || f > numberOfFrames))
+                {
+                    return BadRequest($"Frame numbers must be between 1 and {numberOfFrames}");
+                }
+
+                // 处理 Accept 头
+                var (mediaType, targetTransferSyntax) = GetFrameMediaTypeAndTransferSyntax(
+                    acceptHeader, 
+                    dicomFile.FileMetaInfo.TransferSyntax);
+
+                // 创建响应
+                var boundary = $"boundary.{Guid.NewGuid():N}";
+                using var responseStream = new MemoryStream();
+                using var writer = new StreamWriter(responseStream, leaveOpen: true);
+
+                // 预处理数据集
+                var pixelData = DicomPixelData.Create(dataset);
+                var failedFrames = new List<int>();
+
+                // 处理每一帧
+                foreach (var frameNumber in requestedFrames)
+                {
+                    try
+                    {
+                        var frameData = GetFrameData(dataset, frameNumber, mediaType, targetTransferSyntax);
+
+                        // 写入分隔符和头部
+                        await writer.WriteLineAsync($"--{boundary}");
+                        await writer.WriteLineAsync($"Content-Type: {mediaType}");
+                        await writer.WriteLineAsync($"Content-Length: {frameData.Length}");
+                        await writer.WriteLineAsync($"Content-Location: /dicomweb/studies/{studyInstanceUid}/series/{seriesInstanceUid}/instances/{sopInstanceUid}/frames/{frameNumber}");
+                        if (mediaType == "application/octet-stream")
+                        {
+                            await writer.WriteLineAsync($"transfer-syntax: {targetTransferSyntax.UID.UID}");
+                        }
+                        await writer.WriteLineAsync();
+                        await writer.FlushAsync();
+
+                        // 写入帧数据
+                        await responseStream.WriteAsync(frameData, 0, frameData.Length);
+                        await writer.WriteLineAsync();
+                        await writer.FlushAsync();
+
+                        DicomLogger.Debug("WADO", 
+                            "DICOMweb - 已添加帧到响应: Frame={FrameNumber}, Size={Size} bytes", 
+                            frameNumber, frameData.Length);
+                    }
+                    catch (Exception ex)
+                    {
+                        DicomLogger.Error("WADO", ex, 
+                            "DICOMweb - 处理帧失败: Frame={FrameNumber}", frameNumber);
+                        failedFrames.Add(frameNumber);
+                        continue;
+                    }
+                }
+
+                // 如果所有帧都失败，返回错误
+                if (failedFrames.Count == requestedFrames.Count)
+                {
+                    return StatusCode(500, "Failed to process all requested frames");
+                }
+
+                // 写入结束分隔符
+                await writer.WriteLineAsync($"--{boundary}--");
+                await writer.FlushAsync();
+
+                // 准备返回数据
+                responseStream.Position = 0;
+                var responseBytes = responseStream.ToArray();
+
+                // 设置响应头
+                Response.Headers.Clear();
+                Response.Headers["Content-Type"] = $"multipart/related; type=\"{mediaType}\"; boundary=\"{boundary}\"";
+                Response.Headers["Content-Length"] = responseBytes.Length.ToString();
+                if (mediaType == "application/octet-stream")
+                {
+                    Response.Headers["transfer-syntax"] = targetTransferSyntax.UID.UID;
+                }
+                if (failedFrames.Any())
+                {
+                    Response.Headers["Warning"] = $"299 {Request.Host} \"Failed to process frames: {string.Join(",", failedFrames)}\"";
+                }
+
+                return File(responseBytes, $"multipart/related; type=\"{mediaType}\"; boundary=\"{boundary}\"");
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("WADO", ex, "DICOMweb - 帧检索失败");
+                return StatusCode(500, "Error retrieving frames");
+            }
+        }
+
+        private byte[] GetFrameData(DicomDataset dataset, int frameNumber, string mediaType, DicomTransferSyntax targetTransferSyntax)
+        {
+            var pixelData = DicomPixelData.Create(dataset);
+            var originalFrameData = pixelData.GetFrame(frameNumber - 1).Data.ToArray();
+
+            // 如果请求的是原始传输语法或当前传输语法与目标相同，直接返回
+            if (targetTransferSyntax == dataset.InternalTransferSyntax ||
+                targetTransferSyntax.UID.UID == "*")
+            {
+                return originalFrameData;
+            }
+
+            // 根据媒体类型和传输语法进行转码
+            var transcoder = new DicomTranscoder(
+                dataset.InternalTransferSyntax,
+                mediaType == "image/jp2" ? DicomTransferSyntax.JPEG2000Lossless : targetTransferSyntax);
+
+            var newDataset = transcoder.Transcode(dataset);
+            var newPixelData = DicomPixelData.Create(newDataset);
+            return newPixelData.GetFrame(frameNumber - 1).Data.ToArray();
+        }
+
+        private (string MediaType, DicomTransferSyntax TransferSyntax) GetFrameMediaTypeAndTransferSyntax(
+            string acceptHeader,
+            DicomTransferSyntax originalTransferSyntax)
+        {
+            var mediaType = "application/octet-stream";
+            var targetTransferSyntax = DicomTransferSyntax.ExplicitVRLittleEndian;
+
+            if (string.IsNullOrEmpty(acceptHeader) || acceptHeader == "*/*")
+            {
+                return (mediaType, targetTransferSyntax);
+            }
+
+            var acceptParts = acceptHeader.Split(';').Select(p => p.Trim()).ToList();
+            var typePart = acceptParts.FirstOrDefault(p => p.StartsWith("type=", StringComparison.OrdinalIgnoreCase));
+            var transferSyntaxPart = acceptParts.FirstOrDefault(p => p.StartsWith("transfer-syntax=", StringComparison.OrdinalIgnoreCase));
+
+            // 处理媒体类型
+            if (typePart != null)
+            {
+                var type = typePart.Split('=')[1].Trim('"', ' ');
+                if (type == "image/jp2")
+                {
+                    mediaType = "image/jp2";
+                    targetTransferSyntax = DicomTransferSyntax.JPEG2000Lossless;
+                }
+            }
+
+            // 处理传输语法
+            if (transferSyntaxPart != null)
+            {
+                var transferSyntax = transferSyntaxPart.Split('=')[1].Trim('"', ' ');
+                if (transferSyntax == "*")
+                {
+                    targetTransferSyntax = originalTransferSyntax;
+                }
+                else
+                {
+                    targetTransferSyntax = DicomTransferSyntax.Parse(transferSyntax);
+                }
+            }
+            else if (mediaType == "image/jp2")
+            {
+                targetTransferSyntax = DicomTransferSyntax.JPEG2000Lossless;
+            }
+
+            return (mediaType, targetTransferSyntax);
+        }
+
         #endregion
 
         #region WADO-RS 缩略图接口
