@@ -443,52 +443,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         return response;
     }
 
-    private DicomCFindResponse CreateSeriesResponse(DicomCFindRequest request, Series series)
-    {
-        var response = new DicomCFindResponse(request, DicomStatus.Pending);
-        var dataset = new DicomDataset();
-
-        // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
-        var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
-
-        // 根据请求的字符集设置响应的字符集
-        switch (requestedCharacterSet.ToUpperInvariant())
-        {
-            case "ISO_IR 100":  // Latin1
-                dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
-                break;
-            case "GB18030":     // 中文简体
-                dataset.Add(DicomTag.SpecificCharacterSet, "GB18030");
-                break;
-            case "ISO_IR 192":  // UTF-8
-            default:
-                dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 192");
-                break;
-        }
-
-        AddCommonTags(dataset, request.Dataset);
-
-        dataset.Add(DicomTag.SeriesInstanceUID, series.SeriesInstanceUid)
-              .Add(DicomTag.StudyInstanceUID, series.StudyInstanceUid)
-              .Add(DicomTag.Modality, series.Modality ?? string.Empty)
-              .Add(DicomTag.SeriesNumber, series.SeriesNumber ?? string.Empty)
-              .Add(DicomTag.SeriesDescription, series.SeriesDescription ?? string.Empty);
-
-        response.Dataset = dataset;
-        return response;
-    }
-
-    private void CopyRequestTags(DicomDataset source, DicomDataset target)
-    {
-        foreach (var tag in source.Select(x => x.Tag))
-        {
-            if (!target.Contains(tag) && source.TryGetString(tag, out string value))
-            {
-                target.Add(tag, value);
-            }
-        }
-    }
-
     private async Task<List<DicomCFindResponse>> HandleSeriesLevelFind(DicomCFindRequest request)
     {
         var responses = new List<DicomCFindResponse>();
