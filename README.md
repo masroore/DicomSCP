@@ -124,19 +124,25 @@
 - **WADO-RS 服务 (Web Access to DICOM Objects - RESTful Services)**
   - 实例检索 (Instance Retrieval)
     ```
+    GET /dicomweb/studies/{studyUID}
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}
     GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}
     ```
     - 支持原始 DICOM 格式检索
     - 支持传输语法转换
-    - 支持多帧图像检索
-    - 支持缩略图生成
+    - 支持 multipart/related 响应
+    - 支持 Accept 头指定返回格式
+    - 支持检查/序列/实例三个级别的检索
+    - 支持 transfer-syntax 参数指定传输语法
 
   - 元数据检索 (Metadata Retrieval)
     ```
-    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}/metadata
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/metadata
     ```
     - 返回 DICOM JSON 格式
     - 包含完整的 DICOM 标签信息
+    - 支持 VR 和 Value 的标准格式
+    - 符合 DICOMweb 规范的空值处理
 
   - 帧检索 (Frame Retrieval)
     ```
@@ -148,7 +154,7 @@
 
   - 缩略图服务 (Thumbnail)
     ```
-    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{instanceUID}/thumbnail?size={size}
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/thumbnail
     ```
     - 支持自定义尺寸
     - 保持图像宽高比
@@ -162,14 +168,14 @@
       PatientID={patientID}&
       PatientName={patientName}&
       StudyDate={date}&
-      _offset={offset}&
-      _limit={limit}&
-      includefield={fields}
+      offset={offset}&
+      limit={limit}
     ```
     - 支持多种查询参数（PatientID、PatientName、StudyDate等）
     - 支持分页功能（offset/limit）
     - 支持字段过滤（includefield）
     - 支持模糊匹配
+    - 返回符合 DICOMweb 标准的 JSON 格式
 
   - 序列级查询 (Series Level Query)
     ```
@@ -180,6 +186,8 @@
     - 支持序列 UID 过滤
     - 支持模态过滤
     - 返回序列详细信息
+    - 支持字段过滤
+    - 符合 DICOMweb JSON 格式规范
 
   - 实例级查询 (Instance Level Query)
     ```
@@ -189,6 +197,7 @@
     - 支持 SOP 实例 UID 过滤
     - 返回实例详细信息
     - 包含图像参数信息
+    - 支持字段过滤
 
 ## 系统要求
 
