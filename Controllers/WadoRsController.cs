@@ -9,7 +9,6 @@ using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Jpeg;
-using System.Text.Json;
 using DicomSCP.Services;
 
 namespace DicomSCP.Controllers
@@ -23,11 +22,6 @@ namespace DicomSCP.Controllers
         private readonly DicomSettings _settings;
         private const string AppDicomContentType = "application/dicom";
         private const string JpegImageContentType = "image/jpeg";
-        private static readonly JsonSerializerOptions _jsonOptions = new()
-        {
-            PropertyNamingPolicy = null,
-            WriteIndented = true
-        };
 
         public WadoRsController(DicomRepository repository, IOptions<DicomSettings> settings)
         {

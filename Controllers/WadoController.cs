@@ -16,14 +16,14 @@ namespace DicomSCP.Controllers
 {
     [Route("wado")]
     [AllowAnonymous]
-    public class WadoController : ControllerBase
+    public class WadoURIController : ControllerBase
     {
         private readonly DicomRepository _dicomRepository;
         private readonly DicomSettings _settings;
         private const string AppDicomContentType = "application/dicom";
         private const string JpegImageContentType = "image/jpeg";
 
-        public WadoController(
+        public WadoURIController(
             DicomRepository dicomRepository,
             IOptions<DicomSettings> settings)
         {
