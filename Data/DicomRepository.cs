@@ -1480,7 +1480,8 @@ public class DicomRepository : BaseRepository, IDisposable
         string patientName, 
         string accessionNumber, 
         (string StartDate, string EndDate) dateRange,
-        string[]? modalities)
+        string[]? modalities,
+        string? studyInstanceUid = null)
     {
         try
         {
@@ -1504,6 +1505,7 @@ public class DicomRepository : BaseRepository, IDisposable
                 AND (@StartDate = '' OR s.StudyDate >= @StartDate)
                 AND (@EndDate = '' OR s.StudyDate <= @EndDate)
                 AND (@ModCount = 0 OR s.Modality IN @Modalities)
+                AND (@StudyInstanceUid = '' OR s.StudyInstanceUid = @StudyInstanceUid)
                 GROUP BY 
                     s.StudyInstanceUid,
                     s.PatientId,
@@ -1526,16 +1528,18 @@ public class DicomRepository : BaseRepository, IDisposable
                 StartDate = dateRange.StartDate,
                 EndDate = dateRange.EndDate,
                 ModCount = modalities?.Length ?? 0,
-                Modalities = (modalities?.Length ?? 0) > 0 ? modalities : new[] { "" }
+                Modalities = (modalities?.Length ?? 0) > 0 ? modalities : new[] { "" },
+                StudyInstanceUid = studyInstanceUid ?? ""
             };
 
             LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
 
             var studies = connection.Query<Study>(sql, parameters);
             var result = studies?.ToList() ?? new List<Study>();
-            var modalitiesStr = modalities != null ? string.Join(",", modalities) : string.Empty;
-            LogInformation("检查查询完成 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}, 设备类型: {Modalities}", 
-                result.Count, dateRange.StartDate, dateRange.EndDate, modalitiesStr);
+            
+            LogInformation("检查查询完成 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}, StudyInstanceUID: {StudyUID}", 
+                result.Count, dateRange.StartDate ?? "", dateRange.EndDate ?? "", studyInstanceUid ?? "");
+                
             return result;
         }
         catch (Exception ex)
