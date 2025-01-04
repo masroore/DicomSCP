@@ -28,32 +28,64 @@ namespace DicomSCP.Controllers
         [HttpGet("studies")]
         [Produces("application/dicom+json")]
         public async Task<IActionResult> SearchStudies(
+            [FromQuery] string? PatientID = null, 
             [FromQuery(Name = "00100020")] string? patientId = null,
-            [FromQuery(Name = "00100010")] string? patientName = null,
-            [FromQuery(Name = "00080020")] string? studyDate = null,
-            [FromQuery(Name = "0020000D")] string? studyInstanceUid = null,
-            [FromQuery(Name = "00080050")] string? accessionNumber = null,
-            [FromQuery(Name = "00080061")] string? modalitiesInStudy = null,
-            [FromQuery(Name = "offset")] int offset = 0,
-            [FromQuery(Name = "limit")] int limit = 100)
+            [FromQuery] string? PatientName = null, 
+            [FromQuery(Name = "00100010")] string? patientNameTag = null,
+            [FromQuery] string? StudyDate = null, 
+            [FromQuery(Name = "00080020")] string? studyDateTag = null,
+            [FromQuery] string? StudyInstanceUID = null, 
+            [FromQuery(Name = "0020000D")] string? studyInstanceUidTag = null,
+            [FromQuery] string? AccessionNumber = null, 
+            [FromQuery(Name = "00080050")] string? accessionNumberTag = null,
+            [FromQuery] string? ModalitiesInStudy = null, 
+            [FromQuery(Name = "00080061")] string? modalitiesInStudyTag = null,
+            [FromQuery] bool fuzzymatching = false,
+            [FromQuery] int offset = 0,
+            [FromQuery] int limit = 100)
         {
             try
             {
                 // 记录查询参数
                 DicomLogger.Information("WADO", "DICOMweb - QIDO-RS 查询研究 - 参数: PatientID={PatientID}, PatientName={PatientName}, " +
                     "StudyDate={StudyDate}, StudyUID={StudyUID}, AccessionNumber={AccessionNumber}, Modalities={Modalities}, offset={Offset}, limit={Limit}",
-                    patientId ?? "", patientName ?? "", studyDate ?? "", studyInstanceUid ?? "", 
-                    accessionNumber ?? "", modalitiesInStudy ?? "", offset, limit);
+                    patientId ?? "", patientNameTag ?? "", studyDateTag ?? "", studyInstanceUidTag ?? "", 
+                    accessionNumberTag ?? "", modalitiesInStudyTag ?? "", offset, limit);
+
+                // 使用第一个非空值
+                var finalPatientId = patientId ?? PatientID;
+                var finalPatientName = patientNameTag ?? PatientName;
+                var finalStudyDate = studyDateTag ?? StudyDate;
+                var finalStudyInstanceUid = studyInstanceUidTag ?? StudyInstanceUID;
+                var finalAccessionNumber = accessionNumberTag ?? AccessionNumber;
+                var finalModalitiesInStudy = modalitiesInStudyTag ?? ModalitiesInStudy;
+
+                // 如果启用模糊匹配，将 DICOM 通配符转换为 SQL 通配符
+                if (fuzzymatching)
+                {
+                    if (!string.IsNullOrEmpty(finalPatientId))
+                    {
+                        finalPatientId = finalPatientId.Replace('*', '%').Replace('?', '_');
+                    }
+                    if (!string.IsNullOrEmpty(finalPatientName))
+                    {
+                        finalPatientName = finalPatientName.Replace('*', '%').Replace('?', '_');
+                    }
+                    if (!string.IsNullOrEmpty(finalAccessionNumber))
+                    {
+                        finalAccessionNumber = finalAccessionNumber.Replace('*', '%').Replace('?', '_');
+                    }
+                }
 
                 // 构建查询请求
                 var request = new QueryRequest
                 {
-                    PatientId = patientId,
-                    PatientName = patientName,
-                    StudyDate = studyDate,
-                    StudyInstanceUid = studyInstanceUid,
-                    AccessionNumber = accessionNumber,
-                    Modality = modalitiesInStudy
+                    PatientId = finalPatientId,
+                    PatientName = finalPatientName,
+                    StudyDate = finalStudyDate,
+                    StudyInstanceUid = finalStudyInstanceUid,
+                    AccessionNumber = finalAccessionNumber,
+                    Modality = finalModalitiesInStudy
                 };
 
                 // 使用 GetStudies 查询，传入分页参数
@@ -64,7 +96,7 @@ namespace DicomSCP.Controllers
                     (GetStartDate(request.StudyDate)?.ToString("yyyyMMdd") ?? "", 
                      GetEndDate(request.StudyDate)?.ToString("yyyyMMdd") ?? ""),
                     !string.IsNullOrEmpty(request.Modality) ? request.Modality.Split(',') : null,
-                    studyInstanceUid,
+                    request.StudyInstanceUid,
                     offset,  // 添加偏移量
                     limit)); // 添加每页数量
 
@@ -137,6 +169,7 @@ namespace DicomSCP.Controllers
                     { "00200011", new { vr = "IS", Value = new[] { s.SeriesNumber } } },
                     { "0008103E", new { vr = "LO", Value = new[] { s.SeriesDescription } } },
                     { "00080021", new { vr = "DA", Value = new[] { s.SeriesDate } } },
+                    { "00080031", new { vr = "TM", Value = new[] { "000000" } } },
                     { "00201209", new { vr = "IS", Value = new[] { s.NumberOfInstances.ToString() } } },
                     { "00081190", new { vr = "UR", Value = new[] { 
                         $"{Request.Scheme}://{Request.Host}{Request.PathBase}/dicomweb/studies/{StudyInstanceUID}/series/{s.SeriesInstanceUid}" 
