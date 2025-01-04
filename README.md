@@ -49,6 +49,7 @@
 ![配置](about/settings.png) 
 ![日志](about/logs.png) 
 ![监控](about/status.png) 
+![swagger](about/Swagger.png) 
 
 ## 功能特性
 
