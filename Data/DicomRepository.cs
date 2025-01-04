@@ -1481,11 +1481,27 @@ public class DicomRepository : BaseRepository, IDisposable
         string accessionNumber, 
         (string StartDate, string EndDate) dateRange,
         string[]? modalities,
-        string? studyInstanceUid = null)
+        string? studyInstanceUid = null,
+        int? offset = null,
+        int? limit = null)
     {
         try
         {
             using var connection = CreateConnection();
+            // 先查询总数
+            var countSql = @"
+                SELECT COUNT(DISTINCT s.StudyInstanceUid)
+                FROM Studies s
+                LEFT JOIN Patients p ON s.PatientId = p.PatientId
+                WHERE 1=1
+                AND (@PatientId = '' OR s.PatientId LIKE @PatientId)
+                AND (@PatientName = '' OR p.PatientName LIKE @PatientName)
+                AND (@AccessionNumber = '' OR s.AccessionNumber LIKE @AccessionNumber)
+                AND (@StartDate = '' OR s.StudyDate >= @StartDate)
+                AND (@EndDate = '' OR s.StudyDate <= @EndDate)
+                AND (@ModCount = 0 OR s.Modality IN @Modalities)
+                AND (@StudyInstanceUid = '' OR s.StudyInstanceUid = @StudyInstanceUid)";
+
             var sql = @"
                 SELECT 
                     s.*,
@@ -1520,6 +1536,12 @@ public class DicomRepository : BaseRepository, IDisposable
                     p.PatientBirthDate
                 ORDER BY s.CreateTime DESC";
 
+            // 如果指定了分页参数，添加分页
+            if (offset.HasValue && limit.HasValue)
+            {
+                sql += " LIMIT @Limit OFFSET @Offset";
+            }
+
             var parameters = new
             {
                 PatientId = string.IsNullOrEmpty(patientId) ? "" : $"%{patientId}%",
@@ -1529,17 +1551,22 @@ public class DicomRepository : BaseRepository, IDisposable
                 EndDate = dateRange.EndDate,
                 ModCount = modalities?.Length ?? 0,
                 Modalities = (modalities?.Length ?? 0) > 0 ? modalities : new[] { "" },
-                StudyInstanceUid = studyInstanceUid ?? ""
+                StudyInstanceUid = studyInstanceUid ?? "",
+                Offset = offset,
+                Limit = limit
             };
 
             LogDebug("执行检查查询 - SQL: {Sql}, 参数: {@Parameters}", sql, parameters);
 
+            // 获取总数
+            var totalCount = connection.ExecuteScalar<int>(countSql, parameters);
+
             var studies = connection.Query<Study>(sql, parameters);
             var result = studies?.ToList() ?? new List<Study>();
             
-            LogInformation("检查查询完成 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}, StudyInstanceUID: {StudyUID}", 
-                result.Count, dateRange.StartDate ?? "", dateRange.EndDate ?? "", studyInstanceUid ?? "");
-                
+            LogInformation("检查查询完成 - 返回记录数: {Count}/{Total}, 日期范围: {StartDate} - {EndDate}, StudyInstanceUID: {StudyUID}", 
+                result.Count, totalCount, dateRange.StartDate ?? "", dateRange.EndDate ?? "", studyInstanceUid ?? "");
+
             return result;
         }
         catch (Exception ex)
