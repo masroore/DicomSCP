@@ -92,11 +92,7 @@ public sealed class DicomServer : IDisposable
             DicomLogger.Information("DICOM", "开始启动DICOM服务...");
 
             // 配置存储服务
-            CStoreSCP.Configure(
-                _settings.StoragePath,
-                _settings.TempPath,
-                _settings,
-                _repository);
+            CStoreSCP.Configure(_settings, _repository);
 
             // 配置工作列表服务
             WorklistSCP.Configure(

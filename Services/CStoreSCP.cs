@@ -98,7 +98,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         DicomTag.FrameOfReferenceUID
     };
 
-    public static void Configure(string storagePath, string tempPath, DicomSettings settings, DicomRepository repository)
+    public static void Configure(DicomSettings settings, DicomRepository repository)
     {
         if (string.IsNullOrEmpty(settings.StoragePath) || string.IsNullOrEmpty(settings.TempPath))
         {

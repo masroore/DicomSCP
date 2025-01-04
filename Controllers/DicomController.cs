@@ -310,12 +310,7 @@ public class DicomController : ControllerBase
                 });
             }
 
-            CStoreSCP.Configure(
-                _settings.StoragePath,
-                _settings.TempPath,
-                _settings,
-                _repository
-            );
+            CStoreSCP.Configure(_settings, _repository);
 
             await _server.StartAsync();
             DicomLogger.Information("Api",

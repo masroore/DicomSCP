@@ -240,12 +240,7 @@ var dicomRepository = app.Services.GetRequiredService<DicomRepository>();
 // 配置 DICOM
 DicomSetupBuilder.UseServiceProvider(app.Services);
 
-CStoreSCP.Configure(
-    settings.StoragePath,
-    settings.TempPath,
-    settings,
-    dicomRepository
-);
+CStoreSCP.Configure(settings, dicomRepository);
 
 // 启动 DICOM 服务器
 var dicomServer = app.Services.GetRequiredService<DicomServer>();
