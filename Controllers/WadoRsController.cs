@@ -668,6 +668,290 @@ namespace DicomSCP.Controllers
             return (mediaType, targetTransferSyntax);
         }
 
+        // WADO-RS: 检索序列元数据
+        [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}/metadata")]
+        [Produces("application/dicom+json")]
+        public async Task<IActionResult> GetSeriesMetadata(string studyInstanceUid, string seriesInstanceUid)
+        {
+            // 需要排除的标签
+            var excludedTags = new HashSet<DicomTag>
+            {
+                // 像素数据相关
+                DicomTag.PixelData,
+                DicomTag.FloatPixelData,
+                DicomTag.DoubleFloatPixelData,
+                DicomTag.OverlayData,
+                DicomTag.EncapsulatedDocument,
+                DicomTag.SpectroscopyData
+            };
+
+            // 必需包含的标签
+            var requiredTags = new HashSet<DicomTag>
+            {
+                // 文件元信息
+                DicomTag.TransferSyntaxUID,
+                DicomTag.SpecificCharacterSet,
+                
+                // Study 级别
+                DicomTag.StudyInstanceUID,
+                DicomTag.StudyDate,
+                DicomTag.StudyTime,
+                DicomTag.StudyID,
+                DicomTag.AccessionNumber,
+                DicomTag.StudyDescription,
+                
+                // Series 级别
+                DicomTag.SeriesInstanceUID,
+                DicomTag.SeriesNumber,
+                DicomTag.Modality,
+                DicomTag.SeriesDescription,
+                DicomTag.SeriesDate,
+                DicomTag.SeriesTime,
+                
+                // Instance 级别
+                DicomTag.SOPClassUID,
+                DicomTag.SOPInstanceUID,
+                DicomTag.InstanceNumber,
+                DicomTag.ImageType,
+                DicomTag.AcquisitionNumber,
+                DicomTag.AcquisitionDate,
+                DicomTag.AcquisitionTime,
+                DicomTag.ContentDate,
+                DicomTag.ContentTime,
+                
+                // 设备信息
+                DicomTag.Manufacturer,
+                DicomTag.ManufacturerModelName,
+                DicomTag.StationName,
+                
+                // 患者信息
+                DicomTag.PatientName,
+                DicomTag.PatientID,
+                DicomTag.PatientBirthDate,
+                DicomTag.PatientSex,
+                DicomTag.PatientAge,
+                DicomTag.PatientWeight,
+                DicomTag.PatientPosition,
+                
+                // 图像相关
+                DicomTag.Rows,
+                DicomTag.Columns,
+                DicomTag.BitsAllocated,
+                DicomTag.BitsStored,
+                DicomTag.HighBit,
+                DicomTag.PixelRepresentation,
+                DicomTag.SamplesPerPixel,
+                DicomTag.PhotometricInterpretation,
+                DicomTag.PlanarConfiguration,
+                DicomTag.RescaleIntercept,
+                DicomTag.RescaleSlope,
+                
+                // 空间信息
+                DicomTag.ImageOrientationPatient,
+                DicomTag.ImagePositionPatient,
+                DicomTag.SliceLocation,
+                DicomTag.SliceThickness,
+                DicomTag.PixelSpacing,
+                DicomTag.WindowCenter,
+                DicomTag.WindowWidth,
+                DicomTag.WindowCenterWidthExplanation,
+                
+                // 扫描参数
+                DicomTag.KVP,
+                DicomTag.ExposureTime,
+                DicomTag.XRayTubeCurrent,
+                DicomTag.Exposure,
+                DicomTag.ConvolutionKernel,
+                DicomTag.PatientOrientation,
+                DicomTag.ImageComments,
+                
+                // 多帧相关
+                DicomTag.NumberOfFrames,
+                DicomTag.FrameIncrementPointer
+            };
+
+            try
+            {
+                // 1. 从数据库获取该序列的所有实例
+                var instances = _repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid);
+                if (!instances.Any())
+                {
+                    return NotFound($"未找到序列: {seriesInstanceUid}");
+                }
+
+                var metadata = new List<Dictionary<string, object>>();
+
+                // 2. 读取每个实例的 DICOM 标签
+                foreach (var instance in instances)
+                {
+                    var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
+                    if (!System.IO.File.Exists(filePath))
+                    {
+                        DicomLogger.Warning("WADO", "文件不存在: {Path}", filePath);
+                        continue;
+                    }
+
+                    try
+                    {
+                        var dicomFile = await DicomFile.OpenAsync(filePath);
+                        var tags = new Dictionary<string, object>();
+
+                        // 确保必需标签存在
+                        foreach (var tag in requiredTags)
+                        {
+                            if (dicomFile.Dataset.Contains(tag))
+                            {
+                                var tagKey = $"{tag.Group:X4}{tag.Element:X4}";
+                                var value = ConvertDicomValueToJson(dicomFile.Dataset.GetDicomItem<DicomItem>(tag));
+                                if (value != null)
+                                {
+                                    tags[tagKey] = value;
+                                }
+                            }
+                        }
+
+                        // 添加其他标签
+                        foreach (var tag in dicomFile.Dataset)
+                        {
+                            if (excludedTags.Contains(tag.Tag) || tag.Tag.IsPrivate)
+                            {
+                                continue;
+                            }
+
+                            // 跳过已处理的必需标签
+                            if (requiredTags.Contains(tag.Tag))
+                            {
+                                continue;
+                            }
+
+                            var tagKey = $"{tag.Tag.Group:X4}{tag.Tag.Element:X4}";
+                            var value = ConvertDicomValueToJson(tag);
+                            if (value != null)
+                            {
+                                tags[tagKey] = value;
+                            }
+                        }
+
+                        metadata.Add(tags);
+                    }
+                    catch (Exception ex)
+                    {
+                        DicomLogger.Error("WADO", ex, "读取DICOM文件失败: {Path}", filePath);
+                    }
+                }
+
+                return Ok(metadata);
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("WADO", ex, "获取序列元数据失败 - Study: {Study}, Series: {Series}", 
+                    studyInstanceUid, seriesInstanceUid);
+                return StatusCode(500, "获取序列元数据失败");
+            }
+        }
+
+        private object? ConvertDicomValueToJson(DicomItem item)
+        {
+            try
+            {
+                // DICOMweb JSON 格式要求
+                var result = new Dictionary<string, object?>
+                {
+                    { "vr", item.ValueRepresentation.Code }
+                };
+
+                // 根据 VR 类型处理值
+                if (item is DicomElement element)
+                {
+                    switch (item.ValueRepresentation.Code)
+                    {
+                        case "SQ":
+                            if (item is DicomSequence sq)
+                            {
+                                var items = new List<Dictionary<string, object>>();
+                                foreach (var dataset in sq.Items)
+                                {
+                                    var seqItem = new Dictionary<string, object>();
+                                    foreach (var tag in dataset)
+                                    {
+                                        var tagKey = $"{tag.Tag.Group:X4}{tag.Tag.Element:X4}";
+                                        var value = ConvertDicomValueToJson(tag);
+                                        if (value != null)
+                                        {
+                                            seqItem[tagKey] = value;
+                                        }
+                                    }
+                                    items.Add(seqItem);
+                                }
+                                if (items.Any())
+                                {
+                                    result["Value"] = items;
+                                }
+                            }
+                            break;
+
+                        case "PN":
+                            var personNames = element.Get<string[]>();
+                            result["Value"] = personNames?.Select(pn => new Dictionary<string, string>
+                            {
+                                { "Alphabetic", pn }
+                            }).ToArray() ?? Array.Empty<Dictionary<string, string>>();
+                            break;
+
+                        case "DA":
+                            var dates = element.Get<string[]>();
+                            if (dates?.Any() == true)
+                            {
+                                result["Value"] = dates.Select(x => x?.Replace("-", "")).ToArray();
+                            }
+                            break;
+
+                        case "TM":
+                            var times = element.Get<string[]>();
+                            if (times?.Any() == true)
+                            {
+                                result["Value"] = times.Select(x => x?.Replace(":", "")).ToArray();
+                            }
+                            break;
+
+                        case "AT":
+                            var tags = element.Get<DicomTag[]>();
+                            if (tags?.Any() == true)
+                            {
+                                result["Value"] = tags.Select(t => $"{t.Group:X4}{t.Element:X4}").ToArray();
+                            }
+                            break;
+
+                        default:
+                            if (element.Count > 0)
+                            {
+                                var values = element.Get<string[]>();
+                                if (values?.Any() == true)
+                                {
+                                    result["Value"] = values;
+                                }
+                                else
+                                {
+                                    result["Value"] = Array.Empty<string>();
+                                }
+                            }
+                            else
+                            {
+                                result["Value"] = Array.Empty<string>();
+                            }
+                            break;
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                DicomLogger.Error("WADO", ex, "转换DICOM标签失败: {Tag}", item.Tag);
+                return null;
+            }
+        }
+
         #endregion
 
         #region WADO-RS 缩略图接口
