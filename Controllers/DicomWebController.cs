@@ -42,17 +42,23 @@ namespace DicomSCP.Controllers
         [HttpGet("studies")]
         [Produces("application/dicom+json")]
         public async Task<IActionResult> SearchStudies(
-            [FromQuery(Name = "PatientID")] string? patientId = null,
-            [FromQuery(Name = "PatientName")] string? patientName = null,
-            [FromQuery(Name = "StudyDate")] string? studyDate = null,
-            [FromQuery(Name = "StudyInstanceUID")] string? studyInstanceUid = null,
-            [FromQuery(Name = "AccessionNumber")] string? accessionNumber = null,
-            [FromQuery(Name = "ModalitiesInStudy")] string? modalitiesInStudy = null,
+            [FromQuery(Name = "00100020")] string? patientId = null,
+            [FromQuery(Name = "00100010")] string? patientName = null,
+            [FromQuery(Name = "00080020")] string? studyDate = null,
+            [FromQuery(Name = "0020000D")] string? studyInstanceUid = null,
+            [FromQuery(Name = "00080050")] string? accessionNumber = null,
+            [FromQuery(Name = "00080061")] string? modalitiesInStudy = null,
             [FromQuery(Name = "offset")] int offset = 0,
             [FromQuery(Name = "limit")] int limit = 100)
         {
             try
             {
+                // 记录查询参数
+                DicomLogger.Information("WADO", "DICOMweb - QIDO-RS 查询研究 - 参数: PatientID={PatientID}, PatientName={PatientName}, " +
+                    "StudyDate={StudyDate}, StudyUID={StudyUID}, AccessionNumber={AccessionNumber}, Modalities={Modalities}, offset={Offset}, limit={Limit}",
+                    patientId ?? "", patientName ?? "", studyDate ?? "", studyInstanceUid ?? "", 
+                    accessionNumber ?? "", modalitiesInStudy ?? "", offset, limit);
+
                 // 构建查询请求
                 var request = new QueryRequest
                 {
@@ -75,6 +81,12 @@ namespace DicomSCP.Controllers
                     studyInstanceUid,
                     offset,  // 添加偏移量
                     limit)); // 添加每页数量
+
+                // 记录查询结果
+                DicomLogger.Information("WADO", "DICOMweb - QIDO-RS 查询研究 - 返回记录数: {Count}, 日期范围: {StartDate} - {EndDate}",
+                    studies.Count,
+                    GetStartDate(request.StudyDate)?.ToString("yyyyMMdd") ?? "",
+                    GetEndDate(request.StudyDate)?.ToString("yyyyMMdd") ?? "");
 
                 // 如果当前页数据量等于 limit，说明可能还有下一页
                 if (studies.Count >= limit)

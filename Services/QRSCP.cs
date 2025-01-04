@@ -259,7 +259,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var queryParams = ExtractStudyQueryParameters(request);
             
             DicomLogger.Information("QRSCP", "Study级查询参数 - PatientId: {PatientId}, PatientName: {PatientName}, " +
-                "AccessionNumber: {AccessionNumber}, 日期范围: {StartDate} - {EndDate}, Modality: {Modality}",
+                "AccessionNumber: {AccessionNumber}, 日期范围: {StartDate} - {EndDate}, Modality: {Modality},StudyInstanceUid: {StudyInstanceUid}",
                 queryParams.PatientId,
                 queryParams.PatientName,
                 queryParams.AccessionNumber,
