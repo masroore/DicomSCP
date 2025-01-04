@@ -265,7 +265,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 queryParams.AccessionNumber,
                 queryParams.DateRange.StartDate,
                 queryParams.DateRange.EndDate,
-                queryParams.Modalities);
+                queryParams.Modalities,
+                queryParams.StudyInstanceUid);
 
             // 从数据库查询数据
             var studies = await Task.Run(() => _repository.GetStudies(
@@ -273,7 +274,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 queryParams.PatientName,
                 queryParams.AccessionNumber,
                 queryParams.DateRange,
-                queryParams.Modalities));
+                queryParams.Modalities,
+                queryParams.StudyInstanceUid,
+                0,     // offset
+                1000   // 限制返回1000条记录
+            ));
 
             DicomLogger.Information("QRSCP", "Study级查询结果 - 记录数: {Count}", studies.Count);
 
@@ -298,7 +303,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         string PatientName,
         string AccessionNumber,
         (string StartDate, string EndDate) DateRange,
-        string[] Modalities);
+        string[] Modalities,
+        string StudyInstanceUid);
 
     private StudyQueryParameters ExtractStudyQueryParameters(DicomCFindRequest request)
     {
@@ -397,7 +403,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             ProcessValue(request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty)),
             ProcessValue(request.Dataset.GetSingleValueOrDefault<string>(DicomTag.AccessionNumber, string.Empty)),
             dateRange,
-            ProcessModalities(request.Dataset));
+            ProcessModalities(request.Dataset),
+            ProcessValue(request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyInstanceUID, string.Empty)));
 
         return parameters;
     }
