@@ -26,6 +26,8 @@ COPY --from=build /app/publish .
 
 # 设置环境变量
 ENV TZ=Asia/Shanghai
+# 清空默认端口设置
+ENV ASPNETCORE_HTTP_PORTS=""  
 
 # 暴露端口
 EXPOSE 5000 11112 11113 11114 11115
