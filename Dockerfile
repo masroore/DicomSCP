@@ -26,6 +26,7 @@ COPY --from=build /app/publish .
 
 # 设置环境变量
 ENV TZ=Asia/Shanghai
+ENV ASPNETCORE_URLS=http://+:5000
 
 # 暴露端口
 EXPOSE 5000 11112 11113 11114 11115
