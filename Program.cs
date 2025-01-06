@@ -11,8 +11,21 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Rewrite;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 在 Docker 环境中禁用数据保护和端口警告
+if (!OperatingSystem.IsWindows())  // Linux/Docker 环境
+{
+    // 1. 使用内存存储数据保护密钥
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(Path.GetTempPath()))  // 使用临时目录
+        .SetApplicationName("DicomSCP");
+    
+    // 2. 明确配置 Kestrel 端口，避免端口冲突
+    builder.WebHost.UseUrls("http://*:8080");
+}
 
 // 配置控制台（跨平台支持）
 if (Environment.UserInteractive)

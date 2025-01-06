@@ -26,12 +26,6 @@ COPY --from=build /app/publish .
 
 # 设置环境变量
 ENV TZ=Asia/Shanghai
-# 禁用所有数据保护功能
-ENV ASPNETCORE_DATA_PROTECTION_ENABLED=false
-# 使用内存存储密钥
-ENV ASPNETCORE_DATA_PROTECTION_INMEMORY=true
-# 使用配置文件中的端口
-ENV ASPNETCORE_PREVENTLISTENING=true
 
 # 暴露端口
 EXPOSE 8080 11112 11113 11114 11115
