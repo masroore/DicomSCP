@@ -28,7 +28,7 @@ COPY --from=build /app/publish .
 ENV TZ=Asia/Shanghai
 
 # 暴露端口
-EXPOSE 8080 11112 11113 11114 11115
+EXPOSE 5000 11112 11113 11114 11115
 
 # 设置入口点
 ENTRYPOINT ["dotnet", "DicomSCP.dll"] 

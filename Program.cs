@@ -14,23 +14,6 @@ using Microsoft.AspNetCore.Rewrite;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 在 Docker 环境中禁用数据保护和端口警告
-if (!OperatingSystem.IsWindows())  // Linux/Docker 环境
-{
-    // 1. 配置 Cookie 认证不使用数据保护
-    builder.Services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
-    {
-        options.Cookie.Name = "DicomSCP";
-        options.DataProtectionProvider = null;
-    });
-    
-    // 2. 在 Linux 环境下配置 Kestrel
-    builder.WebHost.ConfigureKestrel(options =>
-    {
-        options.ListenAnyIP(8080);
-    });
-}
-
 // 配置控制台（跨平台支持）
 if (Environment.UserInteractive)
 {
