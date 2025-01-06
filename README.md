@@ -217,6 +217,25 @@
 4. 访问 http://localhost:5000  
 5. 默认账号 admin / admin
 
+## docker容器部署
+appsettings.json需要先在宿主机目录下创建好！
+
+```
+docker run  \
+  -p 5000:5000 \
+  -p 11112-11115:11112-11115 \
+  -v /opt/docker/dicomscp/keys:/root/.aspnet/DataProtection-Keys \
+  -v /opt/docker/dicomscp/logs:/app/logs \
+  -v /opt/docker/dicomscp/received_files:/app/received_files \
+  -v /opt/docker/dicomscp/temp_files:/app/temp_files \
+  -v /opt/docker/dicomscp/appsettings.json:/app/appsettings.json \
+  -v /opt/docker/dicomscp/db:/app/db \
+  fightroad/dicomscp:latest
+
+```
+
+
+
 ## 技术栈
 
 - 后端框架：.NET Core
