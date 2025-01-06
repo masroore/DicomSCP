@@ -11,17 +11,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Rewrite;
-using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// 在 Linux 环境下配置数据保护
-if (!OperatingSystem.IsWindows())
-{
-    builder.Services.AddDataProtection()
-        .SetApplicationName("DicomSCP")
-        .DisableAutomaticKeyGeneration();  // 禁用自动密钥生成
-}
 
 // 配置控制台（跨平台支持）
 if (Environment.UserInteractive)
