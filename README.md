@@ -166,7 +166,6 @@
   - 研究级查询 (Study Level Query)
     ```
     GET /dicomweb/studies?PatientID={patientID}&PatientName={patientName}&StudyDate={date}&offset={offset}&limit={limit}
-
     ```
     - 支持多种查询参数（PatientID、PatientName、StudyDate等）
     - 支持分页功能（offset/limit）
@@ -176,7 +175,6 @@
   - 序列级查询 (Series Level Query)
     ```
     GET /dicomweb/studies/{studyUID}/series?SeriesInstanceUID={seriesUID}&Modality={modality}
-
     ```
     - 支持序列 UID 过滤
     - 支持模态过滤
@@ -186,7 +184,6 @@
   - 实例级查询 (Instance Level Query)
     ```
     GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances?SOPInstanceUID={instanceUID}
-
     ```
     - 支持 SOP 实例 UID 过滤
     - 返回实例详细信息
@@ -224,6 +221,20 @@ docker run -d --name DicomSCP --restart unless-stopped \
   -v /opt/docker/dicomscp/db:/app/db \
   fightroad/dicomscp:latest
 
+```
+
+## nginx反向代理
+
+```
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host:$server_port;
+		    proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header REMOTE-HOST $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_http_version 1.1;
 ```
 
 ## 技术栈
