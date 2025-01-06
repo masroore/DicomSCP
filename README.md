@@ -1,7 +1,7 @@
 # DICOM 管理系统
 
 ## 携手CURSOR重磅发布，打造中文开源社区最完善轻量PACS系统，医学影像工程师必备DICOM工具箱!
-基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO服务，集成了功能强大的DICOM 桌面和Web查看器。
+基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO/DicomWeb服务，集成了功能强大的DICOM 桌面和Web查看器。
 
 - [项目Gitee仓库](https://gitee.com/fightroad/DicomSCP)
 
