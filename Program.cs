@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Rewrite;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -228,6 +229,12 @@ var rewriteOptions = new RewriteOptions()
         "/dicomviewer/index.html", 
         skipRemainingRules: true
     );
+
+// 配置数据保护
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "keys")))
+    .SetDefaultKeyLifetime(TimeSpan.FromDays(14))  // 设置密钥有效期
+    .SetApplicationName("DicomSCP");  // 设置应用名称
 
 var app = builder.Build();
 
