@@ -165,40 +165,32 @@
 - **QIDO-RS 服务 (Query based on ID for DICOM Objects - RESTful Services)**
   - 研究级查询 (Study Level Query)
     ```
-    GET /dicomweb/studies?
-      PatientID={patientID}&
-      PatientName={patientName}&
-      StudyDate={date}&
-      offset={offset}&
-      limit={limit}
+    GET /dicomweb/studies?PatientID={patientID}&PatientName={patientName}&StudyDate={date}&offset={offset}&limit={limit}
+
     ```
     - 支持多种查询参数（PatientID、PatientName、StudyDate等）
     - 支持分页功能（offset/limit）
-    - 支持字段过滤（includefield）
     - 支持模糊匹配
     - 返回符合 DICOMweb 标准的 JSON 格式
 
   - 序列级查询 (Series Level Query)
     ```
-    GET /dicomweb/studies/{studyUID}/series?
-      SeriesInstanceUID={seriesUID}&
-      Modality={modality}
+    GET /dicomweb/studies/{studyUID}/series?SeriesInstanceUID={seriesUID}&Modality={modality}
+
     ```
     - 支持序列 UID 过滤
     - 支持模态过滤
     - 返回序列详细信息
-    - 支持字段过滤
     - 符合 DICOMweb JSON 格式规范
 
   - 实例级查询 (Instance Level Query)
     ```
-    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances?
-      SOPInstanceUID={instanceUID}
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances?SOPInstanceUID={instanceUID}
+
     ```
     - 支持 SOP 实例 UID 过滤
     - 返回实例详细信息
     - 包含图像参数信息
-    - 支持字段过滤
 
 ## 系统要求
 
