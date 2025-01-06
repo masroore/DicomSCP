@@ -21,9 +21,6 @@ RUN apt-get update \
     && apt-get install -y sqlite3 libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建密钥目录
-RUN mkdir -p keys && chmod 700 keys
-
 # 复制发布的应用
 COPY --from=build /app/publish .
 
@@ -31,7 +28,7 @@ COPY --from=build /app/publish .
 ENV TZ=Asia/Shanghai
 
 # 暴露端口
-EXPOSE 5000 11112 11113 11114 11115
+EXPOSE 8080 11112 11113 11114 11115
 
 # 设置入口点
 ENTRYPOINT ["dotnet", "DicomSCP.dll"] 

@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.Authentication;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -233,8 +235,13 @@ var rewriteOptions = new RewriteOptions()
 // 配置数据保护
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "keys")))
-    .SetDefaultKeyLifetime(TimeSpan.FromDays(14))  // 设置密钥有效期
-    .SetApplicationName("DicomSCP");  // 设置应用名称
+    .SetDefaultKeyLifetime(TimeSpan.FromDays(14))
+    .UseCryptographicAlgorithms(new AuthenticatedEncryptorConfiguration()
+    {
+        EncryptionAlgorithm = EncryptionAlgorithm.AES_256_CBC,
+        ValidationAlgorithm = ValidationAlgorithm.HMACSHA256
+    })
+    .SetApplicationName("DicomSCP");
 
 var app = builder.Build();
 
