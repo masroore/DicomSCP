@@ -221,7 +221,7 @@
 appsettings.json需要先在宿主机目录下创建好！
 
 ```
-docker run  \
+docker run -d --name DicomSCP --restart unless-stopped \
   -p 5000:5000 \
   -p 11112-11115:11112-11115 \
   -v /opt/docker/dicomscp/keys:/root/.aspnet/DataProtection-Keys \
@@ -233,8 +233,6 @@ docker run  \
   fightroad/dicomscp:latest
 
 ```
-
-
 
 ## 技术栈
 
