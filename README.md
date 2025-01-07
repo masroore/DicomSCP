@@ -12,19 +12,19 @@
 
 ## 支持项目
 
-如果这个项目对您有帮助，欢迎打赏支持我们继续改进！
+如果这个项目对您有帮助，欢迎赞助支持我们继续改进！
 
 <table>
   <tr>
     <td align="center">
-      <img src="about/wechat.png" alt="微信打赏" width="200"/>
+      <img src="about/wechat.png" alt="微信赞助" width="200"/>
       <br/>
-      微信打赏
+      微信赞助
     </td>
     <td align="center">
-      <img src="about/alipay.png" alt="支付宝打赏" width="200"/>
+      <img src="about/alipay.png" alt="支付宝赞助" width="200"/>
       <br/>
-      支付宝打赏
+      支付宝赞助
     </td>
   </tr>
 </table>
