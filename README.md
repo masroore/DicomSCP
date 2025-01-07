@@ -1,7 +1,10 @@
 # DICOM 管理系统
 
-## 携手CURSOR重磅发布，打造中文开源社区最完善轻量PACS系统，医学影像工程师必备DICOM工具箱!
-基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO/DicomWeb服务，集成了功能强大的DICOM 桌面和Web查看器。
+## 携手Cursor重磅发布，打造中文开源社区最完善轻量PACS系统，医学影像工程师必备DICOM工具箱!
+
+- 基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO/DicomWeb服务，集成了功能强大的DICOM 桌面和Web查看器。
+
+- 项目支持跨平台，windows直接下载发布版本运行，linux直接使用docker部署。 weasis查看影像需要客户端电脑安装了才能调用。
 
 - [项目Gitee仓库](https://gitee.com/fightroad/DicomSCP)
 
@@ -194,8 +197,8 @@
 - Windows 10/11 或 Windows Server 2016+
 - .NET 8.0 或更高版本
 - SQLite 3.x
-- 2GB+ RAM
-- 1GB+ 可用磁盘空间
+- 4GB+ RAM
+- 10GB+ 可用磁盘空间
 - 现代浏览器（Chrome/Firefox/Edge）
 
 ## 快速开始
@@ -206,7 +209,7 @@
 4. 访问 http://localhost:5000  
 5. 默认账号 admin / admin
 
-## docker容器部署
+## Docker部署
 appsettings.json需要先在宿主机目录下创建好！
 
 ```
@@ -223,18 +226,18 @@ docker run -d --name DicomSCP --restart unless-stopped \
 
 ```
 
-## nginx反向代理
+## Nginx反向代理
 
 ```
-        proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host $host:$server_port;
-		    proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header REMOTE-HOST $remote_addr;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_http_version 1.1;
+proxy_pass http://127.0.0.1:5000;
+proxy_set_header Host $host:$server_port;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header REMOTE-HOST $remote_addr;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "Upgrade";
+proxy_http_version 1.1;
 ```
 
 ## 技术栈
@@ -277,9 +280,9 @@ docker run -d --name DicomSCP --restart unless-stopped \
 我们非常欢迎您的贡献！如果您有任何想法或建议：
 
 1. Fork 本仓库
-2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交您的更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
+2. 创建您的特性分支
+3. 提交您的更改
+4. 推送到分支
 5. 打开一个 Pull Request
 
 您也可以通过以下方式参与：
