@@ -214,7 +214,7 @@ public class PrintScuController : ControllerBase
                 NumberOfCopies = printJob.NumberOfCopies,
                 FilmOrientation = printJob.FilmOrientation,
                 FilmSizeID = printJob.FilmSizeID,
-                ImageDisplayFormat = printJob.ImageDisplayFormat,
+                ImageDisplayFormat = "STANDARD\\1,1",  // 固定为1,1布局
                 MagnificationType = printJob.MagnificationType,
                 SmoothingType = printJob.SmoothingType,
                 BorderDensity = printJob.BorderDensity,

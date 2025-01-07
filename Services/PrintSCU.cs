@@ -24,7 +24,8 @@ public class PrintSCU : IPrintSCU
     // DICOM 打印常量
     private static class PrintConstants
     {
-        public static readonly string[] PrintPriorities = { "HIGH", "MEDIUM", "LOW" };
+        // DICOM标准值
+        public static readonly string[] PrintPriorities = { "HIGH", "MED", "LOW" };
         public static readonly string[] MediumTypes = { "PAPER", "CLEAR FILM", "BLUE FILM" };
         public static readonly string[] FilmDestinations = { "MAGAZINE", "PROCESSOR", "BIN_1", "BIN_2" };
         public static readonly string[] FilmOrientations = { "PORTRAIT", "LANDSCAPE" };
@@ -36,21 +37,21 @@ public class PrintSCU : IPrintSCU
             "REPLICATE", "BILINEAR", "CUBIC", "NONE" 
         };
         public static readonly string[] SmoothingTypes = { 
-            "NONE", "LOW", "MEDIUM", "HIGH" 
+            "NONE", "MEDIUM", "SMOOTH"  // 修正为标准值
         };
         public static readonly string[] Densities = { "BLACK", "WHITE" };
         public static readonly string[] TrimOptions = { "YES", "NO" };
 
-        // 默认值
-        public const string DefaultPriority = "MEDIUM";
+        // 默认值 - 使用DICOM标准值
+        public const string DefaultPriority = "MED";
         public const string DefaultMediumType = "BLUE FILM";
         public const string DefaultDestination = "PROCESSOR";
         public const string DefaultOrientation = "PORTRAIT";
         public const string DefaultSize = "14INX17IN";
         public const string DefaultDisplayFormat = "STANDARD\\1,1";
         public const string DefaultMagnification = "REPLICATE";
-        public const string DefaultSmoothing = "MEDIUM";
-        public const string DefaultDensity = "WHITE";
+        public const string DefaultSmoothing = "MEDIUM";  // 修正为标准值
+        public const string DefaultDensity = "BLACK";
         public const string DefaultTrim = "NO";
     }
 
@@ -99,30 +100,50 @@ public class PrintSCU : IPrintSCU
         if (request.NumberOfCopies < 1)
             request.NumberOfCopies = 1;
         if (string.IsNullOrEmpty(request.PrintPriority))
-            request.PrintPriority = "MEDIUM";
+            request.PrintPriority = PrintConstants.DefaultPriority;
         if (string.IsNullOrEmpty(request.MediumType))
-            request.MediumType = "BLUE FILM";
+            request.MediumType = PrintConstants.DefaultMediumType;
         if (string.IsNullOrEmpty(request.FilmDestination))
-            request.FilmDestination = "PROCESSOR";
+            request.FilmDestination = PrintConstants.DefaultDestination;
         if (string.IsNullOrEmpty(request.FilmOrientation))
-            request.FilmOrientation = "PORTRAIT";
+            request.FilmOrientation = PrintConstants.DefaultOrientation;
         if (string.IsNullOrEmpty(request.FilmSizeID))
-            request.FilmSizeID = "14INX17IN";
+            request.FilmSizeID = PrintConstants.DefaultSize;
         if (string.IsNullOrEmpty(request.ImageDisplayFormat))
-            request.ImageDisplayFormat = "STANDARD\\1,1";
+            request.ImageDisplayFormat = PrintConstants.DefaultDisplayFormat;
         if (string.IsNullOrEmpty(request.MagnificationType))
-            request.MagnificationType = "REPLICATE";
+            request.MagnificationType = PrintConstants.DefaultMagnification;
         if (string.IsNullOrEmpty(request.SmoothingType))
-            request.SmoothingType = "MEDIUM";
+            request.SmoothingType = PrintConstants.DefaultSmoothing;
         if (string.IsNullOrEmpty(request.BorderDensity))
-            request.BorderDensity = "BLACK";
+            request.BorderDensity = PrintConstants.DefaultDensity;
         if (string.IsNullOrEmpty(request.EmptyImageDensity))
-            request.EmptyImageDensity = "BLACK";
+            request.EmptyImageDensity = PrintConstants.DefaultDensity;
         if (string.IsNullOrEmpty(request.Trim))
-            request.Trim = "NO";
+            request.Trim = PrintConstants.DefaultTrim;
         if (request.EnableDpi && !request.Dpi.HasValue)
         {
-            request.Dpi = 150;  // 设置默认DPI为150
+            request.Dpi = 150;
+        }
+    }
+
+    private string NormalizeSmoothingType(string? smoothing)
+    {
+        if (string.IsNullOrEmpty(smoothing))
+            return PrintConstants.DefaultSmoothing;
+
+        switch (smoothing.ToUpper().Trim())
+        {
+            case "NONE":
+                return "NONE";
+            case "MEDIUM":
+            case "MED":
+                return "MEDIUM";
+            case "SMOOTH":
+            case "HIGH":
+                return "SMOOTH";
+            default:
+                return PrintConstants.DefaultSmoothing;
         }
     }
 
@@ -171,7 +192,7 @@ public class PrintSCU : IPrintSCU
             case "MEDIUM":
             case "MED":
             case "M":
-                request.PrintPriority = "MEDIUM";
+                request.PrintPriority = "MED";
                 break;
             case "LOW":
             case "LO":
@@ -183,6 +204,9 @@ public class PrintSCU : IPrintSCU
                     request.PrintPriority ?? "NULL");
                 return false;
         }
+
+        // 标准化平滑类型
+        request.SmoothingType = NormalizeSmoothingType(request.SmoothingType);
 
         // 验证打印参数
         if (!PrintConstants.MediumTypes.Contains(request.MediumType))
