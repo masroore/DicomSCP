@@ -158,19 +158,45 @@
 
   - 缩略图服务 (Thumbnail)
     ```
-    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/thumbnail
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/thumbnail?size={size}
+    GET /dicomweb/studies/{studyUID}/series/{seriesUID}/thumbnail?viewport={viewport}
     ```
     - 支持自定义尺寸
+      - size: 指定输出图像大小（可选，默认 128）
+      - viewport: 指定视口大小（可选，与 size 参数互斥）
     - 保持图像宽高比
     - JPEG 格式输出
-    - 优化的图像质量
+    - 示例：
+      ```
+      /dicomweb/studies/1.2.3/series/4.5.6/thumbnail?size=256
+      /dicomweb/studies/1.2.3/series/4.5.6/thumbnail?viewport=512
+      ```
 
 - **QIDO-RS 服务 (Query based on ID for DICOM Objects - RESTful Services)**
   - 研究级查询 (Study Level Query)
     ```
-    GET /dicomweb/studies?PatientID={patientID}&PatientName={patientName}&StudyDate={date}&offset={offset}&limit={limit}
+    # DICOMweb 标准格式
+    GET /dicomweb/studies?00100020={patientID}&00100010={patientName}&00080020={date}&00200010={accessionNumber}&0020000D={studyUID}&00080060={modality}&offset={offset}&limit={limit}&fuzzy=true
+    
+    # 友好格式（兼容）
+    GET /dicomweb/studies?PatientID={patientID}&PatientName={patientName}&StudyDate={date}&AccessionNumber={accessionNumber}&StudyInstanceUID={studyUID}&Modality={modality}&offset={offset}&limit={limit}&fuzzy=true
     ```
-    - 支持多种查询参数（PatientID、PatientName、StudyDate等）
+    - 支持多种查询参数：
+      - 标准 DICOM 标签格式：
+        - 00100020: 患者 ID
+        - 00100010: 患者姓名
+        - 00080020: 检查日期
+        - 00200010: 检查号
+        - 0020000D: 检查实例 UID
+        - 00080060: 检查类型/模态
+      - 友好格式（等效）：
+        - PatientID: 精确匹配或模糊匹配 (例如: "P123*" 匹配所有以 P123 开头的ID)
+        - PatientName: 支持通配符 (例如: "*张*" 匹配包含"张"的姓名)
+        - StudyDate: 支持日期范围 (例如: "20240101-20240131" 表示1月份的数据)
+        - AccessionNumber: 检查号匹配
+        - StudyInstanceUID: 检查实例 UID 精确匹配
+        - Modality: 检查类型/模态 (例如: "CT" 或 "CT\MR" 支持多值)
+        - fuzzy: 设置为 true 时启用模糊匹配
     - 支持分页功能（offset/limit）
     - 支持模糊匹配
     - 返回符合 DICOMweb 标准的 JSON 格式
@@ -180,7 +206,7 @@
     GET /dicomweb/studies/{studyUID}/series?SeriesInstanceUID={seriesUID}&Modality={modality}
     ```
     - 支持序列 UID 过滤
-    - 支持模态过滤
+    - 支持模态过滤 (例如: "CT*" 匹配所有 CT 相关模态)
     - 返回序列详细信息
     - 符合 DICOMweb JSON 格式规范
 
