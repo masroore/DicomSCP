@@ -262,8 +262,6 @@ proxy_http_version 1.1;
 - [Cornerstone.js](https://github.com/cornerstonejs/cornerstone) - 现代 Web DICOM 查看器
 - [weasis](https://github.com/nroduit/Weasis) - DICOM桌面查看器
 - [OHIF](https://github.com/OHIF/Viewers) - DICOM Web查看器
-- [dicomParser](https://github.com/cornerstonejs/dicomParser) - DICOM 解析器
-- [Hammer.js](https://github.com/hammerjs/hammer.js) - 触摸手势库
 - [Axios](https://github.com/axios/axios) - 基于 Promise 的 HTTP 客户端
 - [Bootstrap](https://github.com/twbs/bootstrap) - 前端组件库
 
