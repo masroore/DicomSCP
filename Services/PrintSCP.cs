@@ -174,10 +174,6 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            DicomLogger.Information("PrintSCP", "收到 N-CREATE 请求 - SOP Class: {SopClass}, Calling AE: {CallingAE}", 
-                request.SOPClassUID?.Name ?? "Unknown", 
-                _session.CallingAE ?? "Unknown");
-
             if (request.SOPClassUID == DicomUID.BasicFilmSession)
             {
                 return await HandleFilmSessionCreateAsync(request);
@@ -187,6 +183,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 return await HandleFilmBoxCreateAsync(request);
             }
 
+            DicomLogger.Warning("PrintSCP", "不支持的SOP Class: {SopClass}", request.SOPClassUID?.Name ?? "Unknown");
             return new DicomNCreateResponse(request, DicomStatus.SOPClassNotSupported);
         }
         catch (Exception ex)
@@ -200,6 +197,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
+            DicomLogger.Information("PrintSCP", "创建 Film Session - Calling AE: {CallingAE}", _session.CallingAE ?? "Unknown");
+            
             // 生成 FilmSessionId，不依赖 SOPInstanceUID
             var filmSessionId = DicomUID.Generate().UID;
             var printJob = new PrintJob
@@ -269,8 +268,13 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         {
             if (_session.FilmSession == null)
             {
+                DicomLogger.Warning("PrintSCP", "无法创建 Film Box - Film Session 不存在");
                 return new DicomNCreateResponse(request, DicomStatus.NoSuchObjectInstance);
             }
+
+            DicomLogger.Information("PrintSCP", "创建 Film Box - Film Session: {SessionId}, Calling AE: {CallingAE}", 
+                _session.FilmSession.SOPInstanceUID,
+                _session.CallingAE ?? "Unknown");
 
             // 生成 FilmBoxId
             var filmBoxId = DicomUID.Generate().UID;
