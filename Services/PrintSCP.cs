@@ -469,10 +469,11 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             // 计算分割线
             const int lineWidth = 1;  // 分割线宽度
             var totalSlots = rows * columns;
+            var isSingleImage = totalSlots == 1;  // 判断是否为单图布局
 
             // 计算每个图像的尺寸（不包括分割线）
-            var imageWidth = (filmWidth - (columns - 1) * lineWidth) / columns;
-            var imageHeight = (filmHeight - (rows - 1) * lineWidth) / rows;
+            var imageWidth = isSingleImage ? filmWidth : (filmWidth - (columns - 1) * lineWidth) / columns;
+            var imageHeight = isSingleImage ? filmHeight : (filmHeight - (rows - 1) * lineWidth) / rows;
 
             // 创建输出数据集
             var outputDataset = CreateOutputDataset(_session.CachedImages.First().Value, filmWidth, filmHeight);
@@ -485,50 +486,53 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 int col = (position - 1) % columns;
 
                 // 计算图像位置（考虑分割线）
-                int xBase = col * (imageWidth + lineWidth);
-                int yBase = row * (imageHeight + lineWidth);
+                int xBase = isSingleImage ? 0 : col * (imageWidth + lineWidth);
+                int yBase = isSingleImage ? 0 : row * (imageHeight + lineWidth);
 
                 if (_session.CachedImages.TryGetValue(position, out var image))
                 {
-                    ProcessImage(image, pixels, xBase, yBase, imageWidth, imageHeight, filmWidth);
+                    ProcessImage(image, pixels, xBase, yBase, imageWidth, imageHeight, filmWidth, isSingleImage);
                 }
                 else
                 {
-                    DrawEmptyImage(pixels, xBase, yBase, imageWidth, imageHeight, filmWidth);
+                    DrawEmptyImage(pixels, xBase, yBase, imageWidth, imageHeight, filmWidth, isSingleImage);
                 }
             }
 
-            // 绘制分割线和边框
-            // 绘制垂直线（包括左右边框）
-            for (int i = 0; i <= columns; i++)
+            // 只在多图布局时绘制分割线和边框
+            if (!isSingleImage)
             {
-                int x = i * (imageWidth + lineWidth) - lineWidth;
-                if (i == 0) x = 0;  // 左边框
-                if (i == columns) x = filmWidth - 1;  // 右边框
-                
-                for (int y = 0; y < filmHeight; y++)
+                // 绘制垂直线（包括左右边框）
+                for (int i = 0; i <= columns; i++)
                 {
-                    var index = y * filmWidth + x;
-                    if (index < pixels.Length)
+                    int x = i * (imageWidth + lineWidth) - lineWidth;
+                    if (i == 0) x = 0;  // 左边框
+                    if (i == columns) x = filmWidth - 1;  // 右边框
+                    
+                    for (int y = 0; y < filmHeight; y++)
                     {
-                        pixels[index] = 255;  // 白色线
+                        var index = y * filmWidth + x;
+                        if (index < pixels.Length)
+                        {
+                            pixels[index] = 255;  // 白色线
+                        }
                     }
                 }
-            }
 
-            // 绘制水平线（包括上下边框）
-            for (int i = 0; i <= rows; i++)
-            {
-                int y = i * (imageHeight + lineWidth) - lineWidth;
-                if (i == 0) y = 0;  // 上边框
-                if (i == rows) y = filmHeight - 1;  // 下边框
-                
-                for (int x = 0; x < filmWidth; x++)
+                // 绘制水平线（包括上下边框）
+                for (int i = 0; i <= rows; i++)
                 {
-                    var index = y * filmWidth + x;
-                    if (index < pixels.Length)
+                    int y = i * (imageHeight + lineWidth) - lineWidth;
+                    if (i == 0) y = 0;  // 上边框
+                    if (i == rows) y = filmHeight - 1;  // 下边框
+                    
+                    for (int x = 0; x < filmWidth; x++)
                     {
-                        pixels[index] = 255;  // 白色线
+                        var index = y * filmWidth + x;
+                        if (index < pixels.Length)
+                        {
+                            pixels[index] = 255;  // 白色线
+                        }
                     }
                 }
             }
@@ -572,13 +576,13 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         return dataset;
     }
 
-    private void ProcessImage(DicomDataset image, byte[] pixels, int xBase, int yBase, int maxWidth, int maxHeight, int filmWidth)
+    private void ProcessImage(DicomDataset image, byte[] pixels, int xBase, int yBase, int maxWidth, int maxHeight, int filmWidth, bool isSingleImage)
     {
         try
         {
             if (image == null || !image.Contains(DicomTag.PixelData))
             {
-                DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth);
+                DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth, isSingleImage);
                 return;
             }
 
@@ -588,12 +592,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             if (srcWidth == 0 || srcHeight == 0 || pixelData == null || pixelData.Length == 0)
             {
-                DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth);
+                DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth, isSingleImage);
                 return;
             }
 
-            // 在每个分格中留出2%的边距
-            const double marginPercent = 0.02;
+            // 在多图布局时才添加边距
+            double marginPercent = isSingleImage ? 0 : 0.02;
             var marginX = (int)(maxWidth * marginPercent);
             var marginY = (int)(maxHeight * marginPercent);
             var availableWidth = maxWidth - 2 * marginX;
@@ -631,14 +635,14 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         catch (Exception ex)
         {
             DicomLogger.Error("PrintSCP", ex, "处理图像时发生错误");
-            DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth);
+            DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth, isSingleImage);
         }
     }
 
-    private void DrawEmptyImage(byte[] pixels, int xBase, int yBase, int maxWidth, int maxHeight, int filmWidth)
+    private void DrawEmptyImage(byte[] pixels, int xBase, int yBase, int maxWidth, int maxHeight, int filmWidth, bool isSingleImage)
     {
-        // 在每个分格中留出2%的边距
-        const double marginPercent = 0.02;
+        // 在多图布局时才添加边距
+        double marginPercent = isSingleImage ? 0 : 0.02;
         var marginX = (int)(maxWidth * marginPercent);
         var marginY = (int)(maxHeight * marginPercent);
 
