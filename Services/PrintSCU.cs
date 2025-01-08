@@ -397,47 +397,101 @@ public class PrintSCU : IPrintSCU
 
             var file = await LoadDicomFileAsync(request.FilePath);
 
-            var filmSessionUid = DicomUID.Generate();
-            var filmBoxUid = DicomUID.Generate();
-            var imageBoxUid = DicomUID.Generate();
-
             // 创建一个客户端用于打印过程
             var client = CreateClient(request.HostName, request.Port, _aeTitle, request.CalledAE);
 
-            // 创建所有请求
-            var allRequests = new List<DicomRequest>
+            // 1. 创建 Film Session
+            var filmSessionRequest = new DicomNCreateRequest(DicomUID.BasicFilmSession, DicomUID.Generate());
+            filmSessionRequest.Dataset = CreateFilmSessionDataset(request);
+
+            DicomResponse? filmSessionResponse = null;
+            filmSessionRequest.OnResponseReceived = async (req, res) =>
             {
-                // 1. 创建 Film Session
-                new DicomNCreateRequest(DicomUID.BasicFilmSession, filmSessionUid)
+                filmSessionResponse = res;
+                if (res.Status.State != DicomState.Success)
                 {
-                    Dataset = CreateFilmSessionDataset(request)
-                },
+                    DicomLogger.Error("PrintSCU", "创建 Film Session 失败: {Status}", res.Status);
+                    return;
+                }
+
+                var filmSessionUid = res.Command.GetString(DicomTag.AffectedSOPInstanceUID) ?? 
+                    throw new DicomDataException("Film Session UID 不能为空");
+                DicomLogger.Information("PrintSCU", "Film Session 创建成功, UID: {Uid}", filmSessionUid);
 
                 // 2. 创建 Film Box
-                new DicomNCreateRequest(DicomUID.BasicFilmBox, filmBoxUid)
+                var filmBoxRequest = new DicomNCreateRequest(DicomUID.BasicFilmBox, DicomUID.Generate());
+                filmBoxRequest.Dataset = CreateFilmBoxDataset(request);
+                filmBoxRequest.Dataset.Add(DicomTag.ReferencedFilmSessionSequence, new DicomDataset[] 
                 {
-                    Dataset = CreateFilmBoxDataset(request)
-                },
+                    new DicomDataset 
+                    {
+                        { DicomTag.ReferencedSOPClassUID, DicomUID.BasicFilmSession },
+                        { DicomTag.ReferencedSOPInstanceUID, filmSessionUid }
+                    }
+                });
 
-                // 3. 设置 Image Box
-                new DicomNSetRequest(DicomUID.BasicGrayscaleImageBox, imageBoxUid)
+                DicomResponse? filmBoxResponse = null;
+                filmBoxRequest.OnResponseReceived = async (fbReq, fbRes) =>
                 {
-                    Dataset = CreateImageBoxDataset(file)
-                },
+                    filmBoxResponse = fbRes;
+                    if (fbRes.Status.State != DicomState.Success)
+                    {
+                        DicomLogger.Error("PrintSCU", "创建 Film Box 失败: {Status}", fbRes.Status);
+                        return;
+                    }
 
-                // 4. 打印操作
-                new DicomNActionRequest(DicomUID.BasicFilmSession, filmSessionUid, 1)
+                    var imageBoxSequence = fbRes.Dataset?.GetSequence(DicomTag.ReferencedImageBoxSequence);
+                    if (imageBoxSequence == null || !imageBoxSequence.Items.Any())
+                    {
+                        DicomLogger.Error("PrintSCU", "未找到 Image Box 引用");
+                        return;
+                    }
+
+                    var imageBoxItem = imageBoxSequence.Items[0];
+                    var imageBoxClassUid = imageBoxItem.GetSingleValue<DicomUID>(DicomTag.ReferencedSOPClassUID);
+                    var imageBoxInstanceUid = imageBoxItem.GetSingleValue<DicomUID>(DicomTag.ReferencedSOPInstanceUID);
+
+                    DicomLogger.Information("PrintSCU", "获取到 Image Box 引用 - Class: {Class}, Instance: {Instance}", 
+                        imageBoxClassUid, imageBoxInstanceUid);
+
+                    // 3. 设置 Image Box
+                    var imageBoxRequest = new DicomNSetRequest(imageBoxClassUid, imageBoxInstanceUid);
+                    imageBoxRequest.Dataset = CreateImageBoxDataset(file);
+
+                    DicomResponse? imageBoxResponse = null;
+                    imageBoxRequest.OnResponseReceived = async (ibReq, ibRes) =>
+                    {
+                        imageBoxResponse = ibRes;
+                        if (ibRes.Status.State != DicomState.Success)
+                        {
+                            DicomLogger.Error("PrintSCU", "设置 Image Box 失败: {Status}", ibRes.Status);
+                            return;
+                        }
+
+                        // 4. 打印操作
+                        var printRequest = new DicomNActionRequest(DicomUID.BasicFilmSession, DicomUID.Parse(filmSessionUid), 1);
+                        DicomResponse? printResponse = null;
+                        printRequest.OnResponseReceived = (pReq, pRes) => printResponse = pRes;
+                        await client.AddRequestAsync(printRequest);
+                        await client.SendAsync();
+
+                        // 打印响应为 null 是正常的,不需要检查状态
+                        DicomLogger.Information("PrintSCU", "打印任务已发送到打印机");
+
+                        DicomLogger.Information("PrintSCU", "打印任务完成");
+                    };
+
+                    await client.AddRequestAsync(imageBoxRequest);
+                    await client.SendAsync();
+                };
+
+                await client.AddRequestAsync(filmBoxRequest);
+                await client.SendAsync();
             };
 
-            // 发送所有请求
-            DicomLogger.Information("PrintSCU", "开始发送打印请求序列");
-            foreach (var req in allRequests)
-            {
-                await client.AddRequestAsync(req);
-            }
-
+            await client.AddRequestAsync(filmSessionRequest);
             await client.SendAsync();
-            DicomLogger.Information("PrintSCU", "打印任务完成");
+
             return true;
         }
         catch (Exception ex)
