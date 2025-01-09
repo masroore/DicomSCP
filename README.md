@@ -51,6 +51,7 @@
 ![查询检索](about/qrscu.png) 
 ![发送图像](about/发送图像.png)  
 ![打印](about/打印管理.png)  
+![胶片](about/print.png)  
 ![配置](about/settings.png) 
 ![日志](about/logs.png) 
 ![监控](about/status.png) 
