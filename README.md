@@ -6,6 +6,8 @@
 
 - 项目支持跨平台，windows直接下载发布版本运行，linux直接使用docker部署。 weasis查看影像需要客户端电脑安装了才能调用。
 
+- 推荐使用 [Docker部署](#Docker部署)，推送会自动更新镜像。其他版本可以自行拉取dev分支构建。
+
 - [项目Gitee仓库](https://gitee.com/fightroad/DicomSCP)
 
 - [项目GitHub仓库](https://github.com/fightroad/DicomSCP)
