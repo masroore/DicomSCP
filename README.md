@@ -4,7 +4,7 @@
 
 - 基于 .NET Core 的 DICOM SCP（Service Class Provider）服务器，提供 DICOM 存储、工作列表、查询检索服务，打印服务，WADO/DicomWeb服务，集成了功能强大的DICOM 桌面和Web查看器。
 
-- 项目支持跨平台，windows直接下载发布版本运行，linux直接使用docker部署。 weasis查看影像需要客户端电脑安装了才能调用。
+- 项目支持跨平台，windows直接下载发布版本运行，linux直接使用[Docker部署](#docker部署) 。 weasis查看影像需要客户端电脑安装了才能调用。
 
 - 推荐使用 [Docker部署](#docker部署) 推送会自动更新镜像。其他版本可以自行拉取dev分支构建。
 
