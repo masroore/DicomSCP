@@ -18,17 +18,11 @@ public class StoreSCU : IStoreSCU
 {
     private readonly QueryRetrieveConfig _config;
     private readonly string _callingAE;
-    private readonly int _localPort;
-    private readonly ILoggerFactory _loggerFactory;
 
-    public StoreSCU(
-        IOptions<QueryRetrieveConfig> config,
-        ILoggerFactory loggerFactory)
+    public StoreSCU(IOptions<QueryRetrieveConfig> config)
     {
         _config = config.Value;
         _callingAE = _config.LocalAeTitle;
-        _localPort = _config.LocalPort;
-        _loggerFactory = loggerFactory;
     }
 
     private IDicomClient CreateClient(RemoteNode node)
