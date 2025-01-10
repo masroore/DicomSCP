@@ -8,9 +8,6 @@ public class QueryRetrieveConfig
     [RegularExpression(@"^[A-Za-z0-9\-_]{1,16}$")]
     public string LocalAeTitle { get; set; } = "QRSCU";
 
-    [Range(1, 65535)]
-    public int LocalPort { get; set; } = 11116;
-
     public List<RemoteNode> RemoteNodes { get; set; } = new();
 }
 
