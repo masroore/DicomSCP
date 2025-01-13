@@ -26,12 +26,6 @@
             backdrop-filter: blur(10px);
             width: 100%;
             max-width: 420px;
-            transition: all 0.3s ease;
-        }
-
-        .login-container:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
         }
 
         .logo-container {
@@ -86,11 +80,13 @@
             top: 50%;
             transform: translateY(-50%);
             color: #95a5a6;
-            z-index: 4;
+            z-index: 10;
+            transition: color 0.3s ease;
+            pointer-events: none;
         }
 
         .input-with-icon {
-            padding-left: 2.8rem;
+            padding-left: 2.8rem !important;
         }
 
         .btn-primary {
@@ -131,6 +127,10 @@
                 padding: 2rem;
             }
         }
+
+        .input-group:focus-within .input-icon {
+            color: #3498db;
+        }
     </style>
 </head>
 <body>
@@ -145,14 +145,14 @@
                 <label class="form-label">用户名</label>
                 <div class="input-group">
                     <i class="bi bi-person input-icon"></i>
-                    <input type="text" class="form-control input-with-icon" id="username" required>
+                    <input type="text" class="form-control input-with-icon" id="username" placeholder="请输入用户名" required autofocus>
                 </div>
             </div>
             <div class="mb-3">
                 <label class="form-label">密码</label>
                 <div class="input-group">
                     <i class="bi bi-lock input-icon"></i>
-                    <input type="password" class="form-control input-with-icon" id="password" required>
+                    <input type="password" class="form-control input-with-icon" id="password" placeholder="请输入密码" required>
                 </div>
             </div>
             <div class="d-grid mt-4">
