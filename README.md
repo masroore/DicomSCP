@@ -309,6 +309,7 @@ proxy_http_version 1.1;
 - **平凡之路**
 - **QQ名：生活**
 - **GITEE名：mmkangaroo**
+- **GITEE名：wisgtalt**
 
 ## 参与贡献
 
