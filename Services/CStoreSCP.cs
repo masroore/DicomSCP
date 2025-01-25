@@ -43,7 +43,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks;
     private bool _disposed;
 
-    // 支持的压缩传输语法映射
+    // Supported compression transfer syntax mapping
     private static readonly Dictionary<string, DicomTransferSyntax> _compressionSyntaxes = new()
     {
         { "JPEG2000Lossless", DicomTransferSyntax.JPEG2000Lossless },
@@ -53,20 +53,19 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         { "JPEGProcess14", DicomTransferSyntax.JPEGProcess14SV1 }
     };
 
-    // 需要中文处理的标签
+    // Tags that need Chinese processing
     private static readonly DicomTag[] TextTags = new[]
     {
-        DicomTag.PatientName,           // 患者姓名
-        DicomTag.StudyDescription,      // 检查描述
-        DicomTag.SeriesDescription,     // 序列描述
-        DicomTag.InstitutionName       // 机构名称
-
+        DicomTag.PatientName,           // Patient Name
+        DicomTag.StudyDescription,      // Study Description
+        DicomTag.SeriesDescription,     // Series Description
+        DicomTag.InstitutionName        // Institution Name
     };
 
-    // 需要直接复制的标签（对应数据库字段）
+    // Tags that need to be directly copied (corresponding to database fields)
     private static readonly DicomTag[] RequiredTags = new[]
     {
-        // 患者基本信息
+        // Basic patient information
         DicomTag.PatientID,
         DicomTag.PatientBirthDate,
         DicomTag.PatientSex,
@@ -77,8 +76,8 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         DicomTag.StudyID,
         DicomTag.SeriesNumber,
         DicomTag.InstanceNumber,
-        
-        // 图像相关字段
+
+        // Image-related fields
         DicomTag.Columns,
         DicomTag.Rows,
         DicomTag.BitsAllocated,
@@ -104,29 +103,29 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         {
             throw new ArgumentException("Storage paths must be configured in settings");
         }
-        
+
         StoragePath = settings.StoragePath;
         TempPath = settings.TempPath;
         GlobalSettings = settings;
         _repository = repository;
-        
-        // 确保目录存在
+
+        // Ensure directories exist
         Directory.CreateDirectory(StoragePath);
         Directory.CreateDirectory(TempPath);
     }
 
     public CStoreSCP(
-        INetworkStream stream, 
-        Encoding fallbackEncoding, 
-        Microsoft.Extensions.Logging.ILogger log, 
+        INetworkStream stream,
+        Encoding fallbackEncoding,
+        Microsoft.Extensions.Logging.ILogger log,
         DicomServiceDependencies dependencies,
         IOptions<DicomSettings> settings)
         : base(stream, fallbackEncoding, log, dependencies)
     {
-        _settings = GlobalSettings ?? settings.Value 
+        _settings = GlobalSettings ?? settings.Value
             ?? throw new ArgumentNullException(nameof(settings));
-        
-        // 如果静态路径未初始化，使用配置中的值
+
+        // If static paths are not initialized, use values from configuration
         if (string.IsNullOrEmpty(StoragePath))
         {
             StoragePath = _settings.StoragePath;
@@ -137,15 +136,15 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             TempPath = _settings.TempPath;
             Directory.CreateDirectory(TempPath);
         }
-        
+
         var advancedSettings = _settings.Advanced;
 
-        DicomLogger.Debug("StoreSCP", "加载配置 - 压缩: {Enabled}, 格式: {Format}", 
+        DicomLogger.Debug("StoreSCP", "Loaded configuration - Compression: {Enabled}, Format: {Format}",
             advancedSettings.EnableCompression,
             advancedSettings.PreferredTransferSyntax);
 
-        int concurrentLimit = advancedSettings.ConcurrentStoreLimit > 0 
-            ? advancedSettings.ConcurrentStoreLimit 
+        int concurrentLimit = advancedSettings.ConcurrentStoreLimit > 0
+            ? advancedSettings.ConcurrentStoreLimit
             : Environment.ProcessorCount * 2;
         _concurrentLimit = new SemaphoreSlim(concurrentLimit);
         _fileLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
@@ -155,13 +154,13 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     {
         try
         {
-            // 验证 Called AE
+            // Validate Called AE
             var calledAE = association.CalledAE;
             var expectedAE = _settings?.AeTitle ?? string.Empty;
 
             if (!string.Equals(expectedAE, calledAE, StringComparison.OrdinalIgnoreCase))
             {
-                DicomLogger.Warning("StoreSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
+                DicomLogger.Warning("StoreSCP", "Rejecting incorrect Called AE: {CalledAE}, Expected: {ExpectedAE}",
                     calledAE, expectedAE);
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,
@@ -169,22 +168,22 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     DicomRejectReason.CalledAENotRecognized);
             }
 
-            // 验证 Calling AE
+            // Validate Calling AE
             if (string.IsNullOrEmpty(association.CallingAE))
             {
-                DicomLogger.Warning("StoreSCP", "拒绝空的 Calling AE");
+                DicomLogger.Warning("StoreSCP", "Rejecting empty Calling AE");
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,
                     DicomRejectSource.ServiceUser,
                     DicomRejectReason.CallingAENotRecognized);
             }
 
-            // 只在配置了验证时才检查 AllowedCallingAEs
+            // Only check AllowedCallingAEs if validation is configured
             if (_settings?.Advanced.ValidateCallingAE == true)
             {
                 if (!_settings.Advanced.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
                 {
-                    DicomLogger.Warning("StoreSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+                    DicomLogger.Warning("StoreSCP", "Rejecting unauthorized Calling AE: {CallingAE}", association.CallingAE);
                     return SendAssociationRejectAsync(
                         DicomRejectResult.Permanent,
                         DicomRejectSource.ServiceUser,
@@ -192,7 +191,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 }
             }
 
-            DicomLogger.Debug("StoreSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+            DicomLogger.Debug("StoreSCP", "Validation passed - Called AE: {CalledAE}, Calling AE: {CallingAE}",
                 calledAE, association.CallingAE);
 
             foreach (var pc in association.PresentationContexts)
@@ -201,11 +200,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 {
                     pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
                 }
-                else if (IsImageStorage(pc.AbstractSyntax))  // 图像存储
+                else if (IsImageStorage(pc.AbstractSyntax))  // Image storage
                 {
-                    pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);  // 使用图像传输语法
+                    pc.AcceptTransferSyntaxes(_acceptedImageTransferSyntaxes);  // Use image transfer syntaxes
                 }
-                else if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)  // 其他存储
+                else if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)  // Other storage
                 {
                     pc.AcceptTransferSyntaxes(_acceptedTransferSyntaxes);
                 }
@@ -215,7 +214,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("StoreSCP", ex, "处理关联请求失败");
+            DicomLogger.Error("StoreSCP", ex, "Failed to process association request");
             return SendAssociationRejectAsync(
                 DicomRejectResult.Permanent,
                 DicomRejectSource.ServiceUser,
@@ -225,28 +224,28 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     private bool IsImageStorage(DicomUID sopClass)
     {
-        // 检查是否是图像存储类别
+        // Check if it is an image storage category
         if (sopClass.StorageCategory == DicomStorageCategory.Image)
             return true;
 
-        // 检查特定的图像存储SOP类
-        return sopClass.Equals(DicomUID.SecondaryCaptureImageStorage) ||        // 二次获取图像
-               sopClass.Equals(DicomUID.CTImageStorage) ||                      // CT图像
-               sopClass.Equals(DicomUID.MRImageStorage) ||                      // MR图像
-               sopClass.Equals(DicomUID.UltrasoundImageStorage) ||             // 超声图像
-               sopClass.Equals(DicomUID.UltrasoundMultiFrameImageStorage) ||   // 超声多帧图像
-               sopClass.Equals(DicomUID.XRayAngiographicImageStorage) ||       // 血管造影图
-               sopClass.Equals(DicomUID.XRayRadiofluoroscopicImageStorage) ||  // X射线透视图像
-               sopClass.Equals(DicomUID.DigitalXRayImageStorageForPresentation) || // DR图像
-               sopClass.Equals(DicomUID.DigitalMammographyXRayImageStorageForPresentation) || // 乳腺X射线图像
-               sopClass.Equals(DicomUID.EnhancedCTImageStorage) ||             // 增强CT图像
-               sopClass.Equals(DicomUID.EnhancedMRImageStorage) ||             // 增强MR图像
-               sopClass.Equals(DicomUID.EnhancedXAImageStorage);               // 增强血管造影图像
+        // Check specific image storage SOP classes
+        return sopClass.Equals(DicomUID.SecondaryCaptureImageStorage) ||        // Secondary Capture Image
+               sopClass.Equals(DicomUID.CTImageStorage) ||                      // CT Image
+               sopClass.Equals(DicomUID.MRImageStorage) ||                      // MR Image
+               sopClass.Equals(DicomUID.UltrasoundImageStorage) ||              // Ultrasound Image
+               sopClass.Equals(DicomUID.UltrasoundMultiFrameImageStorage) ||    // Ultrasound Multi-frame Image
+               sopClass.Equals(DicomUID.XRayAngiographicImageStorage) ||        // X-Ray Angiographic Image
+               sopClass.Equals(DicomUID.XRayRadiofluoroscopicImageStorage) ||   // X-Ray Radiofluoroscopic Image
+               sopClass.Equals(DicomUID.DigitalXRayImageStorageForPresentation) || // Digital X-Ray Image for Presentation
+               sopClass.Equals(DicomUID.DigitalMammographyXRayImageStorageForPresentation) || // Digital Mammography X-Ray Image for Presentation
+               sopClass.Equals(DicomUID.EnhancedCTImageStorage) ||              // Enhanced CT Image
+               sopClass.Equals(DicomUID.EnhancedMRImageStorage) ||              // Enhanced MR Image
+               sopClass.Equals(DicomUID.EnhancedXAImageStorage);                // Enhanced XA Image
     }
 
     public Task OnReceiveAssociationReleaseRequestAsync()
     {
-        DicomLogger.Debug("StoreSCP", "收到关联释放请求");
+        DicomLogger.Debug("StoreSCP", "Received association release request");
         return SendAssociationReleaseResponseAsync();
     }
 
@@ -254,21 +253,21 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     {
         var sourceDescription = source switch
         {
-            DicomAbortSource.ServiceProvider => "服务提供方",
-            DicomAbortSource.ServiceUser => "服务使用方",
-            DicomAbortSource.Unknown => "未知来源",
-            _ => $"其他来源({source})"
+            DicomAbortSource.ServiceProvider => "Service Provider",
+            DicomAbortSource.ServiceUser => "Service User",
+            DicomAbortSource.Unknown => "Unknown Source",
+            _ => $"Other Source ({source})"
         };
 
         var reasonDescription = reason switch
         {
-            DicomAbortReason.NotSpecified => "未指定原因",
-            DicomAbortReason.UnrecognizedPDU => "无法识别的PDU",
-            DicomAbortReason.UnexpectedPDU => "意外的PDU",
-            _ => $"其他原因({reason})"
+            DicomAbortReason.NotSpecified => "Not Specified",
+            DicomAbortReason.UnrecognizedPDU => "Unrecognized PDU",
+            DicomAbortReason.UnexpectedPDU => "Unexpected PDU",
+            _ => $"Other Reason ({reason})"
         };
 
-        DicomLogger.Information("StoreSCP", "收到中止请求 - 来源: {Source} ({SourceDesc}), 原因: {Reason} ({ReasonDesc})", 
+        DicomLogger.Information("StoreSCP", "Received abort request - Source: {Source} ({SourceDesc}), Reason: {Reason} ({ReasonDesc})",
             source, sourceDescription, reason, reasonDescription);
     }
 
@@ -276,11 +275,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     {
         if (exception != null)
         {
-            DicomLogger.Error("StoreSCP", exception, "连接异常关闭");
+            DicomLogger.Error("StoreSCP", exception, "Connection closed with exception");
         }
         else
         {
-            DicomLogger.Debug("StoreSCP", "连接正常关闭");
+            DicomLogger.Debug("StoreSCP", "Connection closed normally");
         }
     }
 
@@ -294,37 +293,37 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 return file;
             }
 
-            // 检查是否是图像
+            // Check if it is an image
             if (file.Dataset.InternalTransferSyntax.IsEncapsulated ||
                 !IsImageStorage(file.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID)))
             {
                 return file;
             }
 
-            // 检查是否支持指定的压缩语法
-            if (!_compressionSyntaxes.TryGetValue(advancedSettings.PreferredTransferSyntax, 
+            // Check if the specified compression syntax is supported
+            if (!_compressionSyntaxes.TryGetValue(advancedSettings.PreferredTransferSyntax,
                 out var targetSyntax))
             {
-                DicomLogger.Warning("StoreSCP", "不支持的压缩语法: {Syntax}", advancedSettings.PreferredTransferSyntax);
+                DicomLogger.Warning("StoreSCP", "Unsupported compression syntax: {Syntax}", advancedSettings.PreferredTransferSyntax);
                 return file;
             }
 
-            // 如果已经是目标格式，则不需要转换
+            // If it is already in the target format, no conversion is needed
             if (file.Dataset.InternalTransferSyntax == targetSyntax)
             {
                 return file;
             }
 
-            // 在后台线程执行压缩操作
+            // Perform compression operation in a background thread
             return await Task.Run(async () =>
             {
                 try
                 {
-                    // 获取图像基本信息
+                    // Get basic image information
                     var pixelData = DicomPixelData.Create(file.Dataset);
                     if (pixelData == null)
                     {
-                        DicomLogger.Warning("StoreSCP", "无法获取像素数据，跳过压缩");
+                        DicomLogger.Warning("StoreSCP", "Unable to get pixel data, skipping compression");
                         return file;
                     }
 
@@ -332,51 +331,51 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     var samplesPerPixel = file.Dataset.GetSingleValue<int>(DicomTag.SamplesPerPixel);
                     var photometricInterpretation = file.Dataset.GetSingleValue<string>(DicomTag.PhotometricInterpretation);
 
-                    // 根据不同的压缩格式进行验证
+                    // Validate based on different compression formats
                     if (targetSyntax == DicomTransferSyntax.JPEGLSLossless)
                     {
-                        // JPEG-LS 支持 8/12/16 位
+                        // JPEG-LS supports 8/12/16 bits
                         if (bitsAllocated != 8 && bitsAllocated != 12 && bitsAllocated != 16)
                         {
-                            DicomLogger.Warning("StoreSCP", 
-                                "JPEG-LS压缩要求8/12/16位图像，当前: {BitsAllocated}位，跳过压缩", 
+                            DicomLogger.Warning("StoreSCP",
+                                "JPEG-LS compression requires 8/12/16-bit images, current: {BitsAllocated} bits, skipping compression",
                                 bitsAllocated);
                             return file;
                         }
                     }
                     else if (targetSyntax == DicomTransferSyntax.JPEG2000Lossless)
                     {
-                        // JPEG2000 支持多种位深度，但要检查是否超过16位
+                        // JPEG2000 supports various bit depths but check if it exceeds 16 bits
                         if (bitsAllocated > 16)
                         {
-                            DicomLogger.Warning("StoreSCP", 
-                                "JPEG2000压缩不支持超过16位的图像，当前: {BitsAllocated}位，跳过压缩", 
+                            DicomLogger.Warning("StoreSCP",
+                                "JPEG2000 compression does not support images over 16 bits, current: {BitsAllocated} bits, skipping compression",
                                 bitsAllocated);
                             return file;
                         }
                     }
                     else if (targetSyntax == DicomTransferSyntax.RLELossless)
                     {
-                        // RLE 压缩要求特定的位深度和采样格式
+                        // RLE compression requires specific bit depths and sampling formats
                         if (bitsAllocated != 8 && bitsAllocated != 16)
                         {
-                            DicomLogger.Warning("StoreSCP", 
-                                "RLE压缩要求8位或16位图像，当前: {BitsAllocated}位，跳过压缩", 
+                            DicomLogger.Warning("StoreSCP",
+                                "RLE compression requires 8-bit or 16-bit images, current: {BitsAllocated} bits, skipping compression",
                                 bitsAllocated);
                             return file;
                         }
 
                         if (samplesPerPixel > 3)
                         {
-                            DicomLogger.Warning("StoreSCP", 
-                                "RLE压缩不支持超过3个采样/像素，当前: {SamplesPerPixel}，跳过压缩", 
+                            DicomLogger.Warning("StoreSCP",
+                                "RLE compression does not support more than 3 samples per pixel, current: {SamplesPerPixel}, skipping compression",
                                 samplesPerPixel);
                             return file;
                         }
                     }
 
-                    DicomLogger.Debug("StoreSCP", 
-                        "压缩图像 - 原格式: {OriginalSyntax} -> 新格式: {NewSyntax}\n  位深度: {Bits}位\n  采样数: {Samples}\n  图像解释: {Interpretation}", 
+                    DicomLogger.Debug("StoreSCP",
+                        "Compressing image - Original format: {OriginalSyntax} -> New format: {NewSyntax}\n  Bit depth: {Bits} bits\n  Samples per pixel: {Samples}\n  Photometric interpretation: {Interpretation}",
                         file.Dataset.InternalTransferSyntax.UID.Name,
                         targetSyntax.UID.Name,
                         bitsAllocated,
@@ -388,29 +387,29 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                         var transcoder = new DicomTranscoder(
                             file.Dataset.InternalTransferSyntax,
                             targetSyntax);
-                        
+
                         var compressedFile = transcoder.Transcode(file);
-                        
-                        // 验证压缩结果
+
+                        // Validate compression result
                         var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
                         if (compressedPixelData == null)
                         {
-                            DicomLogger.Error("StoreSCP", "压缩后无法获取像素数据，使用原始文件");
+                            DicomLogger.Error("StoreSCP", "Unable to get pixel data after compression, using original file");
                             return file;
                         }
 
-                        // 检查压缩后的文件大小
+                        // Check compressed file size
                         using var ms = new MemoryStream();
                         await compressedFile.SaveAsync(ms);
                         var compressedSize = ms.Length;
-                        
+
                         using var originalMs = new MemoryStream();
                         await file.SaveAsync(originalMs);
                         var originalSize = originalMs.Length;
 
-                        DicomLogger.Information("StoreSCP", 
-                            "压缩完成 - 原始大小: {Original:N0} 字节, 压缩后: {Compressed:N0} 字节, 压缩率: {Ratio:P2}", 
-                            originalSize, 
+                        DicomLogger.Information("StoreSCP",
+                            "Compression completed - Original size: {Original:N0} bytes, Compressed size: {Compressed:N0} bytes, Compression ratio: {Ratio:P2}",
+                            originalSize,
                             compressedSize,
                             (originalSize - compressedSize) / (double)originalSize);
 
@@ -418,25 +417,25 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("StoreSCP", ex, "图像压缩失败");
+                        DicomLogger.Error("StoreSCP", ex, "Image compression failed");
                         return file;
                     }
                 }
                 catch (Exception ex)
                 {
-                    DicomLogger.Error("StoreSCP", ex, "图像压缩失败");
+                    DicomLogger.Error("StoreSCP", ex, "Image compression failed");
                     return file;
                 }
             });
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("StoreSCP", ex, "压缩处理失败");
+            DicomLogger.Error("StoreSCP", ex, "Compression processing failed");
             return file;
         }
     }
 
-    // 修改 UID 格式化方法
+    // Modify UID formatting method
     private string FormatUID(string uid)
     {
         try
@@ -444,7 +443,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             if (string.IsNullOrEmpty(uid))
                 return uid;
 
-            // 分割 UID 组件
+            // Split UID components
             var components = uid.Split('.');
             var formattedComponents = new List<string>();
 
@@ -453,11 +452,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 if (string.IsNullOrEmpty(component))
                     continue;
 
-                // 处理每个组件
+                // Process each component
                 string formattedComponent;
                 if (component.Length > 1 && component.StartsWith("0"))
                 {
-                    // 移除前导零，但保留单个零
+                    // Remove leading zeros but keep a single zero
                     formattedComponent = component.TrimStart('0');
                     if (string.IsNullOrEmpty(formattedComponent))
                     {
@@ -469,11 +468,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     formattedComponent = component;
                 }
 
-                // 验证组件是否只包含数字
+                // Validate component contains only digits
                 if (!formattedComponent.All(char.IsDigit))
                 {
-                    DicomLogger.Warning("StoreSCP", "UID组件包含非数字字符: {Component}", component);
-                    return uid; // 返回原始值
+                    DicomLogger.Warning("StoreSCP", "UID component contains non-digit characters: {Component}", component);
+                    return uid; // Return original value
                 }
 
                 formattedComponents.Add(formattedComponent);
@@ -481,50 +480,50 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
             var formattedUid = string.Join(".", formattedComponents);
 
-            // 验证格式化后的 UID
+            // Validate formatted UID
             try
             {
-                // 基本验证规则：
-                // 1. 不能为空
-                // 2. 不能以点号开始或结束
-                // 3. 不能有连续的点号
-                // 4. 长度不能超过 64 个字符
+                // Basic validation rules:
+                // 1. Cannot be empty
+                // 2. Cannot start or end with a dot
+                // 3. Cannot have consecutive dots
+                // 4. Length cannot exceed 64 characters
                 if (string.IsNullOrEmpty(formattedUid) ||
                     formattedUid.StartsWith(".") ||
                     formattedUid.EndsWith(".") ||
                     formattedUid.Contains("..") ||
                     formattedUid.Length > 64)
                 {
-                    DicomLogger.Warning("StoreSCP", "格式化后的UID不符合规则: {Uid}", formattedUid);
+                    DicomLogger.Warning("StoreSCP", "Formatted UID does not meet rules: {Uid}", formattedUid);
                     return uid;
                 }
 
-                // 尝试创建 DicomUID 对象来验证
+                // Try creating DicomUID object to validate
                 var dicomUid = new DicomUID(formattedUid, "Temp", DicomUidType.Unknown);
                 return formattedUid;
             }
             catch (Exception ex)
             {
-                DicomLogger.Warning("StoreSCP", ex, "格式化后的UID验证失败: {Uid} -> {FormattedUid}", 
+                DicomLogger.Warning("StoreSCP", ex, "Formatted UID validation failed: {Uid} -> {FormattedUid}",
                     uid, formattedUid);
-                return uid; // 返回原始值
+                return uid; // Return original value
             }
         }
         catch (Exception ex)
         {
-            DicomLogger.Warning("StoreSCP", ex, "UID格式化失败: {Uid}", uid);
+            DicomLogger.Warning("StoreSCP", ex, "UID formatting failed: {Uid}", uid);
             return uid;
         }
     }
 
-    // 添加一个辅助方法来处理数据集中的 UID
+    // Add a helper method to process UIDs in the dataset
     private void ProcessUID(DicomDataset targetDataset, DicomDataset sourceDataset, DicomTag tag)
     {
         try
         {
             if (!sourceDataset.Contains(tag))
             {
-                DicomLogger.Warning("StoreSCP", "UID标签不存在 - Tag: {Tag}", tag);
+                DicomLogger.Warning("StoreSCP", "UID tag does not exist - Tag: {Tag}", tag);
                 return;
             }
 
@@ -533,12 +532,12 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
             targetDataset.AddOrUpdate(tag, formattedUid);
 
-            // 添加验证日志
-            DicomLogger.Debug("StoreSCP", "UID处理完成 - Tag: {Tag}, 值: {Value}", tag, formattedUid);
+            // Add validation log
+            DicomLogger.Debug("StoreSCP", "UID processing completed - Tag: {Tag}, Value: {Value}", tag, formattedUid);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("StoreSCP", ex, "处理UID失败 - Tag: {Tag}", tag);
+            DicomLogger.Error("StoreSCP", ex, "Processing UID failed - Tag: {Tag}", tag);
         }
     }
 
@@ -547,9 +546,9 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         string? tempFilePath = null;
         try
         {
-            // 记录基本信息
-            DicomLogger.Debug("StoreSCP", 
-                "接收DICOM文件 - 患者ID: {PatientId}, 研究: {StudyId}, 序列: {SeriesId}, 实例: {InstanceUid}",
+            // Log basic information
+            DicomLogger.Debug("StoreSCP",
+                "Receiving DICOM file - Patient ID: {PatientId}, Study: {StudyId}, Series: {SeriesId}, Instance: {InstanceUid}",
                 request.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, "Unknown"),
                 request.Dataset.GetSingleValueOrDefault(DicomTag.StudyID, "Unknown"),
                 request.Dataset.GetSingleValueOrDefault(DicomTag.SeriesNumber, "Unknown"),
@@ -566,7 +565,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             {
                 await _concurrentLimit.WaitAsync();
 
-                DicomLogger.Information("StoreSCP", "收到DICOM存储请求 - SOP Class: {SopClass}", request.SOPClassUID.Name);
+                DicomLogger.Information("StoreSCP", "Received DICOM store request - SOP Class: {SopClass}", request.SOPClassUID.Name);
 
                 var validationResult = ValidateKeyDicomTags(request.Dataset);
                 if (!validationResult.IsValid)
@@ -574,16 +573,16 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     return new DicomCStoreResponse(request, DicomStatus.InvalidAttributeValue);
                 }
 
-                // 获取检查日期，如果没有则使用当前日期
-                var studyDate = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, 
+                // Get study date, use current date if not available
+                var studyDate = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate,
                     DateTime.Now.ToString("yyyyMMdd"));
-                
-                // 解析年月日
+
+                // Parse year, month, day
                 var year = studyDate.Substring(0, 4);
                 var month = studyDate.Substring(4, 2);
                 var day = studyDate.Substring(6, 2);
 
-                // 获取并格式化 UID
+                // Get and format UID
                 ProcessUID(request.Dataset, request.Dataset, DicomTag.StudyInstanceUID);
                 ProcessUID(request.Dataset, request.Dataset, DicomTag.SeriesInstanceUID);
                 ProcessUID(request.Dataset, request.Dataset, DicomTag.SOPInstanceUID);
@@ -592,10 +591,10 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 var seriesUid = request.Dataset.GetSingleValue<string>(DicomTag.SeriesInstanceUID);
                 var instanceUid = request.Dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID);
 
-                DicomLogger.Debug("StoreSCP", "格式化后的UID - Study: {StudyUid}, Series: {SeriesUid}, Instance: {InstanceUid}",
+                DicomLogger.Debug("StoreSCP", "Formatted UID - Study: {StudyUid}, Series: {SeriesUid}, Instance: {InstanceUid}",
                     studyUid, seriesUid, instanceUid);
 
-                // 获取文件锁
+                // Get file lock
                 fileLock = _fileLocks.GetOrAdd(instanceUid, _ => new SemaphoreSlim(1, 1));
                 await fileLock.WaitAsync();
 
@@ -605,18 +604,18 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     {
                         throw new InvalidOperationException("Storage paths are not properly initialized");
                     }
-                    
-                    // 使用临时目录创建临时文件
+
+                    // Create temp file in temp directory
                     var tempFileName = $"{instanceUid}_temp_{Guid.NewGuid()}.dcm";
                     tempFilePath = Path.Combine(TempPath, tempFileName);
 
-                    // 压缩图像
+                    // Compress image
                     var compressedFile = await CompressImageAsync(request.File);
 
-                    // 保存压缩后的文件
+                    // Save compressed file
                     await compressedFile.SaveAsync(tempFilePath);
 
-                    // 构建新的文件路径：年/月/日/StudyUID/SeriesUID/SopUID.dcm
+                    // Build new file path: year/month/day/StudyUID/SeriesUID/SopUID.dcm
                     var relativePath = Path.Combine(
                         year,
                         month,
@@ -637,30 +636,30 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
                     if (File.Exists(targetFilePath))
                     {
-                        DicomLogger.Warning("StoreSCP", "检测到重复图像 - 路径: {FilePath}", targetFilePath);
+                        DicomLogger.Warning("StoreSCP", "Duplicate image detected - Path: {FilePath}", targetFilePath);
                         File.Delete(tempFilePath);
                         return new DicomCStoreResponse(request, DicomStatus.DuplicateSOPInstance);
                     }
 
-                    // 在保存前记录目标路径
-                    DicomLogger.Debug("StoreSCP", 
-                        "开始归档 - 研究: {StudyUid}, 序列: {SeriesUid}, 实例: {InstanceUid}, 路径: {Path}",
+                    // Log target path before saving
+                    DicomLogger.Debug("StoreSCP",
+                        "Starting archiving - Study: {StudyUid}, Series: {SeriesUid}, Instance: {InstanceUid}, Path: {Path}",
                         studyUid,
                         seriesUid,
                         instanceUid,
                         targetFilePath);
 
-                    // 移动到最终位置
+                    // Move to final location
                     File.Move(tempFilePath, targetFilePath);
 
-                    // 保存成功后记录
+                    // Log after successful save
                     DicomLogger.Information("StoreSCP",
-                        "归档完成 - 实例: {InstanceUid}, 路径: {FilePath}, 大小: {Size:N0} 字节",
+                        "Archiving completed - Instance: {InstanceUid}, Path: {FilePath}, Size: {Size:N0} bytes",
                         instanceUid,
                         targetFilePath,
                         new FileInfo(targetFilePath).Length);
 
-                    // 在保存到数据库之前处理文本字段
+                    // Process text fields before saving to database
                     if (_repository != null)
                     {
                         try
@@ -668,7 +667,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                             var processedDataset = new DicomDataset();
                             processedDataset.AddOrUpdate(DicomTag.SpecificCharacterSet, "ISO_IR 192");
 
-                            // 1. 处理UID
+                            // 1. Process UIDs
                             foreach (var item in request.Dataset)
                             {
                                 if (item.ValueRepresentation == DicomVR.UI)
@@ -677,7 +676,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                                 }
                             }
 
-                            // 2. 处理中文字段
+                            // 2. Process Chinese fields
                             foreach (var tag in TextTags)
                             {
                                 if (request.Dataset.Contains(tag))
@@ -690,10 +689,10 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                                 }
                             }
 
-                            // 3. 处理其他必需字段
+                            // 3. Process other required fields
                             foreach (var tag in RequiredTags)
                             {
-                                if (request.Dataset.Contains(tag) && !processedDataset.Contains(tag))  // 避免重复添加
+                                if (request.Dataset.Contains(tag) && !processedDataset.Contains(tag))  // Avoid duplicate addition
                                 {
                                     processedDataset.Add(request.Dataset.GetDicomItem<DicomItem>(tag));
                                 }
@@ -701,13 +700,13 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
                             await _repository.SaveDicomDataAsync(processedDataset, relativePath);
 
-                            // 更新 Study 的 Modality
+                            // Update Study Modality
                             var modality = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
                             await _repository.UpdateStudyModalityAsync(studyUid, modality);
                         }
                         catch (Exception ex)
                         {
-                            DicomLogger.Error("StoreSCP", ex, "保存DICOM数据到数据库失败");
+                            DicomLogger.Error("StoreSCP", ex, "Failed to save DICOM data to database");
                         }
                     }
 
@@ -732,12 +731,12 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("StoreSCP", ex, "保存DICOM文件失败 - 实例: {InstanceUid}", request.SOPInstanceUID.UID);
+            DicomLogger.Error("StoreSCP", ex, "Failed to save DICOM file - Instance: {InstanceUid}", request.SOPInstanceUID.UID);
             throw;
         }
         finally
         {
-            // 确保临时文件被清理
+            // Ensure temp file is cleaned up
             if (tempFilePath != null && File.Exists(tempFilePath))
             {
                 try
@@ -746,7 +745,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 }
                 catch (Exception ex)
                 {
-                    DicomLogger.Error("StoreSCP", ex, "清理临时文件失败: {TempFile}", tempFilePath);
+                    DicomLogger.Error("StoreSCP", ex, "Failed to clean up temp file: {TempFile}", tempFilePath);
                 }
             }
         }
@@ -756,7 +755,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
     {
         try
         {
-            // 定义必需的标签
+            // Define required tags
             var requiredTags = new[]
             {
                 (DicomTag.PatientID, "Patient ID"),
@@ -765,16 +764,16 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 (DicomTag.SOPInstanceUID, "SOP Instance UID")
             };
 
-            // 检查必需标签
+            // Check required tags
             var missingTags = requiredTags
                 .Where(t => !dataset.Contains(t.Item1))
                 .Select(t => t.Item2)
                 .ToList();
 
-            // 检查像素数据
+            // Check pixel data
             if (IsImageStorage(dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID)))
             {
-                if (!dataset.Contains(DicomTag.PixelData) || 
+                if (!dataset.Contains(DicomTag.PixelData) ||
                     dataset.GetDicomItem<DicomItem>(DicomTag.PixelData) == null)
                 {
                     missingTags.Add("Pixel Data (empty or missing)");
@@ -783,7 +782,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
             if (missingTags.Any())
             {
-                var errorMessage = $"DICOM数据验证失败: {string.Join(", ", missingTags)}";
+                var errorMessage = $"DICOM data validation failed: {string.Join(", ", missingTags)}";
                 DicomLogger.Warning("StoreSCP", "{ErrorMessage}", errorMessage);
                 return (false, errorMessage);
             }
@@ -792,7 +791,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         }
         catch (Exception ex)
         {
-            var errorMessage = "DICOM数据验证过程发生异常";
+            var errorMessage = "Exception occurred during DICOM data validation";
             DicomLogger.Error("StoreSCP", ex, "{ErrorMessage}", errorMessage);
             return (false, errorMessage);
         }
@@ -800,17 +799,17 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
 
     public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e)
     {
-        DicomLogger.Error("StoreSCP", e, "处理 C-STORE 请求异常 - 临时文件: {TempFile}", tempFileName);
+        DicomLogger.Error("StoreSCP", e, "Exception processing C-STORE request - Temp file: {TempFile}", tempFileName);
         return Task.CompletedTask;
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
     {
-        DicomLogger.Debug("StoreSCP", "收到 C-ECHO 请求");
+        DicomLogger.Debug("StoreSCP", "Received C-ECHO request");
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
 
-    // 实现 IDisposable 模式
+    // Implement IDisposable pattern
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)
@@ -818,7 +817,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
             if (disposing)
             {
                 _concurrentLimit.Dispose();
-                // 清理所有文件锁
+                // Clean up all file locks
                 foreach (var fileLock in _fileLocks.Values)
                 {
                     try
@@ -827,7 +826,7 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("StoreSCP", ex, "释放文件锁时发生错误");
+                        DicomLogger.Error("StoreSCP", ex, "Error releasing file lock");
                     }
                 }
                 _fileLocks.Clear();
@@ -837,14 +836,14 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
         base.Dispose(disposing);
     }
 
-    // 添加析构函数以防止资源泄露
+    // Add finalizer to prevent resource leaks
     ~CStoreSCP()
     {
         Dispose(false);
     }
 
     /// <summary>
-    /// 尝试使用不同编码解码文本
+    /// Try to decode text using different encodings
     /// </summary>
     private string TryDecodeText(DicomDataset dataset, DicomTag tag)
     {
@@ -855,8 +854,8 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 return string.Empty;
 
             var bytes = element.Buffer.Data;
-            
-            // 尝试不同的编码
+
+            // Try different encodings
             var encodings = new[]
             {
                 "UTF-8",
@@ -872,11 +871,11 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                     var encoding = Encoding.GetEncoding(encodingName);
                     var text = encoding.GetString(bytes);
 
-                    // 检查是否包含中文字符
+                    // Check if it contains Chinese characters
                     if (text.Any(c => c >= 0x4E00 && c <= 0x9FFF))
                     {
-                        DicomLogger.Debug("StoreSCP", 
-                            "成功解码文本 - 标签: {Tag}, 编码: {Encoding}, 文本: {Text}", 
+                        DicomLogger.Debug("StoreSCP",
+                            "Successfully decoded text - Tag: {Tag}, Encoding: {Encoding}, Text: {Text}",
                             tag, encodingName, text);
                         return text;
                     }
@@ -887,13 +886,12 @@ public class CStoreSCP : DicomService, IDicomServiceProvider, IDicomCStoreProvid
                 }
             }
 
-            // 如果没有检测到中文，返回原始文本
+            // If no Chinese characters detected, return original text
             return dataset.GetString(tag);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("StoreSCP", ex, "解码文本失败 - 标签: {Tag}", tag);
+            DicomLogger.Error("StoreSCP", ex, "Failed to decode text - Tag: {Tag}", tag);
             return string.Empty;
         }
     }
-} 

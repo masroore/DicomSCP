@@ -48,8 +48,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     };
 
     public PrintSCP(
-        INetworkStream stream, 
-        Encoding fallbackEncoding, 
+        INetworkStream stream,
+        Encoding fallbackEncoding,
         Microsoft.Extensions.Logging.ILogger log,
         DicomServiceDependencies dependencies)
         : base(stream, fallbackEncoding, log, dependencies)
@@ -64,12 +64,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            DicomLogger.Information("PrintSCP", "收到关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
-                association.CalledAE, 
+            DicomLogger.Information("PrintSCP", "收到关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}",
+                association.CalledAE,
                 association.CallingAE);
 
             // AE Title 验证
-            if (_settings.PrintSCP.ValidateCallingAE && 
+            if (_settings.PrintSCP.ValidateCallingAE &&
                 !_settings.PrintSCP.AllowedCallingAEs.Contains(association.CallingAE))
             {
                 DicomLogger.Warning("PrintSCP", "拒绝未授权的 Calling AE: {CallingAE}", association.CallingAE);
@@ -81,8 +81,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             if (_settings.PrintSCP.AeTitle != association.CalledAE)
             {
-                DicomLogger.Warning("PrintSCP", "拒绝错误的 Called AE: {CalledAE}，期望：{ExpectedAE}", 
-                    association.CalledAE, 
+                DicomLogger.Warning("PrintSCP", "拒绝错误的 Called AE: {CalledAE}，期望：{ExpectedAE}",
+                    association.CalledAE,
                     _settings.PrintSCP.AeTitle);
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,
@@ -108,12 +108,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
 
             foreach (var pc in association.PresentationContexts)
             {
-                DicomLogger.Information("PrintSCP", "处理表示上下文 - Abstract Syntax：{AbstractSyntax}", 
+                DicomLogger.Information("PrintSCP", "处理表示上下文 - Abstract Syntax：{AbstractSyntax}",
                     pc.AbstractSyntax.Name);
 
                 if (!supportedSOPClasses.Contains(pc.AbstractSyntax))
                 {
-                    DicomLogger.Warning("PrintSCP", "不支持的服务类型：{AbstractSyntax}", 
+                    DicomLogger.Warning("PrintSCP", "不支持的服务类型：{AbstractSyntax}",
                         pc.AbstractSyntax.Name);
                     pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
                     continue;
@@ -196,12 +196,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 return await HandleFilmBoxCreateAsync(request);
             }
 
-            DicomLogger.Warning("PrintSCP", "不支持的SOP Class: {SopClass}", request.SOPClassUID?.Name ?? "Unknown");
+            DicomLogger.Warning("PrintSCP", "Unsupported SOP Class: {SopClass}", request.SOPClassUID?.Name ?? "Unknown");
             return new DicomNCreateResponse(request, DicomStatus.SOPClassNotSupported);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 N-CREATE 请求失败");
+            DicomLogger.Error("PrintSCP", ex, "Failed to process N-CREATE request");
             return new DicomNCreateResponse(request, DicomStatus.ProcessingFailure);
         }
     }
@@ -210,32 +210,32 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            DicomLogger.Information("PrintSCP", "创建 Film Session - Calling AE: {CallingAE}", _session.CallingAE ?? "Unknown");
-            
-            // 生成 FilmSessionId，不依赖 SOPInstanceUID
+            DicomLogger.Information("PrintSCP", "Creating Film Session - Calling AE: {CallingAE}", _session.CallingAE ?? "Unknown");
+
+            // Generate FilmSessionId, independent of SOPInstanceUID
             var filmSessionId = DicomUID.Generate().UID;
             var printJob = new PrintJob
             {
                 JobId = $"{DateTime.Now:yyyyMMddHHmmss}{new Random().Next(1000, 9999)}",
-                FilmSessionId = filmSessionId,  // 使用生成的ID
+                FilmSessionId = filmSessionId,  // Use generated ID
                 CallingAE = _session.CallingAE ?? "",
                 Status = PrintJobStatus.Created,
-                
-                // Film Session 参数
+
+                // Film Session parameters
                 NumberOfCopies = request.Dataset?.GetSingleValueOrDefault(DicomTag.NumberOfCopies, 1) ?? 1,
                 PrintPriority = request.Dataset?.GetSingleValueOrDefault(DicomTag.PrintPriority, "LOW") ?? "LOW",
                 MediumType = request.Dataset?.GetSingleValueOrDefault(DicomTag.MediumType, "BLUE FILM") ?? "BLUE FILM",
                 FilmDestination = request.Dataset?.GetSingleValueOrDefault(DicomTag.FilmDestination, "MAGAZINE") ?? "MAGAZINE",
-                
+
                 CreateTime = DateTime.Now,
                 UpdateTime = DateTime.Now
             };
 
-            // 保存到数据库
+            // Save to database
             await _repository.AddPrintJobAsync(printJob);
 
             var response = new DicomNCreateResponse(request, DicomStatus.Success);
-            
+
             if (request.Dataset != null)
             {
                 var responseDataset = new DicomDataset();
@@ -265,12 +265,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 SOPInstanceUID = filmSessionId
             };
 
-            DicomLogger.Information("PrintSCP", "Film Session创建成功 - ID: {Id}", filmSessionId);
+            DicomLogger.Information("PrintSCP", "Film Session created successfully - ID: {Id}", filmSessionId);
             return response;
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 Film Session 创建失败");
+            DicomLogger.Error("PrintSCP", ex, "Failed to handle Film Session creation");
             return new DicomNCreateResponse(request, DicomStatus.ProcessingFailure);
         }
     }
@@ -281,15 +281,15 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         {
             if (_session.FilmSession == null)
             {
-                DicomLogger.Warning("PrintSCP", "无法创建 Film Box - Film Session 不存在");
+                DicomLogger.Warning("PrintSCP", "Cannot create Film Box - Film Session does not exist");
                 return new DicomNCreateResponse(request, DicomStatus.NoSuchObjectInstance);
             }
 
-            DicomLogger.Information("PrintSCP", "创建 Film Box - Film Session: {SessionId}, Calling AE: {CallingAE}", 
+            DicomLogger.Information("PrintSCP", "Creating Film Box - Film Session: {SessionId}, Calling AE: {CallingAE}",
                 _session.FilmSession.SOPInstanceUID,
                 _session.CallingAE ?? "Unknown");
 
-            // 生成 FilmBoxId
+            // Generate FilmBoxId
             var filmBoxId = DicomUID.Generate().UID;
 
             await _repository.UpdatePrintJobAsync(
@@ -308,8 +308,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 });
 
             var responseDataset = new DicomDataset();
-            
-            // 复制原始请求中的属性
+
+            // Copy attributes from the original request
             if (request.Dataset != null)
             {
                 foreach (var item in request.Dataset)
@@ -324,18 +324,18 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             responseDataset.AddOrUpdate(DicomTag.SOPClassUID, request.SOPClassUID);
             responseDataset.AddOrUpdate(DicomTag.SOPInstanceUID, filmBoxId);
 
-            // 获取布局格式
+            // Get layout format
             var imageDisplayFormat = request.Dataset?.GetSingleValueOrDefault(DicomTag.ImageDisplayFormat, "STANDARD\\1,1") ?? "STANDARD\\1,1";
             var layoutParts = imageDisplayFormat.Split('\\')[1].Split(',');
             if (layoutParts.Length != 2 || !int.TryParse(layoutParts[0], out int columns) || !int.TryParse(layoutParts[1], out int rows))
             {
-                DicomLogger.Warning("PrintSCP", "无效的布局格式: {Format}", imageDisplayFormat);
+                DicomLogger.Warning("PrintSCP", "Invalid layout format: {Format}", imageDisplayFormat);
                 return new DicomNCreateResponse(request, DicomStatus.InvalidAttributeValue);
             }
 
-            DicomLogger.Information("PrintSCP", "布局: {Columns}列 x {Rows}行", columns, rows);
+            DicomLogger.Information("PrintSCP", "Layout: {Columns} columns x {Rows} rows", columns, rows);
 
-            // 根据布局创建Image Box引用
+            // Create Image Box references based on layout
             var imageBoxSequence = new DicomSequence(DicomTag.ReferencedImageBoxSequence);
             var totalBoxes = columns * rows;
 
@@ -348,7 +348,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     { DicomTag.ImageBoxPosition, (ushort)i }
                 };
                 imageBoxSequence.Items.Add(imageBoxDataset);
-                DicomLogger.Information("PrintSCP", "创建 Image Box {Position}/{Total}", i, totalBoxes);
+                DicomLogger.Information("PrintSCP", "Created Image Box {Position}/{Total}", i, totalBoxes);
             }
 
             responseDataset.Add(imageBoxSequence);
@@ -363,7 +363,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 { DicomTag.MessageIDBeingRespondedTo, request.MessageID },
                 { DicomTag.CommandDataSetType, (ushort)0x0102 },
                 { DicomTag.Status, (ushort)DicomStatus.Success.Code },
-                { DicomTag.AffectedSOPInstanceUID, filmBoxId }  // 使用生成的filmBoxId
+                { DicomTag.AffectedSOPInstanceUID, filmBoxId }  // Use generated filmBoxId
             };
 
             SetCommandDataset(response, command);
@@ -377,7 +377,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 Film Box 创建失败");
+            DicomLogger.Error("PrintSCP", ex, "Failed to handle Film Box creation");
             return new DicomNCreateResponse(request, DicomStatus.ProcessingFailure);
         }
     }
@@ -386,25 +386,25 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            DicomLogger.Information("PrintSCP", "收到 N-SET 请求 - SOP Class: {SopClass}, Calling AE: {CallingAE}", 
-                request.SOPClassUID?.Name ?? "Unknown", 
+            DicomLogger.Information("PrintSCP", "Received N-SET request - SOP Class: {SopClass}, Calling AE: {CallingAE}",
+                request.SOPClassUID?.Name ?? "Unknown",
                 _session.CallingAE ?? "Unknown");
 
             if (_session.FilmSession == null || _session.CurrentFilmBox == null)
             {
-                DicomLogger.Warning("PrintSCP", "Film Session或Film Box为空，无法处理 N-SET 请求");
+                DicomLogger.Warning("PrintSCP", "Film Session or Film Box is null, cannot process N-SET request");
                 return Task.FromResult(new DicomNSetResponse(request, DicomStatus.NoSuchObjectInstance));
             }
 
-            // 获取图像序列
+            // Get image sequence
             var imageSequence = request.Dataset?.GetSequence(DicomTag.BasicGrayscaleImageSequence);
             if (imageSequence == null || !imageSequence.Items.Any())
             {
-                DicomLogger.Warning("PrintSCP", "未找到图像序列或序列为空");
+                DicomLogger.Warning("PrintSCP", "No image sequence found or sequence is empty");
                 return Task.FromResult(new DicomNSetResponse(request, DicomStatus.NoSuchObjectInstance));
             }
 
-            // 从SOPInstanceUID中获取图像位置
+            // Get image position from SOPInstanceUID
             var sopInstanceUid = request.SOPInstanceUID?.UID ?? "";
             var position = 1;
             var parts = sopInstanceUid.Split('.');
@@ -413,20 +413,20 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 position = pos;
             }
 
-            DicomLogger.Information("PrintSCP", "处理图像 - SOPInstanceUID: {Uid}, 位置: {Position}", sopInstanceUid, position);
+            DicomLogger.Information("PrintSCP", "Processing image - SOPInstanceUID: {Uid}, Position: {Position}", sopInstanceUid, position);
 
-            // 处理接收到的图像
+            // Process received images
             foreach (var item in imageSequence.Items)
             {
                 if (item.Contains(DicomTag.PixelData))
                 {
                     var pixelData = item.GetValues<byte>(DicomTag.PixelData);
-                    DicomLogger.Information("PrintSCP", "图像 {Position} - 像素数据大小: {Size} bytes", position, pixelData?.Length ?? 0);
+                    DicomLogger.Information("PrintSCP", "Image {Position} - Pixel data size: {Size} bytes", position, pixelData?.Length ?? 0);
                     _session.CachedImages[position] = item;
                 }
                 else
                 {
-                    DicomLogger.Warning("PrintSCP", "图像 {Position} 没有像素数据", position);
+                    DicomLogger.Warning("PrintSCP", "Image {Position} has no pixel data", position);
                 }
             }
 
@@ -434,7 +434,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 N-SET 请求失败");
+            DicomLogger.Error("PrintSCP", ex, "Failed to process N-SET request");
             return Task.FromResult(new DicomNSetResponse(request, DicomStatus.ProcessingFailure));
         }
     }
@@ -448,44 +448,44 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 return new DicomNActionResponse(request, DicomStatus.NoSuchObjectInstance);
             }
 
-            // 获取并验证布局格式
+            // Get and validate layout format
             var displayFormat = _session.CurrentFilmBox.Dataset.GetSingleValueOrDefault(DicomTag.ImageDisplayFormat, "STANDARD\\1,1");
             var layoutParts = displayFormat.Split('\\')[1].Split(',');
             if (layoutParts.Length != 2 || !int.TryParse(layoutParts[0], out int columns) || !int.TryParse(layoutParts[1], out int rows))
             {
-                DicomLogger.Warning("PrintSCP", "无效的布局格式: {Format}", displayFormat);
+                DicomLogger.Warning("PrintSCP", "Invalid layout format: {Format}", displayFormat);
                 return new DicomNActionResponse(request, DicomStatus.InvalidAttributeValue);
             }
 
-            // 获取胶片尺寸
+            // Get film size
             var filmSizeID = _session.CurrentFilmBox.Dataset.GetSingleValueOrDefault(DicomTag.FilmSizeID, "14INX17IN");
             var filmOrientation = _session.CurrentFilmBox.Dataset.GetSingleValueOrDefault(DicomTag.FilmOrientation, "PORTRAIT");
-            
+
             var filmSize = GetFilmSize(filmSizeID);
             var (filmWidth, filmHeight) = filmOrientation.Equals("LANDSCAPE", StringComparison.OrdinalIgnoreCase)
                 ? (filmSize.height, filmSize.width)
                 : (filmSize.width, filmSize.height);
 
-            // 计算分割线
-            const int lineWidth = 1;  // 分割线宽度
+            // Calculate dividing lines
+            const int lineWidth = 1;  // Line width
             var totalSlots = rows * columns;
-            var isSingleImage = totalSlots == 1;  // 判断是否为单图布局
+            var isSingleImage = totalSlots == 1;  // Check if it's a single image layout
 
-            // 计算每个图像的尺寸（不包括分割线）
+            // Calculate each image size (excluding dividing lines)
             var imageWidth = isSingleImage ? filmWidth : (filmWidth - (columns - 1) * lineWidth) / columns;
             var imageHeight = isSingleImage ? filmHeight : (filmHeight - (rows - 1) * lineWidth) / rows;
 
-            // 创建输出数据集
+            // Create output dataset
             var outputDataset = CreateOutputDataset(_session.CachedImages.First().Value, filmWidth, filmHeight);
             var pixels = new byte[filmWidth * filmHeight];
 
-            // 处理每个位置
+            // Process each position
             for (int position = 1; position <= totalSlots; position++)
             {
                 int row = (position - 1) / columns;
                 int col = (position - 1) % columns;
 
-                // 计算图像位置（考虑分割线）
+                // Calculate image position (considering dividing lines)
                 int xBase = isSingleImage ? 0 : col * (imageWidth + lineWidth);
                 int yBase = isSingleImage ? 0 : row * (imageHeight + lineWidth);
 
@@ -499,45 +499,45 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 }
             }
 
-            // 只在多图布局时绘制分割线和边框
+            // Draw dividing lines and borders only in multi-image layout
             if (!isSingleImage)
             {
-                // 绘制垂直线（包括左右边框）
+                // Draw vertical lines (including left and right borders)
                 for (int i = 0; i <= columns; i++)
                 {
                     int x = i * (imageWidth + lineWidth) - lineWidth;
-                    if (i == 0) x = 0;  // 左边框
-                    if (i == columns) x = filmWidth - 1;  // 右边框
-                    
+                    if (i == 0) x = 0;  // Left border
+                    if (i == columns) x = filmWidth - 1;  // Right border
+
                     for (int y = 0; y < filmHeight; y++)
                     {
                         var index = y * filmWidth + x;
                         if (index < pixels.Length)
                         {
-                            pixels[index] = 255;  // 白色线
+                            pixels[index] = 255;  // White line
                         }
                     }
                 }
 
-                // 绘制水平线（包括上下边框）
+                // Draw horizontal lines (including top and bottom borders)
                 for (int i = 0; i <= rows; i++)
                 {
                     int y = i * (imageHeight + lineWidth) - lineWidth;
-                    if (i == 0) y = 0;  // 上边框
-                    if (i == rows) y = filmHeight - 1;  // 下边框
-                    
+                    if (i == 0) y = 0;  // Top border
+                    if (i == rows) y = filmHeight - 1;  // Bottom border
+
                     for (int x = 0; x < filmWidth; x++)
                     {
                         var index = y * filmWidth + x;
                         if (index < pixels.Length)
                         {
-                            pixels[index] = 255;  // 白色线
+                            pixels[index] = 255;  // White line
                         }
                     }
                 }
             }
 
-            // 保存结果
+            // Save result
             outputDataset.AddOrUpdate(DicomTag.PixelData, pixels);
             await SaveResult(outputDataset, request.SOPInstanceUID?.UID ?? _session.CurrentFilmBox.SOPInstanceUID);
 
@@ -545,7 +545,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理打印请求时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error processing print request");
             return new DicomNActionResponse(request, DicomStatus.ProcessingFailure);
         }
     }
@@ -561,13 +561,13 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         dataset.AddOrUpdate(DicomTag.PixelRepresentation, sourceImage.GetSingleValue<ushort>(DicomTag.PixelRepresentation));
         dataset.AddOrUpdate(DicomTag.SamplesPerPixel, sourceImage.GetSingleValue<ushort>(DicomTag.SamplesPerPixel));
         dataset.AddOrUpdate(DicomTag.PhotometricInterpretation, sourceImage.GetSingleValue<string>(DicomTag.PhotometricInterpretation));
-        
-        var studyUid = sourceImage.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, _session.FilmSession?.SOPInstanceUID) 
+
+        var studyUid = sourceImage.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, _session.FilmSession?.SOPInstanceUID)
             ?? DicomUID.Generate().UID;
         dataset.AddOrUpdate(DicomTag.StudyInstanceUID, studyUid);
         dataset.AddOrUpdate(DicomTag.SeriesInstanceUID, DicomUID.Generate().UID);
 
-        // 检查 CurrentFilmBox 和 SOPInstanceUID
+        // Check CurrentFilmBox and SOPInstanceUID
         var sopInstanceUid = _session.CurrentFilmBox?.SOPInstanceUID ?? DicomUID.Generate().UID;
         dataset.AddOrUpdate(DicomTag.SOPInstanceUID, sopInstanceUid);
         dataset.AddOrUpdate(DicomTag.SOPClassUID, DicomUID.SecondaryCaptureImageStorage);
@@ -596,23 +596,23 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 return;
             }
 
-            // 在多图布局时才添加边距
+            // Add margins only in multi-image layout
             double marginPercent = isSingleImage ? 0 : 0.02;
             var marginX = (int)(maxWidth * marginPercent);
             var marginY = (int)(maxHeight * marginPercent);
             var availableWidth = maxWidth - 2 * marginX;
             var availableHeight = maxHeight - 2 * marginY;
 
-            // 计算缩放比例并保持原始比例
+            // Calculate scaling factor and maintain original aspect ratio
             var scale = Math.Min((double)availableWidth / srcWidth, (double)availableHeight / srcHeight);
             var scaledWidth = (int)(srcWidth * scale);
             var scaledHeight = (int)(srcHeight * scale);
 
-            // 居中显示（考虑边距）
+            // Center the image (considering margins)
             var xOffset = xBase + marginX + (availableWidth - scaledWidth) / 2;
             var yOffset = yBase + marginY + (availableHeight - scaledHeight) / 2;
 
-            // 复制和缩放图像
+            // Copy and scale the image
             for (int y = 0; y < scaledHeight; y++)
             {
                 var srcY = Math.Min((int)(y / scale), srcHeight - 1);
@@ -634,19 +634,19 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理图像时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error processing image");
             DrawEmptyImage(pixels, xBase, yBase, maxWidth, maxHeight, filmWidth, isSingleImage);
         }
     }
 
     private void DrawEmptyImage(byte[] pixels, int xBase, int yBase, int maxWidth, int maxHeight, int filmWidth, bool isSingleImage)
     {
-        // 在多图布局时才添加边距
+        // Add margins only in multi-image layout
         double marginPercent = isSingleImage ? 0 : 0.02;
         var marginX = (int)(maxWidth * marginPercent);
         var marginY = (int)(maxHeight * marginPercent);
 
-        // 填充黑色（考虑边距）
+        // Fill with black (considering margins)
         for (int y = 0; y < maxHeight; y++)
         {
             var rowOffset = (yBase + y) * filmWidth;
@@ -655,17 +655,16 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                 var index = rowOffset + xBase + x;
                 if (index < pixels.Length)
                 {
-                    // 只在内部区域填充黑色
+                    // Fill with black only in the inner area
                     if (y >= marginY && y < (maxHeight - marginY) &&
                         x >= marginX && x < (maxWidth - marginX))
                     {
-                        pixels[index] = 0;  // 黑色
+                        pixels[index] = 0;  // Black
                     }
                 }
             }
         }
     }
-
     private async Task SaveResult(DicomDataset dataset, string filmBoxId)
     {
         try
@@ -675,15 +674,15 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             var relativePath = Path.Combine(_relativePrintPath, dateFolder, filename);
             var fullPath = Path.Combine(_settings.StoragePath, relativePath);
 
-            // 确保目录存在
+            // Ensure directory exists
             var directoryPath = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);
             }
 
-            // 记录保存信息
-            DicomLogger.Information("PrintSCP", "保存打印结果 - ID: {Id}, 路径: {Path}", 
+            // Log save information
+            DicomLogger.Information("PrintSCP", "Saving print result - ID: {Id}, Path: {Path}",
                 filmBoxId, relativePath);
 
             await new DicomFile(dataset).SaveAsync(fullPath);
@@ -703,7 +702,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "保存打印结果时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error saving print result");
             throw;
         }
     }
@@ -715,11 +714,11 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             var response = new DicomNActionResponse(request, DicomStatus.Success);
             var command = new DicomDataset
             {
-                // 必需的命令集元素 (Type 1)
+                // Required command set elements (Type 1)
                 { DicomTag.AffectedSOPClassUID, request.SOPClassUID },
                 { DicomTag.CommandField, (ushort)0x8130 },  // N-ACTION-RSP
                 { DicomTag.MessageIDBeingRespondedTo, request.MessageID },
-                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // 无数据集
+                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // No dataset
                 { DicomTag.Status, (ushort)DicomStatus.Success.Code },
                 { DicomTag.AffectedSOPInstanceUID, request.SOPInstanceUID },
                 { DicomTag.ActionTypeID, request.ActionTypeID }
@@ -730,7 +729,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "创建响应时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error creating response");
             return new DicomNActionResponse(request, DicomStatus.ProcessingFailure);
         }
     }
@@ -739,8 +738,8 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            var commandProperty = typeof(DicomMessage).GetProperty("Command", 
-                System.Reflection.BindingFlags.Public | 
+            var commandProperty = typeof(DicomMessage).GetProperty("Command",
+                System.Reflection.BindingFlags.Public |
                 System.Reflection.BindingFlags.Instance);
 
             if (commandProperty != null)
@@ -749,12 +748,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             }
             else
             {
-                DicomLogger.Error("PrintSCP", "无法设置命令数据集：Command属性不存在");
+                DicomLogger.Error("PrintSCP", "Unable to set command dataset: Command property does not exist");
             }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "设置命令数据集时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error setting command dataset");
         }
     }
 
@@ -762,21 +761,21 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         try
         {
-            // 验证请求
+            // Validate request
             if (request.SOPClassUID == null || request.SOPInstanceUID?.UID == null)
             {
-                DicomLogger.Warning("PrintSCP", "无效的请求参数");
+                DicomLogger.Warning("PrintSCP", "Invalid request parameters");
                 return Task.FromResult(new DicomNDeleteResponse(request, DicomStatus.InvalidArgumentValue));
             }
 
             var response = new DicomNDeleteResponse(request, DicomStatus.Success);
             var command = new DicomDataset
             {
-                // 必需的命令集元素 (Type 1)
+                // Required command set elements (Type 1)
                 { DicomTag.AffectedSOPClassUID, request.SOPClassUID },
                 { DicomTag.CommandField, (ushort)0x8150 },  // N-DELETE-RSP
                 { DicomTag.MessageIDBeingRespondedTo, request.MessageID },
-                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // 无数据集
+                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // No dataset
                 { DicomTag.Status, (ushort)DicomStatus.Success.Code },
                 { DicomTag.AffectedSOPInstanceUID, request.SOPInstanceUID }
             };
@@ -790,7 +789,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     return Task.FromResult(new DicomNDeleteResponse(request, DicomStatus.NoSuchObjectInstance));
                 }
 
-                DicomLogger.Information("PrintSCP", "删除 Film Session: {Uid}", request.SOPInstanceUID.UID);
+                DicomLogger.Information("PrintSCP", "Deleting Film Session: {Uid}", request.SOPInstanceUID.UID);
                 _session.FilmSession = null;
                 _session.CurrentFilmBox = null;
                 _session.CachedImages.Clear();
@@ -802,7 +801,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
                     return Task.FromResult(new DicomNDeleteResponse(request, DicomStatus.NoSuchObjectInstance));
                 }
 
-                DicomLogger.Information("PrintSCP", "删除 Film Box: {Uid}", request.SOPInstanceUID.UID);
+                DicomLogger.Information("PrintSCP", "Deleting Film Box: {Uid}", request.SOPInstanceUID.UID);
                 _session.CurrentFilmBox = null;
                 _session.CachedImages.Clear();
             }
@@ -815,7 +814,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 N-DELETE 请求时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error processing N-DELETE request");
             return Task.FromResult(new DicomNDeleteResponse(request, DicomStatus.ProcessingFailure));
         }
     }
@@ -827,11 +826,11 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             var response = new DicomNEventReportResponse(request, DicomStatus.Success);
             var command = new DicomDataset
             {
-                // 必需的命令集元素 (Type 1)
+                // Required command set elements (Type 1)
                 { DicomTag.AffectedSOPClassUID, request.SOPClassUID },
                 { DicomTag.CommandField, (ushort)0x8110 },  // N-EVENT-REPORT-RSP
                 { DicomTag.MessageIDBeingRespondedTo, request.MessageID },
-                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // 无数据集
+                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // No dataset
                 { DicomTag.Status, (ushort)DicomStatus.Success.Code },
                 { DicomTag.AffectedSOPInstanceUID, request.SOPInstanceUID },
                 { DicomTag.EventTypeID, request.EventTypeID }
@@ -842,7 +841,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 N-EVENT-REPORT 请求时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error processing N-EVENT-REPORT request");
             return Task.FromResult(new DicomNEventReportResponse(request, DicomStatus.ProcessingFailure));
         }
     }
@@ -854,11 +853,11 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
             var response = new DicomNGetResponse(request, DicomStatus.Success);
             var command = new DicomDataset
             {
-                // 必需的命令集元素 (Type 1)
+                // Required command set elements (Type 1)
                 { DicomTag.AffectedSOPClassUID, request.SOPClassUID },
                 { DicomTag.CommandField, (ushort)0x8110 },  // N-GET-RSP
                 { DicomTag.MessageIDBeingRespondedTo, request.MessageID },
-                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // 无数据集
+                { DicomTag.CommandDataSetType, (ushort)0x0101 },  // No dataset
                 { DicomTag.Status, (ushort)DicomStatus.Success.Code },
                 { DicomTag.AffectedSOPInstanceUID, request.SOPInstanceUID }
             };
@@ -868,7 +867,7 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("PrintSCP", ex, "处理 N-GET 请求时发生错误");
+            DicomLogger.Error("PrintSCP", ex, "Error processing N-GET request");
             return Task.FromResult(new DicomNGetResponse(request, DicomStatus.ProcessingFailure));
         }
     }
@@ -877,12 +876,12 @@ public class PrintSCP : DicomService, IDicomServiceProvider, IDicomNServiceProvi
     {
         if (_session.CurrentFilmBox != null)
         {
-            DicomLogger.Information("PrintSCP", "清理 Film Box: {Uid}", 
+            DicomLogger.Information("PrintSCP", "Cleaning up Film Box: {Uid}",
                 _session.CurrentFilmBox.SOPInstanceUID);
         }
         if (_session.FilmSession != null)
         {
-            DicomLogger.Information("PrintSCP", "清理 Film Session: {Uid}", 
+            DicomLogger.Information("PrintSCP", "Cleaning up Film Session: {Uid}",
                 _session.FilmSession.SOPInstanceUID);
         }
 
@@ -911,4 +910,4 @@ public class DicomFilmBox
     }
     public string SOPInstanceUID { get; set; } = "";
     public DicomDataset? Dataset { get; set; }
-} 
+}
