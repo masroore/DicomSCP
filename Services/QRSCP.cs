@@ -42,8 +42,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> _activeDestinations = new();
 
     public QRSCP(
-        INetworkStream stream, 
-        Encoding fallbackEncoding, 
+        INetworkStream stream,
+        Encoding fallbackEncoding,
         ILogger log,
         DicomServiceDependencies dependencies)
         : base(stream, fallbackEncoding, log, dependencies)
@@ -52,11 +52,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         {
             _settings = DicomServiceProvider.GetRequiredService<IOptions<DicomSettings>>().Value;
             _repository = DicomServiceProvider.GetRequiredService<DicomRepository>();
-            DicomLogger.Information("QRSCP", "QR服务初始化完成");
+            DicomLogger.Information("QRSCP", "QR service initialized successfully");
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "QR服务初始化失");
+            DicomLogger.Error("QRSCP", ex, "QR service initialization failed");
             throw;
         }
     }
@@ -65,16 +65,16 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         try
         {
-            DicomLogger.Information("QRSCP", "收到关联请求 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+            DicomLogger.Information("QRSCP", "Received association request - Called AE: {CalledAE}, Calling AE: {CallingAE}",
                 association.CalledAE, association.CallingAE);
 
-            // 验证 Called AE
+            // Validate Called AE
             var calledAE = association.CalledAE;
             var expectedAE = _settings?.QRSCP.AeTitle ?? string.Empty;
 
             if (!string.Equals(expectedAE, calledAE, StringComparison.OrdinalIgnoreCase))
             {
-                DicomLogger.Warning("QRSCP", "拒绝错误的 Called AE: {CalledAE}, 期望: {ExpectedAE}", 
+                DicomLogger.Warning("QRSCP", "Rejecting incorrect Called AE: {CalledAE}, Expected: {ExpectedAE}",
                     calledAE, expectedAE);
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,
@@ -82,22 +82,22 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     DicomRejectReason.CalledAENotRecognized);
             }
 
-            // 验证 Calling AE
+            // Validate Calling AE
             if (string.IsNullOrEmpty(association.CallingAE))
             {
-                DicomLogger.Warning("QRSCP", "拒绝空的 Calling AE");
+                DicomLogger.Warning("QRSCP", "Rejecting empty Calling AE");
                 return SendAssociationRejectAsync(
                     DicomRejectResult.Permanent,
                     DicomRejectSource.ServiceUser,
                     DicomRejectReason.CallingAENotRecognized);
             }
 
-            // 只在配置了验证时才检查 AllowedCallingAEs
+            // Check AllowedCallingAEs only if validation is configured
             if (_settings?.QRSCP.ValidateCallingAE == true)
             {
                 if (!_settings.QRSCP.AllowedCallingAEs.Contains(association.CallingAE, StringComparer.OrdinalIgnoreCase))
                 {
-                    DicomLogger.Warning("QRSCP", "拒绝未授权的调用方AE: {CallingAE}", association.CallingAE);
+                    DicomLogger.Warning("QRSCP", "Rejecting unauthorized Calling AE: {CallingAE}", association.CallingAE);
                     return SendAssociationRejectAsync(
                         DicomRejectResult.Permanent,
                         DicomRejectSource.ServiceUser,
@@ -105,13 +105,13 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 }
             }
 
-            DicomLogger.Information("QRSCP", "验证通过 - Called AE: {CalledAE}, Calling AE: {CallingAE}", 
+            DicomLogger.Information("QRSCP", "Validation passed - Called AE: {CalledAE}, Calling AE: {CallingAE}",
                 calledAE, association.CallingAE);
 
             var storageCount = 0;
             foreach (var pc in association.PresentationContexts)
             {
-                // 检查是否支持请求的服务
+                // Check if the requested service is supported
                 if (pc.AbstractSyntax == DicomUID.Verification ||                                // C-ECHO
                     pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelFind || // C-FIND
                     pc.AbstractSyntax == DicomUID.PatientRootQueryRetrieveInformationModelFind || // C-FIND (Patient Root)
@@ -121,17 +121,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     pc.AbstractSyntax == DicomUID.PatientRootQueryRetrieveInformationModelGet || // C-GET (Patient Root)
                     pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)             // Storage (for C-GET)
                 {
-                    // 记录服务接受日志
+                    // Log service acceptance
                     if (pc.AbstractSyntax.StorageCategory == DicomStorageCategory.None)
                     {
-                        DicomLogger.Information("QRSCP", "接受服务 - AET: {CallingAE}, 服务: {Service}", 
+                        DicomLogger.Information("QRSCP", "Accepting service - AET: {CallingAE}, Service: {Service}",
                             association.CallingAE, pc.AbstractSyntax.Name);
                     }
 
-                    // 根据服务类型选择合适的传输语法
+                    // Select appropriate transfer syntax based on service type
                     if (pc.AbstractSyntax.StorageCategory != DicomStorageCategory.None)
                     {
-                        // 对于存储类服务（C-GET需要），接受所有支持的传输语法
+                        // For storage services (needed for C-GET), accept all supported transfer syntaxes
                         pc.AcceptTransferSyntaxes(AcceptedImageTransferSyntaxes);
                     }
                     else if (pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelGet ||
@@ -139,29 +139,29 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                              pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelMove ||
                              pc.AbstractSyntax == DicomUID.PatientRootQueryRetrieveInformationModelMove)
                     {
-                        // 对于 C-GET/C-MOVE 服务，同时接受基本传输语法和图像传输语法
+                        // For C-GET/C-MOVE services, accept both basic and image transfer syntaxes
                         pc.AcceptTransferSyntaxes(AcceptedImageTransferSyntaxes.Concat(AcceptedTransferSyntaxes).Distinct().ToArray());
-                        DicomLogger.Information("QRSCP", "为C-GET/C-MOVE服务接受传输语法 - 服务: {Service}", pc.AbstractSyntax.Name);
+                        DicomLogger.Information("QRSCP", "Accepting transfer syntaxes for C-GET/C-MOVE service - Service: {Service}", pc.AbstractSyntax.Name);
                     }
                     else
                     {
-                        // 对于其他服务，使用基本传输语法
+                        // For other services, use basic transfer syntaxes
                         pc.AcceptTransferSyntaxes(AcceptedTransferSyntaxes);
-                        DicomLogger.Information("QRSCP", "为基本服务接受传输语法 - 服务: {Service}", pc.AbstractSyntax.Name);
+                        DicomLogger.Information("QRSCP", "Accepting transfer syntaxes for basic service - Service: {Service}", pc.AbstractSyntax.Name);
                     }
                 }
                 else
                 {
-                    DicomLogger.Warning("QRSCP", "拒绝不支持的服务 - AET: {CallingAE}, 服务: {Service}", 
+                    DicomLogger.Warning("QRSCP", "Rejecting unsupported service - AET: {CallingAE}, Service: {Service}",
                         association.CallingAE, pc.AbstractSyntax.Name);
                     pc.SetResult(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported);
                 }
             }
 
-            // 如果有存储类服务，只记录一条汇总日志
+            // Log a summary if there are storage services
             if (storageCount > 0)
             {
-                DicomLogger.Information("QRSCP", "接受存储类服务 - AET: {CallingAE}, 支持的存储类数: {Count}", 
+                DicomLogger.Information("QRSCP", "Accepting storage services - AET: {CallingAE}, Supported storage count: {Count}",
                     association.CallingAE, storageCount);
             }
 
@@ -169,7 +169,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "处理关联请求失败");
+            DicomLogger.Error("QRSCP", ex, "Failed to process association request");
             return SendAssociationRejectAsync(
                 DicomRejectResult.Permanent,
                 DicomRejectSource.ServiceUser,
@@ -181,7 +181,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         if (!_associationReleaseLogged)
         {
-            DicomLogger.Information("QRSCP", "接收到关联释放请求");
+            DicomLogger.Information("QRSCP", "Received association release request");
             _associationReleaseLogged = true;
         }
         return SendAssociationReleaseResponseAsync();
@@ -189,7 +189,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
     public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
     {
-        DicomLogger.Warning("QRSCP", "接收到中止请求 - 来源: {Source}, 原因: {Reason}", source, reason);
+        DicomLogger.Warning("QRSCP", "Received abort request - Source: {Source}, Reason: {Reason}", source, reason);
     }
 
     public void OnConnectionClosed(Exception? exception)
@@ -198,32 +198,32 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         {
             if (exception != null)
             {
-                DicomLogger.Error("QRSCP", exception, "连接异常关闭");
+                DicomLogger.Error("QRSCP", exception, "Connection closed with error");
             }
 
-            // 重置状态
+            // Reset state
             _associationReleaseLogged = false;
             _transferSyntaxLogged = false;
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "处理连接关闭失败");
+            DicomLogger.Error("QRSCP", ex, "Failed to handle connection close");
         }
     }
 
     public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
     {
-        DicomLogger.Information("QRSCP", "收到 C-ECHO 请求 - 来自: {CallingAE}", Association.CallingAE);
+        DicomLogger.Information("QRSCP", "Received C-ECHO request - From: {CallingAE}", Association.CallingAE);
         return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
     }
 
     public async IAsyncEnumerable<DicomCFindResponse> OnCFindRequestAsync(DicomCFindRequest request)
     {
-        DicomLogger.Information("QRSCP", "收到 C-FIND 请求 - 来自: {CallingAE}, 级别: {Level}", 
+        DicomLogger.Information("QRSCP", "Received C-FIND request - From: {CallingAE}, Level: {Level}",
             Association.CallingAE, request.Level);
 
-        if (request.Level != DicomQueryRetrieveLevel.Study && 
-            request.Level != DicomQueryRetrieveLevel.Series && 
+        if (request.Level != DicomQueryRetrieveLevel.Study &&
+            request.Level != DicomQueryRetrieveLevel.Series &&
             request.Level != DicomQueryRetrieveLevel.Image &&
             request.Level != DicomQueryRetrieveLevel.Patient)
         {
@@ -231,7 +231,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             yield break;
         }
 
-        // 使 fo-dicom 的查询理
+        // Handle fo-dicom query
         var responses = request.Level switch
         {
             DicomQueryRetrieveLevel.Patient => await HandlePatientLevelFind(request),
@@ -248,18 +248,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         yield return new DicomCFindResponse(request, DicomStatus.Success);
     }
-
     private async Task<List<DicomCFindResponse>> HandleStudyLevelFind(DicomCFindRequest request)
     {
         var responses = new List<DicomCFindResponse>();
 
         try
         {
-            // 从请求中获取查询参数
+            // Extract query parameters from the request
             var queryParams = ExtractStudyQueryParameters(request);
-            
-            DicomLogger.Information("QRSCP", "Study级查询参数 - PatientId: {PatientId}, PatientName: {PatientName}, " +
-                "AccessionNumber: {AccessionNumber}, 日期范围: {StartDate} - {EndDate}, Modality: {Modality},StudyInstanceUid: {StudyInstanceUid}",
+
+            DicomLogger.Information("QRSCP", "Study level query parameters - PatientId: {PatientId}, PatientName: {PatientName}, " +
+                "AccessionNumber: {AccessionNumber}, Date range: {StartDate} - {EndDate}, Modality: {Modality}, StudyInstanceUid: {StudyInstanceUid}",
                 queryParams.PatientId,
                 queryParams.PatientName,
                 queryParams.AccessionNumber,
@@ -268,7 +267,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 queryParams.Modalities,
                 queryParams.StudyInstanceUid);
 
-            // 从数据库查询数据
+            // Query data from the database
             var studies = await Task.Run(() => _repository.GetStudies(
                 queryParams.PatientId,
                 queryParams.PatientName,
@@ -277,12 +276,12 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 queryParams.Modalities,
                 queryParams.StudyInstanceUid,
                 0,     // offset
-                1000   // 限制返回1000条记录
+                1000   // Limit to 1000 records
             ));
 
-            DicomLogger.Information("QRSCP", "Study级查询结果 - 记录数: {Count}", studies.Count);
+            DicomLogger.Information("QRSCP", "Study level query results - Record count: {Count}", studies.Count);
 
-            // 构建响应
+            // Build responses
             foreach (var study in studies)
             {
                 var response = CreateStudyResponse(request, study);
@@ -291,7 +290,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "Study级查询失败: {Message}", ex.Message);
+            DicomLogger.Error("QRSCP", ex, "Study level query failed: {Message}", ex.Message);
             responses.Add(new DicomCFindResponse(request, DicomStatus.ProcessingFailure));
         }
 
@@ -308,25 +307,25 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
     private StudyQueryParameters ExtractStudyQueryParameters(DicomCFindRequest request)
     {
-        // 处理可能为 null 的字符串
-        string ProcessValue(string? value) => 
+        // Handle potentially null strings
+        string ProcessValue(string? value) =>
             (value?.Replace("*", "")) ?? string.Empty;
 
-        // 记录原始日期值
+        // Log original date value
         var studyDate = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyDate, string.Empty);
         var studyTime = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyTime, string.Empty);
         if (!string.IsNullOrEmpty(studyDate))
         {
-            DicomLogger.Debug("QRSCP", "查询日期: {Date}", studyDate);
+            DicomLogger.Debug("QRSCP", "Query date: {Date}", studyDate);
         }
 
-        // 处理日期范围
+        // Handle date range
         (string StartDate, string EndDate) ProcessDateRange(string? dateValue)
         {
             if (string.IsNullOrEmpty(dateValue))
-                return (string.Empty, string.Empty);  // 返回空，查询所有记录
+                return (string.Empty, string.Empty);  // Return empty to query all records
 
-            // 移除可能的 VR 和标签信息
+            // Remove potential VR and tag information
             var cleanDateValue = dateValue;
             if (dateValue.Contains("DA"))
             {
@@ -337,7 +336,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 }
             }
 
-            // 处理 DICOM 日期范围格式
+            // Handle DICOM date range format
             if (cleanDateValue.Contains("-"))
             {
                 var parts = cleanDateValue.Split('-');
@@ -346,32 +345,32 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     var startDate = parts[0].Trim();
                     var endDate = parts[1].Trim();
 
-                    // 处理开放式范围
+                    // Handle open-ended ranges
                     if (string.IsNullOrEmpty(startDate))
                     {
-                        startDate = "19000101";  // 使用最小日期
+                        startDate = "19000101";  // Use minimum date
                     }
                     if (string.IsNullOrEmpty(endDate))
                     {
-                        endDate = "99991231";    // 使用最大日期
+                        endDate = "99991231";    // Use maximum date
                     }
 
                     return (startDate, endDate);
                 }
             }
-            
-            // 如果是个日期，开始和结束日期相同
+
+            // If it's a single date, start and end dates are the same
             return (cleanDateValue, cleanDateValue);
         }
 
         var dateRange = ProcessDateRange(studyDate);
 
-        // 处理 Modality 列表
+        // Handle Modality list
         string[] ProcessModalities(DicomDataset dataset)
         {
             var modalities = new List<string>();
 
-            // 尝试取 ModalitiesInStudy
+            // Try to get ModalitiesInStudy
             if (dataset.Contains(DicomTag.ModalitiesInStudy))
             {
                 try
@@ -384,11 +383,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 }
                 catch (Exception ex)
                 {
-                    DicomLogger.Warning("QRSCP", ex, "获取 ModalitiesInStudy 失败");
+                    DicomLogger.Warning("QRSCP", ex, "Failed to get ModalitiesInStudy");
                 }
             }
 
-            // 尝试获取单 Modality
+            // Try to get single Modality
             var singleModality = dataset.GetSingleValueOrDefault<string>(DicomTag.Modality, string.Empty);
             if (!string.IsNullOrEmpty(singleModality) && !modalities.Contains(singleModality))
             {
@@ -414,16 +413,16 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         var response = new DicomCFindResponse(request, DicomStatus.Pending);
         var dataset = new DicomDataset();
 
-        // 获取请求中的字符集，如果没有指定则默认使用 UTF-8
+        // Get character set from the request, default to UTF-8 if not specified
         var requestedCharacterSet = request.Dataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192");
 
-        // 根据请求的字符集设置响应的字符集
+        // Set response character set based on the request
         switch (requestedCharacterSet.ToUpperInvariant())
         {
             case "ISO_IR 100":  // Latin1
                 dataset.Add(DicomTag.SpecificCharacterSet, "ISO_IR 100");
                 break;
-            case "GB18030":     // 中文简体
+            case "GB18030":     // Simplified Chinese
                 dataset.Add(DicomTag.SpecificCharacterSet, "GB18030");
                 break;
             case "ISO_IR 192":  // UTF-8
@@ -449,7 +448,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         response.Dataset = dataset;
         return response;
     }
-
     private async Task<List<DicomCFindResponse>> HandleSeriesLevelFind(DicomCFindRequest request)
     {
         var responses = new List<DicomCFindResponse>();
@@ -457,11 +455,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         var studyInstanceUid = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyInstanceUID, string.Empty);
         if (string.IsNullOrEmpty(studyInstanceUid))
         {
-            DicomLogger.Warning("QRSCP", "Series级别查询缺少StudyInstanceUID");
+            DicomLogger.Warning("QRSCP", "Series level query missing StudyInstanceUID");
             return responses;
         }
 
-        // 使用 Task.Run 来异步执行数查询
+        // Use Task.Run to perform database query asynchronously
         var seriesList = await Task.Run(() => _repository.GetSeriesByStudyUid(studyInstanceUid));
 
         foreach (var series in seriesList)
@@ -469,10 +467,10 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var response = new DicomCFindResponse(request, DicomStatus.Pending);
             var dataset = new DicomDataset();
 
-            // 添加字符集和其他用标签
+            // Add character set and other common tags
             AddCommonTags(dataset, request.Dataset);
 
-            // 设置必要的字段
+            // Set necessary fields
             dataset.Add(DicomTag.StudyInstanceUID, series.StudyInstanceUid);
             dataset.Add(DicomTag.SeriesInstanceUID, series.SeriesInstanceUid);
             dataset.Add(DicomTag.Modality, series.Modality ?? string.Empty);
@@ -480,7 +478,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             dataset.Add(DicomTag.SeriesDescription, series.SeriesDescription ?? string.Empty);
             dataset.Add(DicomTag.NumberOfSeriesRelatedInstances, series.NumberOfInstances);
 
-            // 复制请求的其他查询字段（如果不存在）
+            // Copy other query fields from the request (if not already present)
             foreach (var tag in request.Dataset.Select(x => x.Tag))
             {
                 if (!dataset.Contains(tag) && request.Dataset.TryGetString(tag, out string value))
@@ -493,7 +491,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             responses.Add(response);
         }
 
-        DicomLogger.Information("QRSCP", "Series级别查询完成 - 返回记录数: {Count}", responses.Count);
+        DicomLogger.Information("QRSCP", "Series level query completed - Record count: {Count}", responses.Count);
         return responses;
     }
 
@@ -503,14 +501,14 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         var studyInstanceUid = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyInstanceUID, string.Empty);
         var seriesInstanceUid = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesInstanceUID, string.Empty);
-        
+
         if (string.IsNullOrEmpty(studyInstanceUid) || string.IsNullOrEmpty(seriesInstanceUid))
         {
-            DicomLogger.Warning("QRSCP", "Image级别查询缺少StudyInstanceUID或SeriesInstanceUID");
+            DicomLogger.Warning("QRSCP", "Image level query missing StudyInstanceUID or SeriesInstanceUID");
             return responses;
         }
 
-        // 使 Task.Run 来异步执行数据库查询
+        // Use Task.Run to perform database query asynchronously
         var instances = await Task.Run(() => _repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid));
 
         foreach (var instance in instances)
@@ -520,16 +518,16 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 var response = new DicomCFindResponse(request, DicomStatus.Pending);
                 var dataset = new DicomDataset();
 
-                // 添加字符集和其他通用标签
+                // Add character set and other common tags
                 AddCommonTags(dataset, request.Dataset);
 
-                // 验证 UID 格
+                // Validate UID format
                 var validStudyUid = ValidateUID(studyInstanceUid);
                 var validSeriesUid = ValidateUID(seriesInstanceUid);
                 var validSopInstanceUid = ValidateUID(instance.SopInstanceUid);
                 var validSopClassUid = ValidateUID(instance.SopClassUid);
 
-                // 置必要的字段
+                // Set necessary fields
                 dataset.Add(DicomTag.StudyInstanceUID, validStudyUid);
                 dataset.Add(DicomTag.SeriesInstanceUID, validSeriesUid);
                 dataset.Add(DicomTag.SOPInstanceUID, validSopInstanceUid);
@@ -541,43 +539,43 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("QRSCP", ex, "创建Image响应失败 - SOPInstanceUID: {SopInstanceUid}", 
+                DicomLogger.Error("QRSCP", ex, "Failed to create Image response - SOPInstanceUID: {SopInstanceUid}",
                     instance.SopInstanceUid);
                 continue;
             }
         }
 
-        DicomLogger.Information("QRSCP", "Image级别查询完成 - 返回记录数: {Count}", responses.Count);
+        DicomLogger.Information("QRSCP", "Image level query completed - Record count: {Count}", responses.Count);
         return responses;
     }
 
     private string ValidateUID(string uid)
     {
         if (string.IsNullOrEmpty(uid)) return string.Empty;
-        
+
         try
         {
-            // 分割 UID
+            // Split UID
             var parts = uid.Split('.');
             var validParts = new List<string>();
 
             foreach (var part in parts)
             {
-                // 跳过空组
+                // Skip empty parts
                 if (string.IsNullOrEmpty(part))
                 {
                     continue;
                 }
 
-                // 移除前导零并确保至少保留一个数字
+                // Remove leading zeros and ensure at least one digit remains
                 var trimmed = part.TrimStart('0');
                 validParts.Add(string.IsNullOrEmpty(trimmed) ? "0" : trimmed);
             }
 
-            // 确保少有两个组件
+            // Ensure at least two components
             if (validParts.Count < 2)
             {
-                DicomLogger.Warning("QRSCP", "无效的UID格式 (组件数量不足): {Uid}", 
+                DicomLogger.Warning("QRSCP", "Invalid UID format (insufficient components): {Uid}",
                     uid ?? string.Empty);
                 return "0.0";
             }
@@ -586,7 +584,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "UID验证失败: {Uid}", 
+            DicomLogger.Error("QRSCP", ex, "UID validation failed: {Uid}",
                 uid ?? string.Empty);
             return "0.0";
         }
@@ -594,8 +592,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
     private void AddCommonTags(DicomDataset dataset, DicomDataset requestDataset)
     {
-        // 让 fo-dicom 处理字符集
-        dataset.AddOrUpdate(DicomTag.SpecificCharacterSet, 
+        // Let fo-dicom handle character set
+        dataset.AddOrUpdate(DicomTag.SpecificCharacterSet,
             requestDataset.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 192"));
     }
 
@@ -603,48 +601,48 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         var destinationAE = request.DestinationAE;
 
-        // 检查目标 AE 是否正在处理中
+        // Check if the destination AE is already being processed
         if (_activeDestinations.TryGetValue(destinationAE, out var existingCts))
         {
-            DicomLogger.Warning("QRSCP", "目标AE有未完成的任务，取消旧任务 - AET: {AET}", destinationAE);
+            DicomLogger.Warning("QRSCP", "Destination AE has unfinished tasks, canceling old task - AET: {AET}", destinationAE);
             existingCts.Cancel();
             existingCts.Dispose();
             _activeDestinations.TryRemove(destinationAE, out _);
         }
 
-        // 创建新的取消令牌
+        // Create a new cancellation token
         var cts = new CancellationTokenSource();
         _activeDestinations.TryAdd(destinationAE, cts);
 
         try
         {
-            DicomLogger.Information("QRSCP", "收到C-MOVE请求 - AE: {CallingAE}, 目标: {DestinationAE}", 
+            DicomLogger.Information("QRSCP", "Received C-MOVE request - AE: {CallingAE}, Destination: {DestinationAE}",
                 Association.CallingAE, request.DestinationAE);
 
-            // 1. 验证目标 AE
+            // 1. Validate destination AE
             var moveDestination = _settings.QRSCP.MoveDestinations
                 .FirstOrDefault(x => x.AeTitle.Equals(request.DestinationAE, StringComparison.OrdinalIgnoreCase));
 
             if (moveDestination == null)
             {
-                DicomLogger.Warning("QRSCP", "目标AE未配置 - AET: {AET}", request.DestinationAE);
+                DicomLogger.Warning("QRSCP", "Destination AE not configured - AET: {AET}", request.DestinationAE);
                 yield return new DicomCMoveResponse(request, DicomStatus.QueryRetrieveMoveDestinationUnknown);
                 yield break;
             }
 
-            // 2. 测试目标 SCP 连接
+            // 2. Test destination SCP connection
             var client = CreateDicomClient(moveDestination);
             DicomResponse? response = null;
-            try 
+            try
             {
                 var echoRequest = new DicomCEchoRequest();
                 await client.AddRequestAsync(echoRequest);
                 await client.SendAsync();
-                DicomLogger.Information("QRSCP", "目标SCP连接测试成功 - AET: {AET}", request.DestinationAE);
+                DicomLogger.Information("QRSCP", "Destination SCP connection test successful - AET: {AET}", request.DestinationAE);
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("QRSCP", ex, "目标SCP连接测试失败 - AET: {AET}", request.DestinationAE);
+                DicomLogger.Error("QRSCP", ex, "Destination SCP connection test failed - AET: {AET}", request.DestinationAE);
                 response = new DicomCMoveResponse(request, DicomStatus.QueryRetrieveMoveDestinationUnknown);
             }
 
@@ -654,20 +652,20 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 yield break;
             }
 
-            // 3. 获取实例列表
+            // 3. Get instance list
             var instances = await GetRequestedInstances(request);
             if (!instances.Any())
             {
-                DicomLogger.Information("QRSCP", "未找到匹配实例");
+                DicomLogger.Information("QRSCP", "No matching instances found");
                 yield return new DicomCMoveResponse(request, DicomStatus.Success);
                 yield break;
             }
 
-            // 4. 处理实例传输并返回进度
+            // 4. Process instance transfer and return progress
             var totalInstances = instances.Count();
             var result = await ProcessInstances(request, instances, client, cts.Token);
 
-            // 5. 返回进度和最终状态
+            // 5. Return progress and final status
             yield return new DicomCMoveResponse(request, DicomStatus.Pending)
             {
                 Dataset = CreateProgressResponse(
@@ -691,17 +689,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     finalStatus).Dataset
             };
 
-            // 添加完成日志
-            DicomLogger.Information("QRSCP", 
-                "C-MOVE完成 - 总数: {Total}, 成功: {Success}, 失败: {Failed}, 状态: {Status}", 
-                totalInstances, 
-                result.successCount, 
-                result.failedCount, 
+            // Add completion log
+            DicomLogger.Information("QRSCP",
+                "C-MOVE completed - Total: {Total}, Success: {Success}, Failed: {Failed}, Status: {Status}",
+                totalInstances,
+                result.successCount,
+                result.failedCount,
                 finalStatus);
         }
         finally
         {
-            // 清理资源
+            // Clean up resources
             if (_activeDestinations.TryRemove(destinationAE, out var currentCts) && currentCts == cts)
             {
                 cts.Dispose();
@@ -710,14 +708,14 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     }
 
     private async Task<(int successCount, int failedCount, bool hasNetworkError)> SendBatch(
-        IDicomClient client, 
-        List<DicomFile> files, 
-        int currentSuccess, 
+        IDicomClient client,
+        List<DicomFile> files,
+        int currentSuccess,
         int currentFailed)
     {
         try
         {
-            // 批量转码
+            // Batch transcode
             var requestedTransferSyntax = GetRequestedTransferSyntax(files[0]);
             if (requestedTransferSyntax != null)
             {
@@ -729,25 +727,25 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         }
         catch (DicomNetworkException ex)
         {
-            DicomLogger.Error("QRSCP", ex, "网络错误，停止发送");
+            DicomLogger.Error("QRSCP", ex, "Network error, stopping send");
             return (currentSuccess, currentFailed + files.Count, true);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "发送失败");
+            DicomLogger.Error("QRSCP", ex, "Send failed");
             return (currentSuccess, currentFailed + files.Count, false);
         }
     }
 
     private DicomResponse CreateProgressResponse(
-        DicomRequest request, 
-        int totalInstances, 
-        int successCount, 
+        DicomRequest request,
+        int totalInstances,
+        int successCount,
         int failedCount,
         DicomStatus? status = null)
     {
         var remaining = totalInstances - (successCount + failedCount);
-        var currentStatus = status ?? (remaining > 0 ? DicomStatus.Pending : 
+        var currentStatus = status ?? (remaining > 0 ? DicomStatus.Pending :
             failedCount > 0 ? DicomStatus.ProcessingFailure : DicomStatus.Success);
 
         var dataset = new DicomDataset()
@@ -774,7 +772,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         client.NegotiateAsyncOps();
 
-        // 添加所有可能的存储类 PresentationContexts
+        // Add all possible storage class PresentationContexts
         var storageUids = new DicomUID[]
         {
             DicomUID.CTImageStorage,
@@ -806,32 +804,32 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
     public async IAsyncEnumerable<DicomCGetResponse> OnCGetRequestAsync(DicomCGetRequest request)
     {
-        DicomLogger.Information("QRSCP", "收到C-GET请求 - AE: {CallingAE}, 级别: {Level}", 
+        DicomLogger.Information("QRSCP", "Received C-GET request - AE: {CallingAE}, Level: {Level}",
             Association.CallingAE, request.Level);
 
-        // 1. 验证请求参数
+        // 1. Validate request parameters
         var studyInstanceUid = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.StudyInstanceUID, string.Empty);
         if (string.IsNullOrEmpty(studyInstanceUid))
         {
-            DicomLogger.Warning("QRSCP", "C-GET缺少StudyInstanceUID");
+            DicomLogger.Warning("QRSCP", "C-GET missing StudyInstanceUID");
             yield return new DicomCGetResponse(request, DicomStatus.InvalidAttributeValue);
             yield break;
         }
 
-        // 2. 获取实例列表
+        // 2. Get instance list
         var instances = await GetRequestedInstances(request);
         if (!instances.Any())
         {
-            DicomLogger.Information("QRSCP", "未找到匹配实例");
+            DicomLogger.Information("QRSCP", "No matching instances found");
             yield return new DicomCGetResponse(request, DicomStatus.Success);
             yield break;
         }
 
-        // 3. 处理实例传输
+        // 3. Process instance transfer
         var totalInstances = instances.Count();
         var result = await ProcessInstances(request, instances);
-        
-        // 4. 只返回最终状态
+
+        // 4. Return only final status
         var finalStatus = result.hasNetworkError ? DicomStatus.ProcessingFailure :
                          result.failedCount > 0 ? DicomStatus.ProcessingFailure :
                          DicomStatus.Success;
@@ -846,7 +844,6 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 finalStatus).Dataset
         };
     }
-
     private async Task<IEnumerable<Instance>> GetRequestedInstances(DicomRequest request)
     {
         try
@@ -855,8 +852,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             var seriesInstanceUid = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.SeriesInstanceUID, string.Empty);
             var sopInstanceUid = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.SOPInstanceUID, string.Empty);
 
-            DicomLogger.Information("QRSCP", 
-                "获取实例列表 - Study: {StudyUid}, Series: {SeriesUid}, SOP: {SopUid}",
+            DicomLogger.Information("QRSCP",
+                "Getting instance list - Study: {StudyUid}, Series: {SeriesUid}, SOP: {SopUid}",
                 studyInstanceUid, seriesInstanceUid, sopInstanceUid);
 
             if (!string.IsNullOrEmpty(sopInstanceUid))
@@ -864,23 +861,23 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 var instance = await Task.Run(() => _repository.GetInstanceAsync(sopInstanceUid));
                 return instance != null ? new[] { instance } : Array.Empty<Instance>();
             }
-            
+
             if (!string.IsNullOrEmpty(seriesInstanceUid))
             {
                 return await Task.Run(() => _repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid));
             }
-            
+
             if (!string.IsNullOrEmpty(studyInstanceUid))
             {
                 return await Task.Run(() => _repository.GetInstancesByStudyUid(studyInstanceUid));
             }
 
-            DicomLogger.Warning("QRSCP", "请求缺少必要的UID");
+            DicomLogger.Warning("QRSCP", "Request missing necessary UID");
             return Array.Empty<Instance>();
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "获取实例列表失败");
+            DicomLogger.Error("QRSCP", ex, "Failed to get instance list");
             return Array.Empty<Instance>();
         }
     }
@@ -891,18 +888,18 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         try
         {
-            // 从请求中获取查询参数
+            // Extract query parameters from the request
             var patientId = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientID, string.Empty);
             var patientName = request.Dataset.GetSingleValueOrDefault<string>(DicomTag.PatientName, string.Empty);
 
-            DicomLogger.Information("QRSCP", 
-                "Patient级查询 - ID: {PatientId}, Name: {PatientName}", 
+            DicomLogger.Information("QRSCP",
+                "Patient level query - ID: {PatientId}, Name: {PatientName}",
                 patientId, patientName);
 
-            // 从数据库查询患者数据
+            // Query patient data from the database
             var patients = await Task.Run(() => _repository.GetPatients(patientId, patientName));
 
-            // 构建响应
+            // Build responses
             foreach (var patient in patients)
             {
                 var response = new DicomCFindResponse(request, DicomStatus.Pending);
@@ -922,11 +919,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 responses.Add(response);
             }
 
-            DicomLogger.Information("QRSCP", "Patient级查询完成 - 返回记录数: {Count}", responses.Count);
+            DicomLogger.Information("QRSCP", "Patient level query completed - Record count: {Count}", responses.Count);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "Patient级查询失败");
+            DicomLogger.Error("QRSCP", ex, "Patient level query failed");
             responses.Add(new DicomCFindResponse(request, DicomStatus.ProcessingFailure));
         }
 
@@ -937,7 +934,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         if (ex == null) return false;
 
-        // 检查是否是网络相关的异常
+        // Check if it is a network-related exception
         return ex is System.Net.Sockets.SocketException ||
                ex is System.Net.WebException ||
                ex is System.IO.IOException ||
@@ -949,7 +946,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         try
         {
-            // 1. 从 C-MOVE/C-GET 服务的 Presentation Context 中获取传输语法
+            // 1. Get transfer syntax from the Presentation Context of C-MOVE/C-GET service
             var moveContext = Association.PresentationContexts
                 .FirstOrDefault(pc => pc.AbstractSyntax == DicomUID.StudyRootQueryRetrieveInformationModelMove ||
                                    pc.AbstractSyntax == DicomUID.PatientRootQueryRetrieveInformationModelMove);
@@ -959,8 +956,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             {
                 if (!_transferSyntaxLogged)
                 {
-                    DicomLogger.Information("QRSCP", 
-                        "传输语法检查 - 本地文件: {SourceSyntax}, 请求格式: {TargetSyntax}", 
+                    DicomLogger.Information("QRSCP",
+                        "Transfer syntax check - Local file: {SourceSyntax}, Requested format: {TargetSyntax}",
                         file.Dataset.InternalTransferSyntax.UID.Name,
                         moveTransferSyntax.UID.Name);
                     _transferSyntaxLogged = true;
@@ -969,7 +966,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 return moveTransferSyntax;
             }
 
-            // 2. 获取当前文件的 SOP Class UID 对应的传输语法
+            // 2. Get transfer syntax corresponding to the SOP Class UID of the current file
             var sopClassUid = file.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID);
             var storageContext = Association.PresentationContexts
                 .FirstOrDefault(pc => pc.AbstractSyntax == sopClassUid);
@@ -979,8 +976,8 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             {
                 if (!_transferSyntaxLogged)
                 {
-                    DicomLogger.Information("QRSCP", 
-                        "存储类传输语法检查 - 本地文件: {SourceSyntax}, 请求格式: {TargetSyntax}", 
+                    DicomLogger.Information("QRSCP",
+                        "Storage class transfer syntax check - Local file: {SourceSyntax}, Requested format: {TargetSyntax}",
                         file.Dataset.InternalTransferSyntax.UID.Name,
                         storageTransferSyntax.UID.Name);
                     _transferSyntaxLogged = true;
@@ -989,50 +986,50 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 return storageTransferSyntax;
             }
 
-            // 3. 如果都没有指定传输语法，使用默认的传输语法
-            DicomLogger.Information("QRSCP", "未指定传输语法，使用默认传输语法: Explicit VR Little Endian");
+            // 3. Use default transfer syntax if none is specified
+            DicomLogger.Information("QRSCP", "No transfer syntax specified, using default transfer syntax: Explicit VR Little Endian");
             return DicomTransferSyntax.ExplicitVRLittleEndian;
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("QRSCP", ex, "获取请求的传输语法失败，使用默认传输语法: Explicit VR Little Endian");
+            DicomLogger.Error("QRSCP", ex, "Failed to get requested transfer syntax, using default transfer syntax: Explicit VR Little Endian");
             return DicomTransferSyntax.ExplicitVRLittleEndian;
         }
     }
 
-    // 实现 IDicomCStoreProvider 接口
+    // Implement IDicomCStoreProvider interface
     public Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
     {
-        DicomLogger.Warning("QRSCP", "不支持直接存储服务 - AET: {CallingAE}, SOPInstanceUID: {SopInstanceUid}", 
+        DicomLogger.Warning("QRSCP", "Direct storage service not supported - AET: {CallingAE}, SOPInstanceUID: {SopInstanceUid}",
             Association?.CallingAE ?? "Unknown",
             request.SOPInstanceUID?.ToString() ?? string.Empty);
 
-        // 返回不支持的状态
+        // Return unsupported status
         return Task.FromResult(new DicomCStoreResponse(request, DicomStatus.SOPClassNotSupported));
     }
 
     public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e)
     {
-        DicomLogger.Warning("QRSCP", e, "存储请求异常 - 临时文件: {TempFile}", 
+        DicomLogger.Warning("QRSCP", e, "Storage request exception - Temp file: {TempFile}",
             tempFileName ?? string.Empty);
         return Task.CompletedTask;
     }
 
     private List<DicomFile> TranscodeFilesIfNeeded(List<DicomFile> files, DicomTransferSyntax targetSyntax)
     {
-        // 1. 快速检查是否需要转码
+        // 1. Quick check if transcoding is needed
         if (files.All(f => f.Dataset.InternalTransferSyntax == targetSyntax))
         {
             return files;
         }
 
         var transcoder = new DicomTranscoder(DicomTransferSyntax.ExplicitVRLittleEndian, targetSyntax);
-        var results = new ConcurrentBag<DicomFile>();  // 使用线程安全的集合
+        var results = new ConcurrentBag<DicomFile>();  // Use thread-safe collection
 
-        // 2. 并行转码
-        Parallel.ForEach(files, 
+        // 2. Parallel transcoding
+        Parallel.ForEach(files,
             new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-            file => 
+            file =>
         {
             try
             {
@@ -1048,7 +1045,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             }
             catch (Exception ex)
             {
-                DicomLogger.Warning("QRSCP", ex, "语法转换失败，使用原格式");
+                DicomLogger.Warning("QRSCP", ex, "Syntax conversion failed, using original format");
                 results.Add(file);
             }
         });
@@ -1056,7 +1053,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         return results.ToList();
     }
 
-    private const int BatchSize = 10;  // 固定批量大小
+    private const int BatchSize = 10;  // Fixed batch size
 
     private async Task<(int successCount, int failedCount, bool hasNetworkError)> ProcessInstances(
         DicomRequest request,
@@ -1071,10 +1068,10 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
 
         foreach (var seriesGroup in instances.GroupBy(x => x.SeriesInstanceUid))
         {
-            // 检查是否已取消
+            // Check if canceled
             if (cancellationToken.IsCancellationRequested)
             {
-                DicomLogger.Warning("QRSCP", "任务已取消，停止处理");
+                DicomLogger.Warning("QRSCP", "Task canceled, stopping processing");
                 break;
             }
 
@@ -1083,7 +1080,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             {
                 foreach (var instance in seriesGroup)
                 {
-                    // 如果已经发生网络错误或取消，立即停止处理
+                    // Stop processing if network error or canceled
                     if (hasNetworkError || cancellationToken.IsCancellationRequested)
                     {
                         break;
@@ -1101,17 +1098,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                         var file = await DicomFile.OpenAsync(filePath);
                         batchFiles.Add(file);
 
-                        // 达到批次大小时处理
+                        // Process batch when batch size is reached
                         if (batchFiles.Count >= BatchSize)
                         {
-                            // 检查是否已取消
+                            // Check if canceled
                             if (cancellationToken.IsCancellationRequested)
                             {
                                 break;
                             }
 
-                            // 发送批次
-                            var result = client != null 
+                            // Send batch
+                            var result = client != null
                                 ? await SendBatch(client, batchFiles, successCount, failedCount)
                                 : await SendLocalBatch(request, batchFiles, successCount, failedCount);
 
@@ -1130,15 +1127,15 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                     catch (Exception ex)
                     {
                         failedCount++;
-                        DicomLogger.Error("QRSCP", ex, "处理失败 - UID: {SopInstanceUid}", instance.SopInstanceUid);
+                        DicomLogger.Error("QRSCP", ex, "Processing failed - UID: {SopInstanceUid}", instance.SopInstanceUid);
                     }
                 }
 
-                // 如果已经发生网络错误或取消，不处理剩余文件
+                // Skip remaining files if network error or canceled
                 if (!hasNetworkError && !cancellationToken.IsCancellationRequested && batchFiles.Any())
                 {
-                    // 发送批次
-                    var result = client != null 
+                    // Send batch
+                    var result = client != null
                         ? await SendBatch(client, batchFiles, successCount, failedCount)
                         : await SendLocalBatch(request, batchFiles, successCount, failedCount);
 
@@ -1159,11 +1156,11 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
                 batchFiles.Clear();
             }
 
-            // 如果发生网络错误或取消，立即停止处理下一个序列
+            // Stop processing next series if network error or canceled
             if (hasNetworkError || cancellationToken.IsCancellationRequested)
             {
-                DicomLogger.Warning("QRSCP", 
-                    cancellationToken.IsCancellationRequested ? "任务已取消，停止处理" : "发现网络错误，停止处理");
+                DicomLogger.Warning("QRSCP",
+                    cancellationToken.IsCancellationRequested ? "Task canceled, stopping processing" : "Network error detected, stopping processing");
                 break;
             }
         }
@@ -1171,7 +1168,7 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         return (successCount, failedCount, hasNetworkError);
     }
 
-    // C-GET 本地发送
+    // C-GET local send
     private async Task<(int successCount, int failedCount, bool hasNetworkError)> SendLocalBatch(
         DicomRequest request,
         List<DicomFile> files,
@@ -1180,17 +1177,17 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
     {
         try
         {
-            // 1. 批量转码
+            // 1. Batch transcode
             var requestedTransferSyntax = GetRequestedTransferSyntax(files[0]);
             if (requestedTransferSyntax != null)
             {
                 files = TranscodeFilesIfNeeded(files, requestedTransferSyntax);
             }
 
-            // 2. 逐个发送
+            // 2. Send one by one
             foreach (var file in files)
             {
-                await SendRequestAsync(new DicomCStoreRequest(file));  // 使用基类的 SendRequestAsync
+                await SendRequestAsync(new DicomCStoreRequest(file));  // Use base class's SendRequestAsync
             }
             return (currentSuccess + files.Count, currentFailed, false);
         }
@@ -1198,18 +1195,18 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
         {
             if (IsNetworkError(ex))
             {
-                DicomLogger.Error("QRSCP", ex, "网络错误，停止发送");
+                DicomLogger.Error("QRSCP", ex, "Network error, stopping send");
                 return (currentSuccess, currentFailed + files.Count, true);
             }
-            
-            DicomLogger.Error("QRSCP", ex, "发送失败");
+
+            DicomLogger.Error("QRSCP", ex, "Send failed");
             return (currentSuccess, currentFailed + files.Count, false);
         }
     }
 
     private async Task SendToDestinationAsync(IDicomClient client, List<DicomFile> files)
     {
-        // 1. 按 SOP Class 分组添加 PresentationContext
+        // 1. Add PresentationContext grouped by SOP Class
         var sopClassGroups = files.GroupBy(f => f.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID));
         foreach (var group in sopClassGroups)
         {
@@ -1220,15 +1217,13 @@ public class QRSCP : DicomService, IDicomServiceProvider, IDicomCEchoProvider, I
             client.AdditionalPresentationContexts.Add(presentationContext);
         }
 
-        // 2. 批量添加请求
+        // 2. Add requests in batch
         foreach (var file in files)
         {
             await client.AddRequestAsync(new DicomCStoreRequest(file));
         }
 
-        // 3. 一次性发送所有请求
+        // 3. Send all requests at once
         await client.SendAsync();
     }
 }
-
-
