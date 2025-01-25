@@ -23,43 +23,43 @@ public class ViewerController : ControllerBase
     {
         try
         {
-            // 获取研究信息
+            // Retrieve study information
             var study = await _repository.GetStudyAsync(studyInstanceUid);
             if (study == null)
             {
                 return NotFound("Study not found");
             }
 
-            // 获取系列信息
+            // Retrieve series information
             var seriesList = await _repository.GetSeriesAsync(studyInstanceUid);
-            
-            // 获取所有实例并计算总数
+
+            // Retrieve all instances and calculate total count
             var totalInstances = 0;
             foreach (var series in seriesList)
             {
                 var instances = await _repository.GetSeriesInstancesAsync(series.SeriesInstanceUid);
                 totalInstances += instances.Count();
             }
-            
-            // 构建响应模型
+
+            // Build response model
             var response = new ViewerStudyResponse
             {
                 Studies = new List<ViewerStudy>
-                {
-                    new ViewerStudy
                     {
-                        StudyInstanceUID = study.StudyInstanceUid,
-                        NumInstances = totalInstances,  // 使用计算出的实例总数
-                        Modalities = study.Modality,
-                        StudyDate = study.StudyDate,
-                        StudyTime = study.StudyTime,
-                        PatientName = study.PatientName,
-                        PatientID = study.PatientId,
-                        AccessionNumber = study.AccessionNumber,
-                        PatientSex = study.PatientSex,
-                        Series = await GetSeriesMetadata(seriesList)
+                        new ViewerStudy
+                        {
+                            StudyInstanceUID = study.StudyInstanceUid,
+                            NumInstances = totalInstances,  // Use calculated total instance count
+                            Modalities = study.Modality,
+                            StudyDate = study.StudyDate,
+                            StudyTime = study.StudyTime,
+                            PatientName = study.PatientName,
+                            PatientID = study.PatientId,
+                            AccessionNumber = study.AccessionNumber,
+                            PatientSex = study.PatientSex,
+                            Series = await GetSeriesMetadata(seriesList)
+                        }
                     }
-                }
             };
 
             return Ok(response);
@@ -75,20 +75,20 @@ public class ViewerController : ControllerBase
     {
         try
         {
-            // 获取研究信息
+            // Retrieve study information
             var study = await _repository.GetStudyAsync(studyInstanceUid);
             if (study == null)
             {
                 return NotFound("Study not found");
             }
 
-            // 获取系列信息
+            // Retrieve series information
             var seriesList = await _repository.GetSeriesAsync(studyInstanceUid);
 
-            // 构建XML
+            // Build XML
             var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
-            // 定义命名空间
+            // Define namespaces
             XNamespace ns = "http://www.weasis.org/xsd/2.5";
             XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
@@ -154,12 +154,12 @@ public class ViewerController : ControllerBase
     private async Task<List<ViewerSeries>> GetSeriesMetadata(IEnumerable<Series> seriesList)
     {
         var result = new List<ViewerSeries>();
-        
+
         foreach (var series in seriesList)
         {
-            // 使用现有的GetSeriesInstancesAsync方法
+            // Use existing GetSeriesInstancesAsync method
             var instances = await _repository.GetSeriesInstancesAsync(series.SeriesInstanceUid);
-            
+
             result.Add(new ViewerSeries
             {
                 SeriesInstanceUID = series.SeriesInstanceUid,
@@ -201,6 +201,7 @@ public class ViewerController : ControllerBase
         return result;
     }
 
+
     private decimal[] ParsePixelSpacing(string? value)
     {
         if (string.IsNullOrEmpty(value)) return Array.Empty<decimal>();
@@ -232,9 +233,9 @@ public class ViewerController : ControllerBase
 
     private string GenerateWadoUrl(string studyUid, string seriesUid, string instanceUid)
     {
-        // 直接使用请求中的 Host（包含域名和端口）
+        // Directly use the Host from the request (including domain and port)
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
-            
+
         return $"dicomweb:{baseUrl}/wado?requestType=WADO" +
                $"&studyUID={studyUid}" +
                $"&seriesUID={seriesUid}" +
@@ -261,7 +262,7 @@ public class ViewerController : ControllerBase
     }
 }
 
-// 响应模型
+// Response model
 public class ViewerStudyResponse
 {
     [JsonPropertyName("studies")]
@@ -272,31 +273,31 @@ public class ViewerStudy
 {
     [JsonPropertyName("StudyInstanceUID")]
     public string StudyInstanceUID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("NumInstances")]
     public int NumInstances { get; set; }
-    
+
     [JsonPropertyName("Modalities")]
     public string? Modalities { get; set; }
-    
+
     [JsonPropertyName("StudyDate")]
     public string? StudyDate { get; set; }
-    
+
     [JsonPropertyName("StudyTime")]
     public string? StudyTime { get; set; }
-    
+
     [JsonPropertyName("PatientName")]
     public string? PatientName { get; set; }
-    
+
     [JsonPropertyName("PatientID")]
     public string PatientID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("AccessionNumber")]
     public string? AccessionNumber { get; set; }
-    
+
     [JsonPropertyName("PatientSex")]
     public string? PatientSex { get; set; }
-    
+
     [JsonPropertyName("series")]
     public List<ViewerSeries> Series { get; set; } = new();
 }
@@ -305,16 +306,16 @@ public class ViewerSeries
 {
     [JsonPropertyName("SeriesInstanceUID")]
     public string SeriesInstanceUID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("SeriesNumber")]
     public string? SeriesNumber { get; set; }
-    
+
     [JsonPropertyName("Modality")]
     public string? Modality { get; set; }
-    
+
     [JsonPropertyName("SliceThickness")]
     public decimal SliceThickness { get; set; }
-    
+
     [JsonPropertyName("instances")]
     public List<ViewerInstance> Instances { get; set; } = new();
 }
@@ -323,7 +324,7 @@ public class ViewerInstance
 {
     [JsonPropertyName("metadata")]
     public InstanceMetadata Metadata { get; set; } = new();
-    
+
     [JsonPropertyName("url")]
     public string Url { get; set; } = string.Empty;
 }
@@ -332,67 +333,67 @@ public class InstanceMetadata
 {
     [JsonPropertyName("Columns")]
     public int Columns { get; set; }
-    
+
     [JsonPropertyName("Rows")]
     public int Rows { get; set; }
-    
+
     [JsonPropertyName("InstanceNumber")]
     public string? InstanceNumber { get; set; }
-    
+
     [JsonPropertyName("SOPClassUID")]
     public string SOPClassUID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("PhotometricInterpretation")]
     public string? PhotometricInterpretation { get; set; }
-    
+
     [JsonPropertyName("BitsAllocated")]
     public int BitsAllocated { get; set; }
-    
+
     [JsonPropertyName("BitsStored")]
     public int BitsStored { get; set; }
-    
+
     [JsonPropertyName("PixelRepresentation")]
     public int PixelRepresentation { get; set; }
-    
+
     [JsonPropertyName("SamplesPerPixel")]
     public int SamplesPerPixel { get; set; }
-    
+
     [JsonPropertyName("PixelSpacing")]
     public decimal[] PixelSpacing { get; set; } = Array.Empty<decimal>();
-    
+
     [JsonPropertyName("HighBit")]
     public int HighBit { get; set; }
-    
+
     [JsonPropertyName("ImageOrientationPatient")]
     public decimal[] ImageOrientationPatient { get; set; } = Array.Empty<decimal>();
-    
+
     [JsonPropertyName("ImagePositionPatient")]
     public decimal[] ImagePositionPatient { get; set; } = Array.Empty<decimal>();
-    
+
     [JsonPropertyName("FrameOfReferenceUID")]
     public string? FrameOfReferenceUID { get; set; }
-    
+
     [JsonPropertyName("ImageType")]
     public string[] ImageType { get; set; } = Array.Empty<string>();
-    
+
     [JsonPropertyName("Modality")]
     public string? Modality { get; set; }
-    
+
     [JsonPropertyName("SOPInstanceUID")]
     public string SOPInstanceUID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("SeriesInstanceUID")]
     public string SeriesInstanceUID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("StudyInstanceUID")]
     public string StudyInstanceUID { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("WindowCenter")]
     public decimal WindowCenter { get; set; }
-    
+
     [JsonPropertyName("WindowWidth")]
     public decimal WindowWidth { get; set; }
-    
+
     [JsonPropertyName("SeriesDate")]
     public string? SeriesDate { get; set; }
-} 
+}

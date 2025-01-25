@@ -12,70 +12,70 @@ namespace DicomSCP.Controllers;
 public enum DicomTransferSyntaxType
 {
     /// <summary>
-    /// 隐式 VR Little Endian - 默认传输语法
+    /// Implicit VR Little Endian - Default Transfer Syntax
     /// UID: 1.2.840.10008.1.2
     /// Code: IVLE
     /// </summary>
     ImplicitVRLittleEndian,
-    
+
     /// <summary>
-    /// 显式 VR Little Endian - 常用于网络传输
+    /// Explicit VR Little Endian - Commonly used for network transfer
     /// UID: 1.2.840.10008.1.2.1
     /// Code: EVLE
     /// </summary>
     ExplicitVRLittleEndian,
-    
+
     /// <summary>
-    /// 显式 VR Big Endian - 已弃用，但某些老设备可能需要
+    /// Explicit VR Big Endian - Deprecated, but may be needed for older devices
     /// UID: 1.2.840.10008.1.2.2
     /// Code: EVBE
     /// </summary>
     ExplicitVRBigEndian,
-    
+
     /// <summary>
-    /// JPEG Baseline (Process 1) - 有损压缩
+    /// JPEG Baseline (Process 1) - Lossy compression
     /// UID: 1.2.840.10008.1.2.4.50
     /// Code: JPEG_BASELINE
     /// </summary>
     JPEGBaseline,
-    
+
     /// <summary>
-    /// JPEG Lossless (Process 14) - 无损压缩
+    /// JPEG Lossless (Process 14) - Lossless compression
     /// UID: 1.2.840.10008.1.2.4.57
     /// Code: JPEG_LOSSLESS
     /// </summary>
     JPEGLossless,
-    
+
     /// <summary>
-    /// JPEG 2000 有损压缩
+    /// JPEG 2000 Lossy compression
     /// UID: 1.2.840.10008.1.2.4.91
     /// Code: JPEG2000_LOSSY
     /// </summary>
     JPEG2000Lossy,
-    
+
     /// <summary>
-    /// JPEG 2000 无损压缩
+    /// JPEG 2000 Lossless compression
     /// UID: 1.2.840.10008.1.2.4.90
     /// Code: JPEG2000_LOSSLESS
     /// </summary>
     JPEG2000Lossless,
-    
+
     /// <summary>
-    /// RLE 无损压缩
+    /// RLE Lossless compression
     /// UID: 1.2.840.10008.1.2.5
     /// Code: RLE
     /// </summary>
     RLELossless,
-    
+
     /// <summary>
-    /// JPEG-LS 无损压缩
+    /// JPEG-LS Lossless compression
     /// UID: 1.2.840.10008.1.2.4.80
     /// Code: JPEGLS_LOSSLESS
     /// </summary>
     JPEGLSLossless,
-    
+
     /// <summary>
-    /// JPEG-LS 近无损压缩
+    /// JPEG-LS Near Lossless compression
     /// UID: 1.2.840.10008.1.2.4.81
     /// Code: JPEGLS_NEAR_LOSSLESS
     /// </summary>
@@ -99,7 +99,7 @@ public static class DicomTransferSyntaxExtensions
             DicomTransferSyntaxType.RLELossless => "1.2.840.10008.1.2.5",
             DicomTransferSyntaxType.JPEGLSLossless => "1.2.840.10008.1.2.4.80",
             DicomTransferSyntaxType.JPEGLSNearLossless => "1.2.840.10008.1.2.4.81",
-            _ => throw new ArgumentException($"不支持的传输语法类型: {transferSyntax}")
+            _ => throw new ArgumentException($"Unsupported transfer syntax type: {transferSyntax}")
         };
     }
 
@@ -107,17 +107,17 @@ public static class DicomTransferSyntaxExtensions
     {
         return transferSyntax switch
         {
-            DicomTransferSyntaxType.ImplicitVRLittleEndian => "隐式 VR Little Endian (默认)",
-            DicomTransferSyntaxType.ExplicitVRLittleEndian => "显式 VR Little Endian",
-            DicomTransferSyntaxType.ExplicitVRBigEndian => "显式 VR Big Endian",
-            DicomTransferSyntaxType.JPEGBaseline => "JPEG Baseline (有损)",
-            DicomTransferSyntaxType.JPEGLossless => "JPEG 无损",
-            DicomTransferSyntaxType.JPEG2000Lossy => "JPEG 2000 有损",
-            DicomTransferSyntaxType.JPEG2000Lossless => "JPEG 2000 无损",
-            DicomTransferSyntaxType.RLELossless => "RLE 无损",
-            DicomTransferSyntaxType.JPEGLSLossless => "JPEG-LS 无损",
-            DicomTransferSyntaxType.JPEGLSNearLossless => "JPEG-LS 近无损",
-            _ => throw new ArgumentException($"不支持的传输语法类型: {transferSyntax}")
+            DicomTransferSyntaxType.ImplicitVRLittleEndian => "Implicit VR Little Endian (default)",
+            DicomTransferSyntaxType.ExplicitVRLittleEndian => "Explicit VR Little Endian",
+            DicomTransferSyntaxType.ExplicitVRBigEndian => "Explicit VR Big Endian",
+            DicomTransferSyntaxType.JPEGBaseline => "JPEG Baseline (lossy)",
+            DicomTransferSyntaxType.JPEGLossless => "JPEG Lossless",
+            DicomTransferSyntaxType.JPEG2000Lossy => "JPEG 2000 Lossy",
+            DicomTransferSyntaxType.JPEG2000Lossless => "JPEG 2000 Lossless",
+            DicomTransferSyntaxType.RLELossless => "RLE Lossless",
+            DicomTransferSyntaxType.JPEGLSLossless => "JPEG-LS Lossless",
+            DicomTransferSyntaxType.JPEGLSNearLossless => "JPEG-LS Near Lossless",
+            _ => throw new ArgumentException($"Unsupported transfer syntax type: {transferSyntax}")
         };
     }
 }
@@ -158,21 +158,21 @@ public static class DicomTransferSyntaxParser
         if (string.IsNullOrEmpty(value))
             return null;
 
-        // 1. 尝试直接解析枚举名称
+        // 1. Try to parse enum name directly
         if (Enum.TryParse<DicomTransferSyntaxType>(value, true, out var result))
             return result;
 
-        // 2. 尝试从 UID 映射
+        // 2. Try to map from UID
         if (_uidMap.TryGetValue(value, out var uidMapped))
             if (Enum.TryParse<DicomTransferSyntaxType>(uidMapped, true, out result))
                 return result;
 
-        // 3. 尝试从代码映射
+        // 3. Try to map from code
         if (_codeMap.TryGetValue(value.ToUpper(), out var codeMapped))
             if (Enum.TryParse<DicomTransferSyntaxType>(codeMapped, true, out result))
                 return result;
 
-        throw new ArgumentException($"不支持的传输语法: {value}");
+        throw new ArgumentException($"Unsupported transfer syntax: {value}");
     }
 }
 
@@ -198,56 +198,56 @@ public class QueryRetrieveController : ControllerBase
     [HttpGet("nodes")]
     public ActionResult<IEnumerable<RemoteNode>> GetNodes()
     {
-        // 只返回支持查询检索的节点
+        // Only return nodes that support query retrieve
         var qrNodes = _config.RemoteNodes.Where(n => n.SupportsQueryRetrieve());
         return Ok(qrNodes);
     }
 
-    // 统一的查询接口
+    // Unified query interface
     [HttpPost("{nodeId}/query")]
     public async Task<ActionResult<IEnumerable<object>>> Query(
-        string nodeId, 
+        string nodeId,
         [FromQuery] string level,
         [FromBody] QueryRequest queryParams)
     {
         var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
         if (node == null)
         {
-            return NotFound($"未找到节点: {nodeId}");
+            return NotFound($"Node not found: {nodeId}");
         }
 
-        // 验证节点是否支持查询检索
+        // Validate if the node supports query retrieve
         if (!node.SupportsQueryRetrieve())
         {
-            return BadRequest($"节点 {nodeId} 不支持查询检索操作");
+            return BadRequest($"Node {nodeId} does not support query retrieve operations");
         }
 
-        // 解析查询级别
+        // Parse query level
         if (!Enum.TryParse<DicomQueryRetrieveLevel>(level, true, out var queryLevel))
         {
-            return BadRequest($"无效的查询级别: {level}。有效值为: Patient, Study, Series, Image");
+            return BadRequest($"Invalid query level: {level}. Valid values are: Patient, Study, Series, Image");
         }
 
-        // Patient级别查询参数验证
+        // Validate Patient level query parameters
         if (queryLevel == DicomQueryRetrieveLevel.Patient && !string.IsNullOrEmpty(queryParams.StudyInstanceUid))
         {
-            DicomLogger.Warning(LogPrefix, "Patient级别查询不应包含StudyInstanceUID");
+            DicomLogger.Warning(LogPrefix, "Patient level query should not include StudyInstanceUID");
         }
 
-        // Image级别查询的特殊验证
+        // Special validation for Image level query
         if (queryLevel == DicomQueryRetrieveLevel.Image && !queryParams.ValidateImageLevelQuery())
         {
             return BadRequest(new QueryResponse<object>
             {
                 Success = false,
-                Message = "Image级别查询必须提供StudyInstanceUID和SeriesInstanceUID"
+                Message = "Image level query must provide StudyInstanceUID and SeriesInstanceUID"
             });
         }
 
         try
         {
             var queryDict = new Dictionary<string, string>();
-            
+
             if (!string.IsNullOrEmpty(queryParams.PatientId))
                 queryDict["patientId"] = queryParams.PatientId;
             if (!string.IsNullOrEmpty(queryParams.PatientName))
@@ -263,42 +263,42 @@ public class QueryRetrieveController : ControllerBase
             if (!string.IsNullOrEmpty(queryParams.SeriesInstanceUid))
                 queryDict["seriesInstanceUid"] = queryParams.SeriesInstanceUid;
 
-            // Image级别特有参数 - 不再添加 sopInstanceUid 作为查询条件
+            // Special parameters for Image level - do not add sopInstanceUid as a query condition
             if (!string.IsNullOrEmpty(queryParams.InstanceNumber))
             {
                 queryDict["instanceNumber"] = queryParams.InstanceNumber;
-                DicomLogger.Debug(LogPrefix, "添加InstanceNumber参数: {0}", queryParams.InstanceNumber);
+                DicomLogger.Debug(LogPrefix, "Added InstanceNumber parameter: {0}", queryParams.InstanceNumber);
             }
 
-            DicomLogger.Debug(LogPrefix, "查询参数字典: {0}", 
+            DicomLogger.Debug(LogPrefix, "Query parameter dictionary: {0}",
                 string.Join(", ", queryDict.Select(kv => $"{kv.Key}={kv.Value}")));
 
             var dataset = BuildQueryDataset(queryLevel, queryDict);
             var results = await _queryRetrieveScu.QueryAsync(node, queryLevel, dataset);
 
-            // 记录原始结果
-            DicomLogger.Debug(LogPrefix, "收到查询结果 - Level: {Level}, Count: {Count}", 
+            // Log raw results
+            DicomLogger.Debug(LogPrefix, "Received query results - Level: {Level}, Count: {Count}",
                 queryLevel, results?.Count() ?? 0);
 
-            // 确保结果不为空
+            // Ensure results are not empty
             if (results == null || !results.Any())
             {
-                DicomLogger.Warning(LogPrefix, "查询未返回数据 - Level: {Level}, Node: {Node}", 
+                DicomLogger.Warning(LogPrefix, "Query returned no data - Level: {Level}, Node: {Node}",
                     queryLevel, nodeId);
                 return Ok(new QueryResponse<object>
                 {
                     Success = true,
                     Data = Array.Empty<object>(),
                     Total = 0,
-                    Message = "未找到匹配的数据"
+                    Message = "No matching data found"
                 });
             }
 
-            // Image级别的特殊处理
+            // Special handling for Image level
             if (queryLevel == DicomQueryRetrieveLevel.Image)
             {
                 var imageResults = results.Select(DicomImageResult.FromDataset).ToList();
-                DicomLogger.Information(LogPrefix, "Image级别查询返回 {0} 条结果", imageResults.Count);
+                DicomLogger.Information(LogPrefix, "Image level query returned {0} results", imageResults.Count);
                 return Ok(new QueryResponse<DicomImageResult>
                 {
                     Success = true,
@@ -307,7 +307,7 @@ public class QueryRetrieveController : ControllerBase
                 });
             }
 
-            // 根据不同级别返回不同的响应类型
+            // Return different response types based on query level
             switch (queryLevel)
             {
                 case DicomQueryRetrieveLevel.Patient:
@@ -333,7 +333,7 @@ public class QueryRetrieveController : ControllerBase
                     });
                 case DicomQueryRetrieveLevel.Image:
                     var imageResults = results.Select(DicomImageResult.FromDataset).ToList();
-                    DicomLogger.Information(LogPrefix, "Image级别查询返回 {0} 条结果", imageResults.Count);
+                    DicomLogger.Information(LogPrefix, "Image level query returned {0} results", imageResults.Count);
                     return Ok(new QueryResponse<DicomImageResult>
                     {
                         Success = true,
@@ -344,13 +344,13 @@ public class QueryRetrieveController : ControllerBase
                     return BadRequest(new QueryResponse<object>
                     {
                         Success = false,
-                        Message = $"不支持的查询级别: {level}"
+                        Message = $"Unsupported query level: {level}"
                     });
             }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(LogPrefix, ex, "执行{Level}查询失败", level);
+            DicomLogger.Error(LogPrefix, ex, "Failed to execute {Level} query", level);
             return StatusCode(500, new QueryResponse<object>
             {
                 Success = false,
@@ -360,7 +360,7 @@ public class QueryRetrieveController : ControllerBase
     }
 
     /// <summary>
-    /// 发送DICOM获取请求
+    /// Send DICOM move request
     /// </summary>
     [HttpPost("{nodeId}/move")]
     [ProducesResponseType(typeof(MoveResponse), StatusCodes.Status200OK)]
@@ -377,31 +377,31 @@ public class QueryRetrieveController : ControllerBase
             var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
             if (node == null)
             {
-                return NotFound($"未找到节点: {nodeId}");
+                return NotFound($"Node not found: {nodeId}");
             }
 
-            // 验证节点是否支持查询检索
+            // Validate if the node supports query retrieve
             if (!node.SupportsQueryRetrieve())
             {
-                return BadRequest($"节点 {nodeId} 不支持查询检索操作");
+                return BadRequest($"Node {nodeId} does not support query retrieve operations");
             }
 
-            // 解析级别
+            // Parse level
             if (!Enum.TryParse<DicomQueryRetrieveLevel>(level, true, out var queryLevel))
             {
-                return BadRequest(new MoveResponse 
-                { 
+                return BadRequest(new MoveResponse
+                {
                     Success = false,
-                    Message = $"无效的获取级别: {level}。有效值为: Patient, Study, Series, Image"
+                    Message = $"Invalid move level: {level}. Valid values are: Patient, Study, Series, Image"
                 });
             }
 
-            // 验证请求参数
+            // Validate request parameters
             var (isValid, errorMessage) = ValidateMoveRequest(queryLevel, moveRequest);
             if (!isValid)
             {
-                return BadRequest(new MoveResponse 
-                { 
+                return BadRequest(new MoveResponse
+                {
                     Success = false,
                     Message = errorMessage
                 });
@@ -409,11 +409,11 @@ public class QueryRetrieveController : ControllerBase
 
             try
             {
-                // 构建数据集
+                // Build dataset
                 var dataset = new DicomDataset();
                 dataset.Add(DicomTag.QueryRetrieveLevel, queryLevel.ToString().ToUpper());
 
-                // 根据不同级别添加必要的字段
+                // Add necessary fields based on level
                 switch (queryLevel)
                 {
                     case DicomQueryRetrieveLevel.Patient:
@@ -436,9 +436,9 @@ public class QueryRetrieveController : ControllerBase
                         break;
                 }
 
-                DicomLogger.Debug(LogPrefix, "Move请求数据集: {0}", dataset.ToString());
+                DicomLogger.Debug(LogPrefix, "Move request dataset: {0}", dataset.ToString());
 
-                // 解析传输语法
+                // Parse transfer syntax
                 string? transferSyntax = null;
                 if (!string.IsNullOrEmpty(moveRequest.TransferSyntax))
                 {
@@ -448,8 +448,8 @@ public class QueryRetrieveController : ControllerBase
                         if (syntaxType.HasValue)
                         {
                             transferSyntax = syntaxType.Value.GetUID();
-                            DicomLogger.Debug(LogPrefix, 
-                                "使用指定的传输语法: {0} ({1}) [输入: {2}]", 
+                            DicomLogger.Debug(LogPrefix,
+                                "Using specified transfer syntax: {0} ({1}) [Input: {2}]",
                                 syntaxType.Value.GetDescription(),
                                 transferSyntax,
                                 moveRequest.TransferSyntax);
@@ -457,65 +457,65 @@ public class QueryRetrieveController : ControllerBase
                     }
                     catch (ArgumentException ex)
                     {
-                        return BadRequest(new MoveResponse 
-                        { 
+                        return BadRequest(new MoveResponse
+                        {
                             Success = false,
                             Message = ex.Message
                         });
                     }
                 }
 
-                // 直接使用本地 AE Title，并传入传输语法参数
+                // Use local AE Title and pass transfer syntax parameter
                 var success = await _queryRetrieveScu.MoveAsync(
-                    node, 
-                    queryLevel, 
-                    dataset, 
+                    node,
+                    queryLevel,
+                    dataset,
                     _settings.AeTitle,
                     transferSyntax);
-                
+
                 if (!success)
                 {
-                    // 根据不同情况返回不同的错误信息
-                    return StatusCode(500, new MoveResponse 
-                    { 
+                    // Return different error messages based on the situation
+                    return StatusCode(500, new MoveResponse
+                    {
                         Success = false,
-                        Message = queryLevel == DicomQueryRetrieveLevel.Patient ? 
-                            "Patient级别获取未返回任何影像，该级别可能不被支持，请尝试使用Study级别获取" : 
-                            "获取请求被拒绝"
+                        Message = queryLevel == DicomQueryRetrieveLevel.Patient ?
+                            "Patient level move did not return any images, this level may not be supported, please try using Study level" :
+                            "Move request was rejected"
                     });
                 }
 
                 return Ok(new MoveResponse
                 {
                     Success = true,
-                    Message = queryLevel == DicomQueryRetrieveLevel.Patient ? 
-                        "Patient级别获取请求已发送，如果支持此级别操作，稍后可在影像管理中查看" : 
-                        "获取请求已发送，请稍后在影像管理中查看",
+                    Message = queryLevel == DicomQueryRetrieveLevel.Patient ?
+                        "Patient level move request sent, if supported, you can view the images later in the image management" :
+                        "Move request sent, please check the image management later",
                     JobId = Guid.NewGuid().ToString()
                 });
             }
             catch (Exception ex)
             {
-                DicomLogger.Error(LogPrefix, ex, "发送{Level}获取请求失败", level);
-                return StatusCode(500, new MoveResponse 
-                { 
+                DicomLogger.Error(LogPrefix, ex, "Failed to send {Level} move request", level);
+                return StatusCode(500, new MoveResponse
+                {
                     Success = false,
-                    Message = "发送获取请求失败" 
+                    Message = "Failed to send move request"
                 });
             }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(LogPrefix, ex, "执行{Level}获取请求失败", level);
-            return StatusCode(500, new MoveResponse 
-            { 
+            DicomLogger.Error(LogPrefix, ex, "Failed to execute {Level} move request", level);
+            return StatusCode(500, new MoveResponse
+            {
                 Success = false,
-                Message = "执行获取请求失败" 
+                Message = "Failed to execute move request"
             });
         }
     }
 
-    // 添加验证方法
+    // Add validation method
     private (bool IsValid, string ErrorMessage) ValidateMoveRequest(DicomQueryRetrieveLevel level, MoveRequest request)
     {
         switch (level)
@@ -523,31 +523,31 @@ public class QueryRetrieveController : ControllerBase
             case DicomQueryRetrieveLevel.Patient:
                 if (string.IsNullOrEmpty(request.PatientId))
                 {
-                    return (false, "Patient级别获取必须提供PatientId");
+                    return (false, "Patient level move must provide PatientId");
                 }
                 break;
 
             case DicomQueryRetrieveLevel.Study:
                 if (string.IsNullOrEmpty(request.StudyInstanceUid))
                 {
-                    return (false, "Study级别获取必须提供StudyInstanceUID");
+                    return (false, "Study level move must provide StudyInstanceUID");
                 }
                 break;
 
             case DicomQueryRetrieveLevel.Series:
-                if (string.IsNullOrEmpty(request.StudyInstanceUid) || 
+                if (string.IsNullOrEmpty(request.StudyInstanceUid) ||
                     string.IsNullOrEmpty(request.SeriesInstanceUid))
                 {
-                    return (false, "Series级别获取必须提供StudyInstanceUID和SeriesInstanceUID");
+                    return (false, "Series level move must provide StudyInstanceUID and SeriesInstanceUID");
                 }
                 break;
 
             case DicomQueryRetrieveLevel.Image:
-                if (string.IsNullOrEmpty(request.StudyInstanceUid) || 
-                    string.IsNullOrEmpty(request.SeriesInstanceUid) || 
+                if (string.IsNullOrEmpty(request.StudyInstanceUid) ||
+                    string.IsNullOrEmpty(request.SeriesInstanceUid) ||
                     string.IsNullOrEmpty(request.SopInstanceUid))
                 {
-                    return (false, "Image级别获取必须提供StudyInstanceUID、SeriesInstanceUID和SopInstanceUID");
+                    return (false, "Image level move must provide StudyInstanceUID, SeriesInstanceUID, and SopInstanceUID");
                 }
                 break;
         }
@@ -555,7 +555,7 @@ public class QueryRetrieveController : ControllerBase
         return (true, string.Empty);
     }
 
-    // 辅助方法：构建查询数据集
+    // Helper method: build query dataset
     private DicomDataset BuildQueryDataset(DicomQueryRetrieveLevel level, Dictionary<string, string> queryParams)
     {
         var dataset = new DicomDataset();
@@ -580,7 +580,7 @@ public class QueryRetrieveController : ControllerBase
         return dataset;
     }
 
-    // 辅助方法：格式化查询结果
+    // Helper method: format query results
     private object FormatQueryResults(DicomQueryRetrieveLevel level, IEnumerable<DicomDataset> results)
     {
         switch (level)
@@ -596,7 +596,7 @@ public class QueryRetrieveController : ControllerBase
         }
     }
 
-    // 辅助方法：构建移动数据集
+    // Helper method: build move dataset
     private DicomDataset BuildMoveDataset(DicomQueryRetrieveLevel level, Dictionary<string, string> moveRequest)
     {
         var dataset = new DicomDataset();
@@ -641,54 +641,54 @@ public class QueryRetrieveController : ControllerBase
         return dataset;
     }
 
-    // 添加病人查询字段
+    // Add patient query fields
     private void AddPatientQueryFields(DicomDataset dataset, Dictionary<string, string> queryParams)
     {
-        // 必需返回的字段
+        // Required return fields
         dataset.Add(DicomTag.PatientID, "");
         dataset.Add(DicomTag.PatientName, "");
         dataset.Add(DicomTag.PatientBirthDate, "");
         dataset.Add(DicomTag.PatientSex, "");
         dataset.Add(DicomTag.NumberOfPatientRelatedStudies, "");
 
-        // 只处理 Patient 级别的查询条件
+        // Only handle Patient level query conditions
         if (queryParams.TryGetValue("patientId", out var patientId) && !string.IsNullOrWhiteSpace(patientId))
         {
             dataset.AddOrUpdate(DicomTag.PatientID, patientId);
-            DicomLogger.Debug(LogPrefix, "Patient查询 - 添加PatientID: {0}", patientId);
+            DicomLogger.Debug(LogPrefix, "Patient query - Added PatientID: {0}", patientId);
         }
 
         if (queryParams.TryGetValue("patientName", out var patientName) && !string.IsNullOrWhiteSpace(patientName))
         {
             dataset.AddOrUpdate(DicomTag.PatientName, $"*{patientName}*");
-            DicomLogger.Debug(LogPrefix, "Patient查询 - 添加PatientName: {0}", patientName);
+            DicomLogger.Debug(LogPrefix, "Patient query - Added PatientName: {0}", patientName);
         }
 
         if (queryParams.TryGetValue("patientBirthDate", out var birthDate) && !string.IsNullOrWhiteSpace(birthDate))
         {
             dataset.AddOrUpdate(DicomTag.PatientBirthDate, birthDate);
-            DicomLogger.Debug(LogPrefix, "Patient查询 - 添加PatientBirthDate: {0}", birthDate);
+            DicomLogger.Debug(LogPrefix, "Patient query - Added PatientBirthDate: {0}", birthDate);
         }
 
         if (queryParams.TryGetValue("patientSex", out var sex) && !string.IsNullOrWhiteSpace(sex))
         {
             dataset.AddOrUpdate(DicomTag.PatientSex, sex);
-            DicomLogger.Debug(LogPrefix, "Patient查询 - 添加PatientSex: {0}", sex);
+            DicomLogger.Debug(LogPrefix, "Patient query - Added PatientSex: {0}", sex);
         }
 
-        // 忽略其他级别的查询条件（如 studyInstanceUid）
+        // Ignore other level query conditions (e.g., studyInstanceUid)
         if (queryParams.ContainsKey("studyInstanceUid"))
         {
-            DicomLogger.Warning(LogPrefix, "Patient查询不应使用StudyInstanceUID作为查询条件");
+            DicomLogger.Warning(LogPrefix, "Patient query should not use StudyInstanceUID as a query condition");
         }
 
-        DicomLogger.Debug(LogPrefix, "Patient级别查询数据集: {0}", dataset.ToString());
+        DicomLogger.Debug(LogPrefix, "Patient level query dataset: {0}", dataset.ToString());
     }
 
-    // 添加检级别查询字段
+    // Add study level query fields
     private void AddStudyQueryFields(DicomDataset dataset, Dictionary<string, string> queryParams)
     {
-        // 必需返回的字段
+        // Required return fields
         dataset.Add(DicomTag.StudyInstanceUID, "");
         dataset.Add(DicomTag.StudyDate, "");
         dataset.Add(DicomTag.StudyTime, "");
@@ -700,7 +700,7 @@ public class QueryRetrieveController : ControllerBase
         dataset.Add(DicomTag.NumberOfStudyRelatedInstances, "");
         dataset.Add(DicomTag.AccessionNumber, "");
 
-        // 处理查询条件
+        // Handle query conditions
         if (queryParams.TryGetValue("patientId", out var patientId) && !string.IsNullOrWhiteSpace(patientId))
         {
             dataset.AddOrUpdate(DicomTag.PatientID, $"*{patientId}*");
@@ -723,30 +723,30 @@ public class QueryRetrieveController : ControllerBase
 
         if (queryParams.TryGetValue("studyDate", out var studyDate) && !string.IsNullOrWhiteSpace(studyDate))
         {
-            // 转换为 DICOM 日期格式 YYYYMMDD
+            // Convert to DICOM date format YYYYMMDD
             var dicomDate = studyDate.Replace("-", "");
             dataset.AddOrUpdate(DicomTag.StudyDate, dicomDate);
         }
     }
 
-    // 添加序列级别查询字段
+    // Add series level query fields
     private void AddSeriesQueryFields(DicomDataset dataset, Dictionary<string, string> queryParams)
     {
-        // 必需返回的字段
+        // Required return fields
         dataset.Add(DicomTag.SeriesInstanceUID, "");
-        dataset.Add(DicomTag.StudyInstanceUID, "");  // 添加StudyInstanceUID
+        dataset.Add(DicomTag.StudyInstanceUID, "");  // Add StudyInstanceUID
         dataset.Add(DicomTag.SeriesNumber, "");
         dataset.Add(DicomTag.SeriesDescription, "");
         dataset.Add(DicomTag.Modality, "");
         dataset.Add(DicomTag.NumberOfSeriesRelatedInstances, "");
 
-        // 必需的上级字段
+        // Required parent fields
         if (queryParams.TryGetValue("studyInstanceUid", out var studyUid))
         {
             dataset.AddOrUpdate(DicomTag.StudyInstanceUID, studyUid);
         }
 
-        // 处理查询条件
+        // Handle query conditions
         if (queryParams.TryGetValue("seriesInstanceUid", out var seriesUid))
         {
             dataset.AddOrUpdate(DicomTag.SeriesInstanceUID, seriesUid);
@@ -768,10 +768,10 @@ public class QueryRetrieveController : ControllerBase
         }
     }
 
-    // 添加影像级别查询字段
+    // Add image level query fields
     private void AddImageQueryFields(DicomDataset dataset, Dictionary<string, string> queryParams)
     {
-        // 必需返回的字段
+        // Required return fields
         dataset.Add(DicomTag.SOPInstanceUID, "");
         dataset.Add(DicomTag.StudyInstanceUID, "");
         dataset.Add(DicomTag.SeriesInstanceUID, "");
@@ -783,30 +783,30 @@ public class QueryRetrieveController : ControllerBase
         dataset.Add(DicomTag.NumberOfFrames, "");
         dataset.Add(DicomTag.SOPClassUID, "");
 
-        // 必需的上级字段 - 这些是用来限定查询范围的
+        // Required parent fields - these are used to limit the query scope
         if (queryParams.TryGetValue("studyInstanceUid", out var studyUid))
         {
             dataset.AddOrUpdate(DicomTag.StudyInstanceUID, studyUid);
-            DicomLogger.Debug(LogPrefix, "添加StudyInstanceUID: {0}", studyUid);
+            DicomLogger.Debug(LogPrefix, "Added StudyInstanceUID: {0}", studyUid);
         }
         if (queryParams.TryGetValue("seriesInstanceUid", out var seriesUid))
         {
             dataset.AddOrUpdate(DicomTag.SeriesInstanceUID, seriesUid);
-            DicomLogger.Debug(LogPrefix, "添加SeriesInstanceUID: {0}", seriesUid);
+            DicomLogger.Debug(LogPrefix, "Added SeriesInstanceUID: {0}", seriesUid);
         }
 
-        // 注意：通常不应该在查询时使用 SOPInstanceUID，
-        // 因为我们想要获取序列下的所有图像
-        // 如果需要特定图像，应该在结果中过滤
+        // Note: Typically, SOPInstanceUID should not be used in queries,
+        // as we want to retrieve all images under the series.
+        // If a specific image is needed, it should be filtered in the results.
 
         if (queryParams.TryGetValue("instanceNumber", out var instanceNumber))
         {
             dataset.AddOrUpdate(DicomTag.InstanceNumber, instanceNumber);
-            DicomLogger.Debug(LogPrefix, "添加InstanceNumber: {0}", instanceNumber);
+            DicomLogger.Debug(LogPrefix, "Added InstanceNumber: {0}", instanceNumber);
         }
 
-        // 记录完整的查询数据集
-        DicomLogger.Debug(LogPrefix, "Image级别查询数据集: {0}", dataset.ToString());
+        // Log the complete query dataset
+        DicomLogger.Debug(LogPrefix, "Image level query dataset: {0}", dataset.ToString());
     }
 
     [HttpPost("{nodeId}/verify")]
@@ -817,23 +817,25 @@ public class QueryRetrieveController : ControllerBase
             var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == nodeId);
             if (node == null)
             {
-                return NotFound($"未找到节点: {nodeId}");
+                return NotFound($"Node not found: {nodeId}");
             }
 
-            // 验证节点是否支持查询检索
+            // Validate if the node supports query retrieve
             if (!node.SupportsQueryRetrieve())
             {
-                return BadRequest($"节点 {nodeId} 不支持查询检索操作");
+                return BadRequest($"Node {nodeId} does not support query retrieve operations");
             }
 
             var success = await _queryRetrieveScu.VerifyConnectionAsync(node);
-            
+
             if (!success)
             {
-                return StatusCode(500, new { 
+                return StatusCode(500, new
+                {
                     success = false,
-                    message = "连接测试失败",
-                    details = new {
+                    message = "Connection test failed",
+                    details = new
+                    {
                         localAe = _config.LocalAeTitle,
                         remoteAe = node.AeTitle,
                         host = node.HostName,
@@ -842,10 +844,12 @@ public class QueryRetrieveController : ControllerBase
                 });
             }
 
-            return Ok(new { 
+            return Ok(new
+            {
                 success = true,
-                message = "连接测试成功",
-                details = new {
+                message = "Connection test succeeded",
+                details = new
+                {
                     localAe = _config.LocalAeTitle,
                     remoteAe = node.AeTitle,
                     host = node.HostName,
@@ -855,15 +859,15 @@ public class QueryRetrieveController : ControllerBase
         }
         catch (Exception ex)
         {
-            DicomLogger.Error(LogPrefix, ex, "执行连接测试失败");
-            return StatusCode(500, new { success = false, message = "执行连接测试失败", error = ex.Message });
+            DicomLogger.Error(LogPrefix, ex, "Failed to execute connection test");
+            return StatusCode(500, new { success = false, message = "Failed to execute connection test", error = ex.Message });
         }
     }
 
-    // ... 其他辅助方法
+    // ... other helper methods
 }
 
-// 添加用于转换查询结果的类
+// Add classes for converting query results
 public class DicomStudyResult
 {
     private const string LogPrefix = "[Api]";
@@ -912,7 +916,7 @@ public class DicomStudyResult
     }
 }
 
-// 添加Series结果转换类
+// Add Series result conversion class
 public class DicomSeriesResult
 {
     public string SeriesInstanceUid { get; set; } = string.Empty;
@@ -966,7 +970,7 @@ public class DicomImageResult
     }
 }
 
-// 添加Patient级别的结果转换类
+// Add Patient level result conversion class
 public class DicomPatientResult
 {
     public string PatientId { get; set; } = string.Empty;
@@ -988,7 +992,7 @@ public class DicomPatientResult
     }
 }
 
-// 在 MoveRequest 类中添加传输语法参数
+// Add transfer syntax parameter in MoveRequest class
 public class MoveRequest
 {
     public string PatientId { get; set; } = string.Empty;

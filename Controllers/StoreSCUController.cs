@@ -27,7 +27,7 @@ public class StoreSCUController : ControllerBase
     [HttpGet("nodes")]
     public ActionResult<IEnumerable<RemoteNode>> GetNodes()
     {
-        // 只返回支持存储的节点
+        // Only return nodes that support storage
         var storeNodes = _config.RemoteNodes.Where(n => n.SupportsStore());
         return Ok(storeNodes);
     }
@@ -46,8 +46,8 @@ public class StoreSCUController : ControllerBase
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "验证连接失败");
-            return StatusCode(500, "验证连接失败");
+            DicomLogger.Error("Api", ex, "Failed to verify connection");
+            return StatusCode(500, "Failed to verify connection");
         }
     }
 
@@ -59,39 +59,39 @@ public class StoreSCUController : ControllerBase
             var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == remoteName);
             if (node == null)
             {
-                return NotFound($"未找到节点: {remoteName}");
+                return NotFound($"Node not found: {remoteName}");
             }
 
-            // 验证节点是否支持存储
+            // Verify if the node supports storage
             if (!node.SupportsStore())
             {
-                return BadRequest($"节点 {remoteName} 不支持存储操作");
+                return BadRequest($"Node {remoteName} does not support storage operations");
             }
 
             if (!string.IsNullOrEmpty(folderPath))
             {
-                DicomLogger.Information("Api", "开始发送文件夹 - 路径: {FolderPath}, 目标: {RemoteName}", 
+                DicomLogger.Information("Api", "Starting to send folder - Path: {FolderPath}, Target: {RemoteName}",
                     folderPath, remoteName);
-                
+
                 await _storeSCU.SendFolderAsync(folderPath, remoteName);
-                return Ok(new { message = "文件夹发送成功" });
+                return Ok(new { message = "Folder sent successfully" });
             }
             else if (files != null && files.Count > 0)
             {
-                DicomLogger.Information("Api", "开始上传文件 - 文件数: {Count}, 目标: {RemoteName}", 
+                DicomLogger.Information("Api", "Starting to upload files - File count: {Count}, Target: {RemoteName}",
                     files.Count, remoteName);
-                
-                // 创建临时目录
+
+                // Create temporary directory
                 var tempDir = Path.Combine(_tempPath, "temp_" + DateTime.Now.Ticks.ToString());
                 Directory.CreateDirectory(tempDir);
 
                 try
                 {
-                    // 保存上传的文件
+                    // Save uploaded files
                     var filePaths = new List<string>();
                     foreach (var file in files)
                     {
-                        // 直接使用文件名保存到临时目录
+                        // Save directly to temporary directory using the file name
                         var fileName = Path.GetFileName(file.FileName);
                         var filePath = Path.Combine(tempDir, fileName);
 
@@ -100,32 +100,32 @@ public class StoreSCUController : ControllerBase
                             await file.CopyToAsync(stream);
                         }
                         filePaths.Add(filePath);
-                        DicomLogger.Debug("Api", "文件已保存到临时目录 - 文件: {FileName}", file.FileName);
+                        DicomLogger.Debug("Api", "File saved to temporary directory - File: {FileName}", file.FileName);
                     }
 
-                    // 发送文件
+                    // Send files
                     await _storeSCU.SendFilesAsync(filePaths, remoteName);
-                    return Ok(new { message = "文件发送成功" });
+                    return Ok(new { message = "Files sent successfully" });
                 }
                 finally
                 {
-                    // 清理临时文件
+                    // Clean up temporary files
                     if (Directory.Exists(tempDir))
                     {
                         Directory.Delete(tempDir, true);
-                        DicomLogger.Debug("Api", "临时目录已清理 - 路径: {TempDir}", tempDir);
+                        DicomLogger.Debug("Api", "Temporary directory cleaned up - Path: {TempDir}", tempDir);
                     }
                 }
             }
             else
             {
-                DicomLogger.Warning("Api", "未提供文件或文件夹路径");
-                return BadRequest("请提供文件或文件夹路径");
+                DicomLogger.Warning("Api", "No files or folder path provided");
+                return BadRequest("Please provide files or folder path");
             }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "发送失败");
+            DicomLogger.Error("Api", ex, "Failed to send files");
             return StatusCode(500, ex.Message);
         }
     }
@@ -138,40 +138,40 @@ public class StoreSCUController : ControllerBase
             var node = _config.RemoteNodes.FirstOrDefault(n => n.Name == remoteName);
             if (node == null)
             {
-                return NotFound($"未找到节点: {remoteName}");
+                return NotFound($"Node not found: {remoteName}");
             }
 
-            // 验证节点是否支持存储
+            // Verify if the node supports storage
             if (!node.SupportsStore())
             {
-                return BadRequest($"节点 {remoteName} 不支持存储操作");
+                return BadRequest($"Node {remoteName} does not support storage operations");
             }
 
-            // 获取研究相关的所有文件路径
+            // Get all file paths related to the study
             var repository = HttpContext.RequestServices.GetRequiredService<DicomRepository>();
             var instances = repository.GetInstancesByStudyUid(studyInstanceUid);
-            
+
             if (!instances.Any())
             {
-                return NotFound("未找到相关图像");
+                return NotFound("No related images found");
             }
 
-            // 获取所有文件的完整路径
+            // Get full paths of all files
             var settings = HttpContext.RequestServices.GetRequiredService<IOptions<DicomSettings>>().Value;
             var filePaths = instances.Select(i => Path.Combine(settings.StoragePath, i.FilePath));
 
-            // 发送文件
+            // Send files
             await _storeSCU.SendFilesAsync(filePaths, remoteName);
-            
-            return Ok(new { 
-                message = "发送成功",
+
+            return Ok(new
+            {
+                message = "Sent successfully",
                 totalFiles = filePaths.Count()
             });
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "发送研究失败 - StudyInstanceUid: {StudyUid}", studyInstanceUid);
-            return StatusCode(500, new { message = "发送失败" });
+            DicomLogger.Error("Api", ex, "Failed to send study - StudyInstanceUid: {StudyUid}", studyInstanceUid);
+            return StatusCode(500, new { message = "Failed to send" });
         }
     }
-} 
