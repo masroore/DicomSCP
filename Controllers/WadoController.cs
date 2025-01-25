@@ -35,100 +35,100 @@ namespace DicomSCP.Controllers
         public async Task<IActionResult> GetStudyInstances(
             [FromQuery] string? requestType,
             [FromQuery] string studyUID,
-            [FromQuery] string seriesUID, 
+            [FromQuery] string seriesUID,
             [FromQuery] string objectUID,
             [FromQuery] string? contentType = default,
             [FromQuery] string? transferSyntax = default,
             [FromQuery] string? anonymize = default)
         {
-            // 验证必需参数
+            // Validate required parameters
             if (string.IsNullOrEmpty(studyUID) || string.IsNullOrEmpty(seriesUID) || string.IsNullOrEmpty(objectUID))
             {
-                DicomLogger.Warning("WADO", "缺少必需参数");
+                DicomLogger.Warning("WADO", "Missing required parameters");
                 return BadRequest("Missing required parameters");
             }
 
-            DicomLogger.Information("WADO", "收到WADO请求 - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, ObjectUID: {ObjectUID}, ContentType: {ContentType}, TransferSyntax: {TransferSyntax}",
-                studyUID, seriesUID, objectUID, contentType ?? "default", transferSyntax ?? "default");
+            DicomLogger.Information("WADO", "Received WADO request - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, ObjectUID: {ObjectUID}, ContentType: {ContentType}, TransferSyntax: {TransferSyntax}",
+            studyUID, seriesUID, objectUID, contentType ?? "default", transferSyntax ?? "default");
 
-            // 验证请求类型 (必需参数)
+            // Validate request type (required parameter)
             if (requestType?.ToUpper() != "WADO")
             {
-                DicomLogger.Warning("WADO", "无效的请求类型: {RequestType}", requestType ?? "null");
+                DicomLogger.Warning("WADO", "Invalid request type: {RequestType}", requestType ?? "null");
                 return BadRequest("Invalid requestType - WADO is required");
             }
 
             try
             {
-                // 从数据库获取实例信息
+                // Get instance information from the database
                 var instance = await _dicomRepository.GetInstanceAsync(objectUID);
                 if (instance == null)
                 {
-                    DicomLogger.Warning("WADO", "未找到实例: {ObjectUID}", objectUID);
+                    DicomLogger.Warning("WADO", "Instance not found: {ObjectUID}", objectUID);
                     return NotFound("Instance not found");
                 }
 
-                // 构建完整的文件路径
+                // Build the full file path
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                 if (!System.IO.File.Exists(filePath))
                 {
-                    DicomLogger.Error("WADO", "DICOM文件不存在: {FilePath}", filePath);
+                    DicomLogger.Error("WADO", "DICOM file not found: {FilePath}", filePath);
                     return NotFound("DICOM file not found");
                 }
 
-                // 读取DICOM文件
+                // Read the DICOM file
                 var dicomFile = await DicomFile.OpenAsync(filePath);
 
-                // 确定最终的内容类型
+                // Determine the final content type
                 string finalContentType = PickFinalContentType(contentType, dicomFile);
-                DicomLogger.Information("WADO", "最终内容类型: {ContentType}", finalContentType);
-                
-                // 根据请求内容类型返回
+                DicomLogger.Information("WADO", "Final content type: {ContentType}", finalContentType);
+
+                // Return based on the requested content type
                 if (finalContentType == JpegImageContentType)
                 {
-                    // 如果请求匿名化，先处理匿名化
+                    // If anonymization is requested, process anonymization first
                     if (anonymize == "yes")
                     {
-                        DicomLogger.Information("WADO", "执行匿名化处理");
+                        DicomLogger.Information("WADO", "Performing anonymization");
                         dicomFile = AnonymizeDicomFile(dicomFile);
                     }
 
-                    // 返回JPEG
+                    // Return JPEG
                     var dicomImage = new DicomImage(dicomFile.Dataset);
                     var renderedImage = dicomImage.RenderImage();
-                    
-                    // 转换为JPEG
+
+                    // Convert to JPEG
                     byte[] jpegBytes;
                     using (var memoryStream = new MemoryStream())
                     {
                         using var image = Image.LoadPixelData<Rgba32>(
-                            renderedImage.AsBytes(), 
-                            renderedImage.Width, 
+                            renderedImage.AsBytes(),
+                            renderedImage.Width,
                             renderedImage.Height);
-                            
-                        // 配置JPEG编码器选项
+
+                        // Configure JPEG encoder options
                         var encoder = new JpegEncoder
                         {
-                            Quality = 90  // 设置JPEG质量
+                            Quality = 90  // Set JPEG quality
                         };
 
-                        // 保存为JPEG
+                        // Save as JPEG
                         await image.SaveAsJpegAsync(memoryStream, encoder);
                         jpegBytes = memoryStream.ToArray();
                     }
 
-                    DicomLogger.Information("WADO", "成功返回JPEG图像 - Size: {Size} bytes", jpegBytes.Length);
+                    DicomLogger.Information("WADO", "Successfully returned JPEG image - Size: {Size} bytes", jpegBytes.Length);
 
-                    // 设置文件名为 SOP Instance UID
+                    // Set the file name to SOP Instance UID
                     var contentDisposition = new System.Net.Mime.ContentDisposition
                     {
                         FileName = $"{objectUID}.jpg",
-                        Inline = false  // 使用 attachment 方式下载
+                        Inline = false  // Use attachment for download
                     };
                     Response.Headers["Content-Disposition"] = contentDisposition.ToString();
 
-                    // 主动触发GC
-                    if (jpegBytes.Length > 10 * 1024 * 1024) // 如果图像大于10MB
+                    // Trigger GC proactively
+                    if (jpegBytes.Length > 10 * 1024 * 1024) // If the image is larger than 10MB
                     {
                         GC.Collect();
                         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
@@ -138,42 +138,42 @@ namespace DicomSCP.Controllers
                 }
                 else
                 {
-                    // 如果请求匿名化，先处理匿名化
+                    // If anonymization is requested, process anonymization first
                     if (anonymize == "yes")
                     {
-                        DicomLogger.Information("WADO", "执行匿名化处理");
+                        DicomLogger.Information("WADO", "Performing anonymization");
                         dicomFile = AnonymizeDicomFile(dicomFile);
                     }
 
-                    // 返回DICOM（包括传输语法转换）
+                    // Return DICOM (including transfer syntax conversion)
                     var result = await GetDicomBytes(dicomFile, transferSyntax, filePath);
-                    
-                    // 设置文件名为 SOP Instance UID
+
+                    // Set the file name to SOP Instance UID
                     var contentDisposition = new System.Net.Mime.ContentDisposition
                     {
                         FileName = $"{objectUID}.dcm",
-                        Inline = false  // 使用 attachment 方式下载
+                        Inline = false  // Use attachment for download
                     };
                     Response.Headers["Content-Disposition"] = contentDisposition.ToString();
-                    
+
                     return result;
                 }
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "处理WADO请求时发生错误");
+                DicomLogger.Error("WADO", ex, "Error processing WADO request");
                 return StatusCode(500, $"Error processing image: {ex.Message}");
             }
         }
 
         private string PickFinalContentType(string? contentType, DicomFile dicomFile)
         {
-            // 如果没有指定内容类型，根据图像类型选择默认值
+            // If no content type is specified, choose the default based on the image type
             if (string.IsNullOrEmpty(contentType))
             {
-                // 获取帧数
+                // Get the number of frames
                 var numberOfFrames = dicomFile.Dataset.GetSingleValueOrDefault(DicomTag.NumberOfFrames, 1);
-                // 多帧图像默认返回 DICOM，单帧图像默认返回 JPEG
+                // Default to DICOM for multi-frame images, JPEG for single-frame images
                 return numberOfFrames > 1 ? AppDicomContentType : JpegImageContentType;
             }
 
@@ -184,15 +184,15 @@ namespace DicomSCP.Controllers
         {
             try
             {
-                // 如果需要转换传输语法
+                // If transfer syntax conversion is needed
                 if (!string.IsNullOrEmpty(transferSyntax))
                 {
-                    try 
+                    try
                     {
                         var currentSyntax = dicomFile.Dataset.InternalTransferSyntax;
                         var requestedSyntax = GetRequestedTransferSyntax(transferSyntax);
 
-                        DicomLogger.Information("WADO", "传输语法 - 当前: {CurrentSyntax}, 请求: {RequestedSyntax}", 
+                        DicomLogger.Information("WADO", "Transfer Syntax - Current: {CurrentSyntax}, Requested: {RequestedSyntax}",
                             currentSyntax.UID.Name,
                             requestedSyntax.UID.Name);
 
@@ -202,29 +202,29 @@ namespace DicomSCP.Controllers
                             {
                                 var transcoder = new DicomTranscoder(currentSyntax, requestedSyntax);
                                 dicomFile = transcoder.Transcode(dicomFile);
-                                DicomLogger.Information("WADO", "已转换传输语法为: {NewSyntax}", requestedSyntax.UID.Name);
-                                
-                                // 转码后需要重新生成字节流
+                                DicomLogger.Information("WADO", "Converted transfer syntax to: {NewSyntax}", requestedSyntax.UID.Name);
+
+                                // After transcoding, regenerate the byte stream
                                 using var ms = new MemoryStream();
                                 await dicomFile.SaveAsync(ms);
                                 return File(ms.ToArray(), AppDicomContentType);
                             }
                             catch (Exception ex)
                             {
-                                DicomLogger.Error("WADO", ex, "传输语法转换失败: {TransferSyntax}", transferSyntax);
-                                throw new InvalidOperationException($"无法转换到请求的传输语法: {transferSyntax}", ex);
+                                DicomLogger.Error("WADO", ex, "Failed to convert transfer syntax: {TransferSyntax}", transferSyntax);
+                                throw new InvalidOperationException($"Unable to convert to requested transfer syntax: {transferSyntax}", ex);
                             }
                         }
                     }
                     catch (Exception ex) when (ex is not InvalidOperationException)
                     {
-                        DicomLogger.Warning("WADO", ex, "无效的传输语法请求: {TransferSyntax}", transferSyntax);
+                        DicomLogger.Warning("WADO", ex, "Invalid transfer syntax request: {TransferSyntax}", transferSyntax);
                     }
                 }
 
-                // 如果不需要转换传输语法，直接返回文件流
+                // If no transfer syntax conversion is needed, return the file stream directly
                 var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                DicomLogger.Information("WADO", "使用文件流返回DICOM文件: {FilePath}", filePath);
+                DicomLogger.Information("WADO", "Returning DICOM file using file stream: {FilePath}", filePath);
                 return File(fileStream, AppDicomContentType);
             }
             catch
@@ -237,38 +237,38 @@ namespace DicomSCP.Controllers
         {
             try
             {
-                // 尝试直接解析传输语法 UID
+                // Try to directly parse the transfer syntax UID
                 return DicomTransferSyntax.Parse(syntax);
             }
             catch
             {
-                // 如果解析失败，使用常见的传输语法 UID 映射
+                // If parsing fails, use common transfer syntax UID mappings
                 return syntax switch
                 {
                     // Uncompressed
                     "1.2.840.10008.1.2" => DicomTransferSyntax.ImplicitVRLittleEndian,
                     "1.2.840.10008.1.2.1" => DicomTransferSyntax.ExplicitVRLittleEndian,
                     "1.2.840.10008.1.2.2" => DicomTransferSyntax.ExplicitVRBigEndian,
-                    
+
                     // JPEG Baseline
                     "1.2.840.10008.1.2.4.50" => DicomTransferSyntax.JPEGProcess1,
                     "1.2.840.10008.1.2.4.51" => DicomTransferSyntax.JPEGProcess2_4,
-                    
+
                     // JPEG Lossless
                     "1.2.840.10008.1.2.4.57" => DicomTransferSyntax.JPEGProcess14,
                     "1.2.840.10008.1.2.4.70" => DicomTransferSyntax.JPEGProcess14SV1,
-                    
+
                     // JPEG 2000
                     "1.2.840.10008.1.2.4.90" => DicomTransferSyntax.JPEG2000Lossless,
                     "1.2.840.10008.1.2.4.91" => DicomTransferSyntax.JPEG2000Lossy,
-                    
+
                     // JPEG-LS
                     "1.2.840.10008.1.2.4.80" => DicomTransferSyntax.JPEGLSLossless,
                     "1.2.840.10008.1.2.4.81" => DicomTransferSyntax.JPEGLSNearLossless,
-                    
+
                     // RLE
                     "1.2.840.10008.1.2.5" => DicomTransferSyntax.RLELossless,
-                    
+
                     // Default to Explicit VR Little Endian if unknown
                     _ => DicomTransferSyntax.ExplicitVRLittleEndian
                 };
@@ -277,15 +277,15 @@ namespace DicomSCP.Controllers
 
         private DicomFile AnonymizeDicomFile(DicomFile dicomFile)
         {
-            // 克隆数据集
+            // Clone the dataset
             var newDataset = dicomFile.Dataset.Clone();
-            
-            // 基本标签匿名化
+
+            // Basic tag anonymization
             newDataset.AddOrUpdate(DicomTag.PatientName, "ANONYMOUS");
             newDataset.AddOrUpdate(DicomTag.PatientID, "ANONYMOUS");
             newDataset.AddOrUpdate(DicomTag.PatientBirthDate, "19000101");
-            
-            // 移除敏感标签
+
+            // Remove sensitive tags
             newDataset.Remove(DicomTag.PatientAddress);
             newDataset.Remove(DicomTag.PatientTelephoneNumbers);
             newDataset.Remove(DicomTag.PatientMotherBirthName);
@@ -297,20 +297,20 @@ namespace DicomSCP.Controllers
             newDataset.Remove(DicomTag.PerformingPhysicianName);
             newDataset.Remove(DicomTag.NameOfPhysiciansReadingStudy);
             newDataset.Remove(DicomTag.OperatorsName);
-            
-            // 修改研究和序列描述
+
+            // Modify study and series descriptions
             newDataset.AddOrUpdate(DicomTag.StudyDescription, "ANONYMOUS");
             newDataset.AddOrUpdate(DicomTag.SeriesDescription, "ANONYMOUS");
-            
-            // 创建新的 DicomFile
+
+            // Create a new DicomFile
             var anonymizedFile = new DicomFile(newDataset);
-            
-            // 复制文件元信息
+
+            // Copy file meta information
             anonymizedFile.FileMetaInfo.TransferSyntax = dicomFile.FileMetaInfo.TransferSyntax;
             anonymizedFile.FileMetaInfo.MediaStorageSOPClassUID = dicomFile.FileMetaInfo.MediaStorageSOPClassUID;
             anonymizedFile.FileMetaInfo.MediaStorageSOPInstanceUID = dicomFile.FileMetaInfo.MediaStorageSOPInstanceUID;
-            
+
             return anonymizedFile;
         }
     }
-} 
+}

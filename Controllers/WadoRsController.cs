@@ -29,47 +29,47 @@ namespace DicomSCP.Controllers
             _settings = settings.Value;
         }
 
-        #region WADO-RS 检索接口
+        #region WADO-RS Retrieval Interfaces
 
-        // WADO-RS: 检索检查
+        // WADO-RS: Retrieve Study
         [HttpGet("studies/{studyInstanceUid}")]
         [Produces("multipart/related", "application/dicom")]
         public async Task<IActionResult> RetrieveStudy(string studyInstanceUid)
         {
             try
             {
-                // 记录请求信息
+                // Log request information
                 var acceptHeader = Request.Headers["Accept"].ToString();
-                DicomLogger.Information("WADO", "DICOMweb - 收到检查检索请求 - StudyUID: {StudyUID}, Accept: {Accept}",
+                DicomLogger.Information("WADO", "DICOMweb - Received study retrieval request - StudyUID: {StudyUID}, Accept: {Accept}",
                     studyInstanceUid, acceptHeader);
 
-                // 获取检查下的所有实例
+                // Get all instances in the study
                 var instances = await Task.FromResult(_repository.GetInstancesByStudyUid(studyInstanceUid));
                 if (!instances.Any())
                 {
-                    DicomLogger.Warning("WADO", "DICOMweb - 未找到检查: {StudyUID}", studyInstanceUid);
+                    DicomLogger.Warning("WADO", "DICOMweb - Study not found: {StudyUID}", studyInstanceUid);
                     return NotFound("Study not found");
                 }
 
-                // 按序列号和实例号排序
+                // Sort by series number and instance number
                 instances = instances
                     .OrderBy(i => int.Parse(_repository.GetSeriesByStudyUid(studyInstanceUid)
-                        .First(s => s.SeriesInstanceUid == i.SeriesInstanceUid)
-                        .SeriesNumber ?? "0"))
+                    .First(s => s.SeriesInstanceUid == i.SeriesInstanceUid)
+                    .SeriesNumber ?? "0"))
                     .ThenBy(i => int.Parse(i.InstanceNumber ?? "0"))
                     .ToList();
 
-                // 确定传输语法
+                // Determine transfer syntax
                 DicomTransferSyntax targetTransferSyntax = DicomTransferSyntax.ExplicitVRLittleEndian;
                 var acceptParts = acceptHeader.Split(';').Select(p => p.Trim()).ToList();
                 var transferSyntaxPart = acceptParts.FirstOrDefault(p => p.StartsWith("transfer-syntax=", StringComparison.OrdinalIgnoreCase));
-                
+
                 if (transferSyntaxPart != null)
                 {
                     var transferSyntax = transferSyntaxPart.Split('=')[1].Trim('"', ' ');
                     if (transferSyntax == "*")
                     {
-                        // 使用第一个实例的原始传输语法
+                        // Use the original transfer syntax of the first instance
                         var firstInstance = instances.First();
                         var firstFilePath = Path.Combine(_settings.StoragePath, firstInstance.FilePath);
                         var firstDicomFile = await DicomFile.OpenAsync(firstFilePath);
@@ -81,40 +81,40 @@ namespace DicomSCP.Controllers
                     }
                 }
 
-                // 创建 multipart/related 响应
+                // Create multipart/related response
                 var boundary = $"boundary.{Guid.NewGuid():N}";
                 var responseStream = new MemoryStream();
                 var writer = new StreamWriter(responseStream);
 
-                // 处理检查中的每个实例
+                // Process each instance in the study
                 foreach (var instance in instances)
                 {
                     var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                     if (!System.IO.File.Exists(filePath))
                     {
-                        DicomLogger.Warning("WADO", "DICOMweb - 实例文件不存在: {FilePath}", filePath);
+                        DicomLogger.Warning("WADO", "DICOMweb - Instance file not found: {FilePath}", filePath);
                         continue;
                     }
 
                     try
                     {
-                        // 读取 DICOM 文件
+                        // Read DICOM file
                         var dicomFile = await DicomFile.OpenAsync(filePath);
                         var currentTransferSyntax = dicomFile.FileMetaInfo.TransferSyntax;
 
-                        // 如果需要转换传输语法
+                        // Transcode if needed
                         if (currentTransferSyntax != targetTransferSyntax)
                         {
                             var transcoder = new DicomTranscoder(currentTransferSyntax, targetTransferSyntax);
                             dicomFile = transcoder.Transcode(dicomFile);
                         }
 
-                        // 将 DICOM 文件保存到临时流
+                        // Save DICOM file to temporary stream
                         using var tempStream = new MemoryStream();
                         await dicomFile.SaveAsync(tempStream);
                         var dicomBytes = tempStream.ToArray();
 
-                        // 写入分隔符和头部
+                        // Write boundary and headers
                         await writer.WriteLineAsync($"--{boundary}");
                         await writer.WriteLineAsync("Content-Type: application/dicom");
                         await writer.WriteLineAsync($"Content-Length: {dicomBytes.Length}");
@@ -123,88 +123,88 @@ namespace DicomSCP.Controllers
                         await writer.WriteLineAsync();
                         await writer.FlushAsync();
 
-                        // 写入 DICOM 数据
+                        // Write DICOM data
                         await responseStream.WriteAsync(dicomBytes, 0, dicomBytes.Length);
                         await writer.WriteLineAsync();
                         await writer.FlushAsync();
 
-                        DicomLogger.Debug("WADO", "DICOMweb - 已添加检查实例到响应: {SopInstanceUid}, Size: {Size} bytes", 
+                        DicomLogger.Debug("WADO", "DICOMweb - Added study instance to response: {SopInstanceUid}, Size: {Size} bytes",
                             instance.SopInstanceUid, dicomBytes.Length);
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("WADO", ex, "DICOMweb - 处理检查实例失败: {SopInstanceUid}", 
+                        DicomLogger.Error("WADO", ex, "DICOMweb - Failed to process study instance: {SopInstanceUid}",
                             instance.SopInstanceUid);
                         continue;
                     }
                 }
 
-                // 写入结束分隔符
+                // Write end boundary
                 await writer.WriteLineAsync($"--{boundary}--");
                 await writer.FlushAsync();
 
-                // 准备返回数据
+                // Prepare response data
                 responseStream.Position = 0;
                 var responseBytes = responseStream.ToArray();
 
-                // 设置响应头
+                // Set response headers
                 Response.Headers.Clear();
                 Response.Headers["Content-Type"] = $"multipart/related; type=\"application/dicom\"; boundary=\"{boundary}\"";
                 Response.Headers["Content-Length"] = responseBytes.Length.ToString();
                 Response.Headers["transfer-syntax"] = targetTransferSyntax.UID.UID;
 
-                DicomLogger.Information("WADO", "DICOMweb - 返回检查数据: {StudyUID}, Size: {Size} bytes, TransferSyntax: {TransferSyntax}", 
+                DicomLogger.Information("WADO", "DICOMweb - Returning study data: {StudyUID}, Size: {Size} bytes, TransferSyntax: {TransferSyntax}",
                     studyInstanceUid, responseBytes.Length, targetTransferSyntax.UID.Name);
 
                 return File(responseBytes, $"multipart/related; type=\"application/dicom\"; boundary=\"{boundary}\"");
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "DICOMweb - 检查检索失败");
+                DicomLogger.Error("WADO", ex, "DICOMweb - Study retrieval failed");
                 return StatusCode(500, "Error retrieving study");
             }
         }
 
-        // WADO-RS: 检索序列
+        // WADO-RS: Retrieve Series
         [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}")]
         [Produces("multipart/related", "application/dicom")]
         public async Task<IActionResult> RetrieveSeries(string studyInstanceUid, string seriesInstanceUid)
         {
             try
             {
-                // 记录请求信息
+                // Log request information
                 var acceptHeader = Request.Headers["Accept"].ToString();
-                DicomLogger.Information("WADO", "DICOMweb - 收到序列检索请求 - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, Accept: {Accept}",
+                DicomLogger.Information("WADO", "DICOMweb - Received series retrieval request - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, Accept: {Accept}",
                     studyInstanceUid, seriesInstanceUid, acceptHeader);
 
-                // 获取指定序列的实例
+                // Get instances in the specified series
                 var instances = await Task.FromResult(_repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid));
                 if (!instances.Any())
                 {
-                    DicomLogger.Warning("WADO", "DICOMweb - 未找到序列: {StudyUID}/{SeriesUID}", 
-                        studyInstanceUid, seriesInstanceUid);
+                    DicomLogger.Warning("WADO", "DICOMweb - Series not found: {StudyUID}/{SeriesUID}",
+                    studyInstanceUid, seriesInstanceUid);
                     return NotFound("Series not found");
                 }
 
-                // 按实例号排序
+                // Sort by instance number
                 instances = instances.OrderBy(i => int.Parse(i.InstanceNumber ?? "0")).ToList();
 
-                // 确定传输语法
+                // Determine transfer syntax
                 DicomTransferSyntax targetTransferSyntax = DicomTransferSyntax.ExplicitVRLittleEndian;
                 var acceptParts = acceptHeader.Split(';').Select(p => p.Trim()).ToList();
                 var transferSyntaxPart = acceptParts.FirstOrDefault(p => p.StartsWith("transfer-syntax=", StringComparison.OrdinalIgnoreCase));
-                
+
                 if (transferSyntaxPart != null)
                 {
                     var transferSyntax = transferSyntaxPart.Split('=')[1].Trim('"', ' ');
                     if (transferSyntax == "*")
                     {
-                        // 使用第一个实例的原始传输语法
+                        // Use the original transfer syntax of the first instance
                         var firstInstance = instances.First();
                         var firstFilePath = Path.Combine(_settings.StoragePath, firstInstance.FilePath);
                         var firstDicomFile = await DicomFile.OpenAsync(firstFilePath);
                         targetTransferSyntax = firstDicomFile.FileMetaInfo.TransferSyntax;
-                        DicomLogger.Information("WADO", "DICOMweb - 使用原始传输语法: {TransferSyntax}", 
+                        DicomLogger.Information("WADO", "DICOMweb - Using original transfer syntax: {TransferSyntax}",
                             targetTransferSyntax.UID.Name);
                     }
                     else
@@ -213,42 +213,42 @@ namespace DicomSCP.Controllers
                     }
                 }
 
-                // 创建新的响应流
+                // Create new response stream
                 using var responseStream = new MemoryStream();
                 using var writer = new StreamWriter(responseStream, leaveOpen: true);
 
-                // 写入 multipart 响应
+                // Write multipart response
                 var boundary = $"boundary.{Guid.NewGuid():N}";
 
-                // 处理序列中的每个实例
+                // Process each instance in the series
                 foreach (var instance in instances)
                 {
                     var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                     if (!System.IO.File.Exists(filePath))
                     {
-                        DicomLogger.Warning("WADO", "DICOMweb - 实例文件不存在: {FilePath}", filePath);
+                        DicomLogger.Warning("WADO", "DICOMweb - Instance file not found: {FilePath}", filePath);
                         continue;
                     }
 
                     try
                     {
-                        // 读取和处理 DICOM 文件
+                        // Read and process DICOM file
                         var dicomFile = await DicomFile.OpenAsync(filePath);
                         var currentTransferSyntax = dicomFile.FileMetaInfo.TransferSyntax;
 
-                        // 如果需要转换传输语法
+                        // Transcode if needed
                         if (currentTransferSyntax != targetTransferSyntax)
                         {
                             var transcoder = new DicomTranscoder(currentTransferSyntax, targetTransferSyntax);
                             dicomFile = transcoder.Transcode(dicomFile);
                         }
 
-                        // 将 DICOM 文件保存到临时流
+                        // Save DICOM file to temporary stream
                         using var tempStream = new MemoryStream();
                         await dicomFile.SaveAsync(tempStream);
                         var dicomBytes = tempStream.ToArray();
 
-                        // 写入分隔符和头部
+                        // Write boundary and headers
                         await writer.WriteLineAsync($"--{boundary}");
                         await writer.WriteLineAsync("Content-Type: application/dicom");
                         await writer.WriteLineAsync($"Content-Length: {dicomBytes.Length}");
@@ -257,49 +257,49 @@ namespace DicomSCP.Controllers
                         await writer.WriteLineAsync();
                         await writer.FlushAsync();
 
-                        // 写入 DICOM 数据
+                        // Write DICOM data
                         await responseStream.WriteAsync(dicomBytes, 0, dicomBytes.Length);
                         await writer.WriteLineAsync();
                         await writer.FlushAsync();
 
-                        DicomLogger.Debug("WADO", "DICOMweb - 已添加序列实例到响应: {SopInstanceUid}, Size: {Size} bytes", 
+                        DicomLogger.Debug("WADO", "DICOMweb - Added series instance to response: {SopInstanceUid}, Size: {Size} bytes",
                             instance.SopInstanceUid, dicomBytes.Length);
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("WADO", ex, "DICOMweb - 处理序列实例失败: {SopInstanceUid}", 
+                        DicomLogger.Error("WADO", ex, "DICOMweb - Failed to process series instance: {SopInstanceUid}",
                             instance.SopInstanceUid);
                         continue;
                     }
                 }
 
-                // 写入结束分隔符
+                // Write end boundary
                 await writer.WriteLineAsync($"--{boundary}--");
                 await writer.FlushAsync();
 
-                // 准备返回数据
+                // Prepare response data
                 responseStream.Position = 0;
                 var responseBytes = responseStream.ToArray();
 
-                // 设置响应头
+                // Set response headers
                 Response.Headers.Clear();
                 Response.Headers["Content-Type"] = $"multipart/related; type=\"application/dicom\"; boundary=\"{boundary}\"";
                 Response.Headers["Content-Length"] = responseBytes.Length.ToString();
                 Response.Headers["transfer-syntax"] = targetTransferSyntax.UID.UID;
 
-                DicomLogger.Information("WADO", "DICOMweb - 返回序列数据: {SeriesUID}, Size: {Size} bytes, TransferSyntax: {TransferSyntax}", 
+                DicomLogger.Information("WADO", "DICOMweb - Returning series data: {SeriesUID}, Size: {Size} bytes, TransferSyntax: {TransferSyntax}",
                     seriesInstanceUid, responseBytes.Length, targetTransferSyntax.UID.Name);
 
                 return File(responseBytes, $"multipart/related; type=\"application/dicom\"; boundary=\"{boundary}\"");
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "DICOMweb - 序列检索失败");
+                DicomLogger.Error("WADO", ex, "DICOMweb - Series retrieval failed");
                 return StatusCode(500, "Error retrieving series");
             }
         }
 
-        // WADO-RS: 检索DICOM实例
+        // WADO-RS: Retrieve DICOM Instance
         [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}/instances/{sopInstanceUid}")]
         [Produces("multipart/related", "application/dicom")]
         public async Task<IActionResult> RetrieveDicomInstance(
@@ -309,97 +309,97 @@ namespace DicomSCP.Controllers
         {
             try
             {
-                // 记录请求信息
+                // Log request information
                 var acceptHeader = Request.Headers["Accept"].ToString();
-                DicomLogger.Information("WADO", "DICOMweb - 收到实例检索请求 - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, SopUID: {SopUID}, Accept: {Accept}",
+                DicomLogger.Information("WADO", "DICOMweb - Received instance retrieval request - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, SopUID: {SopUID}, Accept: {Accept}",
                     studyInstanceUid, seriesInstanceUid, sopInstanceUid, acceptHeader);
 
-                // 获取实例信息
+                // Get instance information
                 var instances = await Task.FromResult(_repository.GetInstancesByStudyUid(studyInstanceUid));
-                var instance = instances.FirstOrDefault(i => 
-                    i.SeriesInstanceUid == seriesInstanceUid && 
+                var instance = instances.FirstOrDefault(i =>
+                    i.SeriesInstanceUid == seriesInstanceUid &&
                     i.SopInstanceUid == sopInstanceUid);
 
                 if (instance == null)
                 {
-                    DicomLogger.Warning("WADO", "DICOMweb - 未找到实例: {SopInstanceUid}", sopInstanceUid);
+                    DicomLogger.Warning("WADO", "DICOMweb - Instance not found: {SopInstanceUid}", sopInstanceUid);
                     return NotFound("Instance not found");
                 }
 
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                 if (!System.IO.File.Exists(filePath))
                 {
-                    DicomLogger.Error("WADO", "DICOMweb - DICOM文件不存在: {FilePath}", filePath);
+                    DicomLogger.Error("WADO", "DICOMweb - DICOM file not found: {FilePath}", filePath);
                     return NotFound("DICOM file not found");
                 }
 
-                // 读取DICOM文件
+                // Read DICOM file
                 var dicomFile = await DicomFile.OpenAsync(filePath);
                 var currentTransferSyntax = dicomFile.FileMetaInfo.TransferSyntax;
 
-                // 解析 Accept 头
+                // Parse Accept header
                 var acceptParts = acceptHeader.Split(';').Select(p => p.Trim()).ToList();
                 var mediaType = acceptParts.First().Trim();
                 var transferSyntaxPart = acceptParts.FirstOrDefault(p => p.StartsWith("transfer-syntax=", StringComparison.OrdinalIgnoreCase));
                 var typePart = acceptParts.FirstOrDefault(p => p.StartsWith("type=", StringComparison.OrdinalIgnoreCase));
 
-                // 确定媒体类型
+                // Determine media type
                 if (mediaType == "*/*" || string.IsNullOrEmpty(mediaType))
                 {
                     mediaType = AppDicomContentType;
                 }
 
-                // 从 multipart/related 中提取实际的媒体类型
+                // Extract actual media type from multipart/related
                 if (mediaType == "multipart/related" && typePart != null)
                 {
                     var type = typePart.Split('=')[1].Trim('"', ' ');
                     mediaType = type;
                 }
 
-                // 确定传输语法
+                // Determine transfer syntax
                 DicomTransferSyntax targetTransferSyntax;
                 if (transferSyntaxPart != null)
                 {
                     var requestedSyntax = transferSyntaxPart.Split('=')[1].Trim('"', ' ');
                     if (requestedSyntax == "*")
                     {
-                        // 使用原始传输语法
+                        // Use original transfer syntax
                         targetTransferSyntax = currentTransferSyntax;
-                        DicomLogger.Information("WADO", "DICOMweb - 使用原始传输语法: {TransferSyntax}", 
+                        DicomLogger.Information("WADO", "DICOMweb - Using original transfer syntax: {TransferSyntax}",
                             currentTransferSyntax.UID.Name);
                     }
                     else
                     {
                         targetTransferSyntax = DicomTransferSyntax.Parse(requestedSyntax);
-                        DicomLogger.Information("WADO", "DICOMweb - 使用请求的传输语法: {TransferSyntax}", 
+                        DicomLogger.Information("WADO", "DICOMweb - Using requested transfer syntax: {TransferSyntax}",
                             targetTransferSyntax.UID.Name);
                     }
                 }
                 else
                 {
-                    // 默认使用显式 VR 小端 (1.2.840.10008.1.2.1)
+                    // Default to Explicit VR Little Endian (1.2.840.10008.1.2.1)
                     targetTransferSyntax = DicomTransferSyntax.ExplicitVRLittleEndian;
-                    DicomLogger.Information("WADO", "DICOMweb - 使用默认传输语法: ExplicitVRLittleEndian");
+                    DicomLogger.Information("WADO", "DICOMweb - Using default transfer syntax: ExplicitVRLittleEndian");
                 }
 
-                // 如果需要转换传输语法
+                // Transcode if needed
                 if (currentTransferSyntax != targetTransferSyntax)
                 {
-                    DicomLogger.Information("WADO", 
-                        "DICOMweb - 传输语法转换 - 从: {CurrentSyntax} 到: {TargetSyntax}",
-                        currentTransferSyntax.UID.Name,
-                        targetTransferSyntax.UID.Name);
+                    DicomLogger.Information("WADO",
+                    "DICOMweb - Transcoding transfer syntax - From: {CurrentSyntax} To: {TargetSyntax}",
+                    currentTransferSyntax.UID.Name,
+                    targetTransferSyntax.UID.Name);
 
                     var transcoder = new DicomTranscoder(currentTransferSyntax, targetTransferSyntax);
                     dicomFile = transcoder.Transcode(dicomFile);
                 }
 
-                // 将 DICOM 文件保存到内存流
+                // Save DICOM file to memory stream
                 using var memoryStream = new MemoryStream();
                 await dicomFile.SaveAsync(memoryStream);
                 var dicomBytes = memoryStream.ToArray();
 
-                // 如果请求单个 DICOM 文件
+                // If single DICOM file is requested
                 if (mediaType == AppDicomContentType && !acceptHeader.Contains("multipart/related"))
                 {
                     Response.Headers["Content-Type"] = AppDicomContentType;
@@ -408,15 +408,15 @@ namespace DicomSCP.Controllers
                     return File(dicomBytes, AppDicomContentType, $"{sopInstanceUid}.dcm");
                 }
 
-                // 默认返回 multipart/related 格式
+                // Default to multipart/related format
                 var boundary = $"boundary_{Guid.NewGuid():N}";
                 var responseStream = new MemoryStream();
                 var writer = new StreamWriter(responseStream, System.Text.Encoding.UTF8);
 
-                // 写入第一个分隔符
+                // Write first boundary
                 await writer.WriteLineAsync($"--{boundary}");
 
-                // 写入 MIME 头部
+                // Write MIME headers
                 await writer.WriteLineAsync("Content-Type: application/dicom");
                 await writer.WriteLineAsync($"Content-Length: {dicomBytes.Length}");
                 await writer.WriteLineAsync($"Content-Location: /dicomweb/studies/{studyInstanceUid}/series/{seriesInstanceUid}/instances/{sopInstanceUid}");
@@ -424,38 +424,38 @@ namespace DicomSCP.Controllers
                 await writer.WriteLineAsync();
                 await writer.FlushAsync();
 
-                // 写入 DICOM 数据
+                // Write DICOM data
                 await responseStream.WriteAsync(dicomBytes, 0, dicomBytes.Length);
 
-                // 写入结束分隔符
+                // Write end boundary
                 var endBoundary = $"\r\n--{boundary}--\r\n";
                 var endBoundaryBytes = System.Text.Encoding.UTF8.GetBytes(endBoundary);
                 await responseStream.WriteAsync(endBoundaryBytes, 0, endBoundaryBytes.Length);
 
-                // 准备返回数据
+                // Prepare response data
                 responseStream.Position = 0;
                 var responseBytes = responseStream.ToArray();
 
-                // 设置响应头
+                // Set response headers
                 Response.Headers.Clear();
                 Response.Headers["Content-Type"] = $"multipart/related; type=\"application/dicom\"; boundary=\"{boundary}\"";
                 Response.Headers["Content-Length"] = responseBytes.Length.ToString();
                 Response.Headers["transfer-syntax"] = targetTransferSyntax.UID.UID;
 
-                DicomLogger.Information("WADO", 
-                    "DICOMweb - 返回DICOM实例: {SopInstanceUid}, Size: {Size} bytes, TransferSyntax: {TransferSyntax}", 
+                DicomLogger.Information("WADO",
+                    "DICOMweb - Returning DICOM instance: {SopInstanceUid}, Size: {Size} bytes, TransferSyntax: {TransferSyntax}",
                     sopInstanceUid ?? string.Empty, responseBytes.Length, targetTransferSyntax.UID.Name ?? string.Empty);
 
                 return File(responseBytes, $"multipart/related; type=\"application/dicom\"; boundary=\"{boundary}\"");
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", "检索DICOM实例失败: {Error}", ex.Message ?? string.Empty);
+                DicomLogger.Error("WADO", "Failed to retrieve DICOM instance: {Error}", ex.Message ?? string.Empty);
                 return StatusCode(500, "Error retrieving DICOM instance");
             }
         }
 
-        // WADO-RS: 检索帧
+        // WADO-RS: Retrieve Frames
         [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}/instances/{sopInstanceUid}/frames/{frameNumbers}")]
         [Produces("multipart/related")]
         public async Task<IActionResult> RetrieveFrames(
@@ -466,19 +466,19 @@ namespace DicomSCP.Controllers
         {
             try
             {
-                // 记录请求信息
+                // Log request information
                 var acceptHeader = Request.Headers["Accept"].ToString();
-                DicomLogger.Information("WADO", 
-                    "DICOMweb - 收到帧检索请求 - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, SopUID: {SopUID}, Frames: {Frames}, Accept: {Accept}",
+                DicomLogger.Information("WADO",
+                    "DICOMweb - Received frame retrieval request - StudyUID: {StudyUID}, SeriesUID: {SeriesUID}, SopUID: {SopUID}, Frames: {Frames}, Accept: {Accept}",
                     studyInstanceUid, seriesInstanceUid, sopInstanceUid, frameNumbers, acceptHeader);
 
-                // 验证帧号格式
+                // Validate frame numbers format
                 if (!frameNumbers.Split(',').All(f => int.TryParse(f, out int n) && n >= 1))
                 {
                     return BadRequest("Invalid frame numbers. Frame numbers must be positive integers.");
                 }
 
-                // 获取实例
+                // Get instance
                 var instances = await Task.FromResult(_repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid));
                 var instance = instances.FirstOrDefault(i => i.SopInstanceUid == sopInstanceUid);
                 if (instance == null)
@@ -486,7 +486,7 @@ namespace DicomSCP.Controllers
                     return NotFound("Instance not found");
                 }
 
-                // 读取 DICOM 文件
+                // Read DICOM file
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                 if (!System.IO.File.Exists(filePath))
                 {
@@ -496,7 +496,7 @@ namespace DicomSCP.Controllers
                 var dicomFile = await DicomFile.OpenAsync(filePath);
                 var dataset = dicomFile.Dataset;
 
-                // 修改这部分逻辑：如果不存在 NumberOfFrames，则认为是单帧图像
+                // Modify this logic: if NumberOfFrames does not exist, assume it is a single-frame image
                 int numberOfFrames = 1;
                 if (dataset.Contains(DicomTag.NumberOfFrames))
                 {
@@ -505,34 +505,34 @@ namespace DicomSCP.Controllers
 
                 var requestedFrames = frameNumbers.Split(',').Select(int.Parse).ToList();
 
-                // 验证帧号范围
+                // Validate frame number range
                 if (requestedFrames.Any(f => f < 1 || f > numberOfFrames))
                 {
                     return BadRequest($"Frame numbers must be between 1 and {numberOfFrames}");
                 }
 
-                // 处理 Accept 头
+                // Process Accept header
                 var (mediaType, targetTransferSyntax) = GetFrameMediaTypeAndTransferSyntax(
-                    acceptHeader, 
+                    acceptHeader,
                     dicomFile.FileMetaInfo.TransferSyntax);
 
-                // 创建响应
+                // Create response
                 var boundary = $"boundary.{Guid.NewGuid():N}";
                 using var responseStream = new MemoryStream();
                 using var writer = new StreamWriter(responseStream, leaveOpen: true);
 
-                // 预处理数据集
+                // Preprocess dataset
                 var pixelData = DicomPixelData.Create(dataset);
                 var failedFrames = new List<int>();
 
-                // 处理每一帧
+                // Process each frame
                 foreach (var frameNumber in requestedFrames)
                 {
                     try
                     {
                         var frameData = GetFrameData(dataset, frameNumber, mediaType, targetTransferSyntax);
 
-                        // 写入分隔符和头部
+                        // Write boundary and headers
                         await writer.WriteLineAsync($"--{boundary}");
                         await writer.WriteLineAsync($"Content-Type: {mediaType}");
                         await writer.WriteLineAsync($"Content-Length: {frameData.Length}");
@@ -544,39 +544,39 @@ namespace DicomSCP.Controllers
                         await writer.WriteLineAsync();
                         await writer.FlushAsync();
 
-                        // 写入帧数据
+                        // Write frame data
                         await responseStream.WriteAsync(frameData, 0, frameData.Length);
                         await writer.WriteLineAsync();
                         await writer.FlushAsync();
 
-                        DicomLogger.Debug("WADO", 
-                            "DICOMweb - 已添加帧到响应: Frame={FrameNumber}, Size={Size} bytes", 
+                        DicomLogger.Debug("WADO",
+                            "DICOMweb - Added frame to response: Frame={FrameNumber}, Size={Size} bytes",
                             frameNumber, frameData.Length);
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("WADO", ex, 
-                            "DICOMweb - 处理帧失败: Frame={FrameNumber}", frameNumber);
+                        DicomLogger.Error("WADO", ex,
+                            "DICOMweb - Failed to process frame: Frame={FrameNumber}", frameNumber);
                         failedFrames.Add(frameNumber);
                         continue;
                     }
                 }
 
-                // 如果所有帧都失败，返回错误
+                // If all frames failed, return error
                 if (failedFrames.Count == requestedFrames.Count)
                 {
                     return StatusCode(500, "Failed to process all requested frames");
                 }
 
-                // 写入结束分隔符
+                // Write end boundary
                 await writer.WriteLineAsync($"--{boundary}--");
                 await writer.FlushAsync();
 
-                // 准备返回数据
+                // Prepare response data
                 responseStream.Position = 0;
                 var responseBytes = responseStream.ToArray();
 
-                // 设置响应头
+                // Set response headers
                 Response.Headers.Clear();
                 Response.Headers["Content-Type"] = $"multipart/related; type=\"{mediaType}\"; boundary=\"{boundary}\"";
                 Response.Headers["Content-Length"] = responseBytes.Length.ToString();
@@ -593,7 +593,7 @@ namespace DicomSCP.Controllers
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "DICOMweb - 帧检索失败");
+                DicomLogger.Error("WADO", ex, "DICOMweb - Frame retrieval failed");
                 return StatusCode(500, "Error retrieving frames");
             }
         }
@@ -603,17 +603,17 @@ namespace DicomSCP.Controllers
             var pixelData = DicomPixelData.Create(dataset);
             var originalFrameData = pixelData.GetFrame(frameNumber - 1).Data.ToArray();
 
-            // 如果请求的是原始传输语法或当前传输语法与目标相同，直接返回
+            // If the requested transfer syntax is the original or the current transfer syntax matches the target, return the original data
             if (targetTransferSyntax == dataset.InternalTransferSyntax ||
-                targetTransferSyntax.UID.UID == "*")
+            targetTransferSyntax.UID.UID == "*")
             {
                 return originalFrameData;
             }
 
-            // 根据媒体类型和传输语法进行转码
+            // Transcode based on media type and transfer syntax
             var transcoder = new DicomTranscoder(
-                dataset.InternalTransferSyntax,
-                mediaType == "image/jp2" ? DicomTransferSyntax.JPEG2000Lossless : targetTransferSyntax);
+            dataset.InternalTransferSyntax,
+            mediaType == "image/jp2" ? DicomTransferSyntax.JPEG2000Lossless : targetTransferSyntax);
 
             var newDataset = transcoder.Transcode(dataset);
             var newPixelData = DicomPixelData.Create(newDataset);
@@ -636,7 +636,7 @@ namespace DicomSCP.Controllers
             var typePart = acceptParts.FirstOrDefault(p => p.StartsWith("type=", StringComparison.OrdinalIgnoreCase));
             var transferSyntaxPart = acceptParts.FirstOrDefault(p => p.StartsWith("transfer-syntax=", StringComparison.OrdinalIgnoreCase));
 
-            // 处理媒体类型
+            // Handle media type
             if (typePart != null)
             {
                 var type = typePart.Split('=')[1].Trim('"', ' ');
@@ -647,7 +647,7 @@ namespace DicomSCP.Controllers
                 }
             }
 
-            // 处理传输语法
+            // Handle transfer syntax
             if (transferSyntaxPart != null)
             {
                 var transferSyntax = transferSyntaxPart.Split('=')[1].Trim('"', ' ');
@@ -668,126 +668,126 @@ namespace DicomSCP.Controllers
             return (mediaType, targetTransferSyntax);
         }
 
-        // WADO-RS: 检索序列元数据
+        // WADO-RS: Retrieve Series Metadata
         [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}/metadata")]
         [Produces("application/dicom+json")]
         public async Task<IActionResult> GetSeriesMetadata(string studyInstanceUid, string seriesInstanceUid)
         {
-            // 需要排除的标签
+            // Tags to exclude
             var excludedTags = new HashSet<DicomTag>
             {
-                // 像素数据相关
-                DicomTag.PixelData,
-                DicomTag.FloatPixelData,
-                DicomTag.DoubleFloatPixelData,
-                DicomTag.OverlayData,
-                DicomTag.EncapsulatedDocument,
-                DicomTag.SpectroscopyData
+            // Pixel data related
+            DicomTag.PixelData,
+            DicomTag.FloatPixelData,
+            DicomTag.DoubleFloatPixelData,
+            DicomTag.OverlayData,
+            DicomTag.EncapsulatedDocument,
+            DicomTag.SpectroscopyData
             };
 
-            // 必需包含的标签
+            // Required tags
             var requiredTags = new HashSet<DicomTag>
             {
-                // 文件元信息
-                DicomTag.TransferSyntaxUID,
-                DicomTag.SpecificCharacterSet,
-                
-                // Study 级别
-                DicomTag.StudyInstanceUID,
-                DicomTag.StudyDate,
-                DicomTag.StudyTime,
-                DicomTag.StudyID,
-                DicomTag.AccessionNumber,
-                DicomTag.StudyDescription,
-                
-                // Series 级别
-                DicomTag.SeriesInstanceUID,
-                DicomTag.SeriesNumber,
-                DicomTag.Modality,
-                DicomTag.SeriesDescription,
-                DicomTag.SeriesDate,
-                DicomTag.SeriesTime,
-                
-                // Instance 级别
-                DicomTag.SOPClassUID,
-                DicomTag.SOPInstanceUID,
-                DicomTag.InstanceNumber,
-                DicomTag.ImageType,
-                DicomTag.AcquisitionNumber,
-                DicomTag.AcquisitionDate,
-                DicomTag.AcquisitionTime,
-                DicomTag.ContentDate,
-                DicomTag.ContentTime,
-                
-                // 设备信息
-                DicomTag.Manufacturer,
-                DicomTag.ManufacturerModelName,
-                DicomTag.StationName,
-                
-                // 患者信息
-                DicomTag.PatientName,
-                DicomTag.PatientID,
-                DicomTag.PatientBirthDate,
-                DicomTag.PatientSex,
-                DicomTag.PatientAge,
-                DicomTag.PatientWeight,
-                DicomTag.PatientPosition,
-                
-                // 图像相关
-                DicomTag.Rows,
-                DicomTag.Columns,
-                DicomTag.BitsAllocated,
-                DicomTag.BitsStored,
-                DicomTag.HighBit,
-                DicomTag.PixelRepresentation,
-                DicomTag.SamplesPerPixel,
-                DicomTag.PhotometricInterpretation,
-                DicomTag.PlanarConfiguration,
-                DicomTag.RescaleIntercept,
-                DicomTag.RescaleSlope,
-                
-                // 空间信息
-                DicomTag.ImageOrientationPatient,
-                DicomTag.ImagePositionPatient,
-                DicomTag.SliceLocation,
-                DicomTag.SliceThickness,
-                DicomTag.PixelSpacing,
-                DicomTag.WindowCenter,
-                DicomTag.WindowWidth,
-                DicomTag.WindowCenterWidthExplanation,
-                
-                // 扫描参数
-                DicomTag.KVP,
-                DicomTag.ExposureTime,
-                DicomTag.XRayTubeCurrent,
-                DicomTag.Exposure,
-                DicomTag.ConvolutionKernel,
-                DicomTag.PatientOrientation,
-                DicomTag.ImageComments,
-                
-                // 多帧相关
-                DicomTag.NumberOfFrames,
-                DicomTag.FrameIncrementPointer
+            // File meta information
+            DicomTag.TransferSyntaxUID,
+            DicomTag.SpecificCharacterSet,
+
+            // Study level
+            DicomTag.StudyInstanceUID,
+            DicomTag.StudyDate,
+            DicomTag.StudyTime,
+            DicomTag.StudyID,
+            DicomTag.AccessionNumber,
+            DicomTag.StudyDescription,
+
+            // Series level
+            DicomTag.SeriesInstanceUID,
+            DicomTag.SeriesNumber,
+            DicomTag.Modality,
+            DicomTag.SeriesDescription,
+            DicomTag.SeriesDate,
+            DicomTag.SeriesTime,
+
+            // Instance level
+            DicomTag.SOPClassUID,
+            DicomTag.SOPInstanceUID,
+            DicomTag.InstanceNumber,
+            DicomTag.ImageType,
+            DicomTag.AcquisitionNumber,
+            DicomTag.AcquisitionDate,
+            DicomTag.AcquisitionTime,
+            DicomTag.ContentDate,
+            DicomTag.ContentTime,
+
+            // Device information
+            DicomTag.Manufacturer,
+            DicomTag.ManufacturerModelName,
+            DicomTag.StationName,
+
+            // Patient information
+            DicomTag.PatientName,
+            DicomTag.PatientID,
+            DicomTag.PatientBirthDate,
+            DicomTag.PatientSex,
+            DicomTag.PatientAge,
+            DicomTag.PatientWeight,
+            DicomTag.PatientPosition,
+
+            // Image related
+            DicomTag.Rows,
+            DicomTag.Columns,
+            DicomTag.BitsAllocated,
+            DicomTag.BitsStored,
+            DicomTag.HighBit,
+            DicomTag.PixelRepresentation,
+            DicomTag.SamplesPerPixel,
+            DicomTag.PhotometricInterpretation,
+            DicomTag.PlanarConfiguration,
+            DicomTag.RescaleIntercept,
+            DicomTag.RescaleSlope,
+
+            // Spatial information
+            DicomTag.ImageOrientationPatient,
+            DicomTag.ImagePositionPatient,
+            DicomTag.SliceLocation,
+            DicomTag.SliceThickness,
+            DicomTag.PixelSpacing,
+            DicomTag.WindowCenter,
+            DicomTag.WindowWidth,
+            DicomTag.WindowCenterWidthExplanation,
+
+            // Scanning parameters
+            DicomTag.KVP,
+            DicomTag.ExposureTime,
+            DicomTag.XRayTubeCurrent,
+            DicomTag.Exposure,
+            DicomTag.ConvolutionKernel,
+            DicomTag.PatientOrientation,
+            DicomTag.ImageComments,
+
+            // Multi-frame related
+            DicomTag.NumberOfFrames,
+            DicomTag.FrameIncrementPointer
             };
 
             try
             {
-                // 1. 从数据库获取该序列的所有实例
+                // 1. Get all instances of the series from the database
                 var instances = _repository.GetInstancesBySeriesUid(studyInstanceUid, seriesInstanceUid);
                 if (!instances.Any())
                 {
-                    return NotFound($"未找到序列: {seriesInstanceUid}");
+                    return NotFound($"Series not found: {seriesInstanceUid}");
                 }
 
                 var metadata = new List<Dictionary<string, object>>();
 
-                // 2. 读取每个实例的 DICOM 标签
+                // 2. Read DICOM tags for each instance
                 foreach (var instance in instances)
                 {
                     var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                     if (!System.IO.File.Exists(filePath))
                     {
-                        DicomLogger.Warning("WADO", "文件不存在: {Path}", filePath);
+                        DicomLogger.Warning("WADO", "File not found: {Path}", filePath);
                         continue;
                     }
 
@@ -796,7 +796,7 @@ namespace DicomSCP.Controllers
                         var dicomFile = await DicomFile.OpenAsync(filePath);
                         var tags = new Dictionary<string, object>();
 
-                        // 确保必需标签存在
+                        // Ensure required tags exist
                         foreach (var tag in requiredTags)
                         {
                             if (dicomFile.Dataset.Contains(tag))
@@ -810,7 +810,7 @@ namespace DicomSCP.Controllers
                             }
                         }
 
-                        // 添加其他标签
+                        // Add other tags
                         foreach (var tag in dicomFile.Dataset)
                         {
                             if (excludedTags.Contains(tag.Tag) || tag.Tag.IsPrivate)
@@ -818,7 +818,7 @@ namespace DicomSCP.Controllers
                                 continue;
                             }
 
-                            // 跳过已处理的必需标签
+                            // Skip already processed required tags
                             if (requiredTags.Contains(tag.Tag))
                             {
                                 continue;
@@ -836,7 +836,7 @@ namespace DicomSCP.Controllers
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("WADO", ex, "读取DICOM文件失败: {Path}", filePath);
+                        DicomLogger.Error("WADO", ex, "Failed to read DICOM file: {Path}", filePath);
                     }
                 }
 
@@ -844,9 +844,9 @@ namespace DicomSCP.Controllers
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "获取序列元数据失败 - Study: {Study}, Series: {Series}", 
+                DicomLogger.Error("WADO", ex, "Failed to get series metadata - Study: {Study}, Series: {Series}",
                     studyInstanceUid, seriesInstanceUid);
-                return StatusCode(500, "获取序列元数据失败");
+                return StatusCode(500, "Failed to get series metadata");
             }
         }
 
@@ -854,13 +854,13 @@ namespace DicomSCP.Controllers
         {
             try
             {
-                // DICOMweb JSON 格式要求
+                // DICOMweb JSON format requirements
                 var result = new Dictionary<string, object?>
-                {
-                    { "vr", item.ValueRepresentation.Code }
-                };
+            {
+                { "vr", item.ValueRepresentation.Code }
+            };
 
-                // 根据 VR 类型处理值
+                // Handle value based on VR type
                 if (item is DicomElement element)
                 {
                     switch (item.ValueRepresentation.Code)
@@ -893,9 +893,9 @@ namespace DicomSCP.Controllers
                         case "PN":
                             var personNames = element.Get<string[]>();
                             result["Value"] = personNames?.Select(pn => new Dictionary<string, string>
-                            {
-                                { "Alphabetic", pn }
-                            }).ToArray() ?? Array.Empty<Dictionary<string, string>>();
+                    {
+                    { "Alphabetic", pn }
+                    }).ToArray() ?? Array.Empty<Dictionary<string, string>>();
                             break;
 
                         case "DA":
@@ -947,16 +947,16 @@ namespace DicomSCP.Controllers
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "转换DICOM标签失败: {Tag}", item.Tag);
+                DicomLogger.Error("WADO", ex, "Failed to convert DICOM tag: {Tag}", item.Tag);
                 return null;
             }
         }
 
         #endregion
 
-        #region WADO-RS 缩略图接口
+        #region WADO-RS Thumbnail Interfaces
 
-        // WADO-RS: 检索序列缩略图
+        // WADO-RS: Retrieve Series Thumbnail
         [HttpGet("studies/{studyInstanceUid}/series/{seriesInstanceUid}/thumbnail")]
         [Produces(JpegImageContentType)]
         public async Task<IActionResult> RetrieveSeriesThumbnail(
@@ -967,102 +967,102 @@ namespace DicomSCP.Controllers
         {
             try
             {
-                // 从 viewport 参数解析尺寸（格式：width,height）
+                // Parse size from viewport parameter (format: width,height)
                 if (viewport != null && size == null)
                 {
                     var dimensions = viewport.Split(',', StringSplitOptions.RemoveEmptyEntries);
                     if (dimensions.Length > 0 && int.TryParse(dimensions[0].Trim('%'), out int width))
                     {
                         size = width;
-                        DicomLogger.Debug("WADO", "DICOMweb - 使用 viewport 参数: {SeriesInstanceUid}, Viewport: {Viewport}, 解析尺寸: {Size}", 
+                        DicomLogger.Debug("WADO", "DICOMweb - Using viewport parameter: {SeriesInstanceUid}, Viewport: {Viewport}, Parsed size: {Size}",
                             seriesInstanceUid, viewport, size);
                     }
                 }
                 else if (viewport != null && size != null)
                 {
-                    DicomLogger.Debug("WADO", "DICOMweb - 同时提供了 size 和 viewport 参数，优先使用 size: {Size}, 忽略 viewport: {Viewport}", 
-                        size, viewport);
+                    DicomLogger.Debug("WADO", "DICOMweb - Both size and viewport parameters provided, using size: {Size}, ignoring viewport: {Viewport}",
+                    size, viewport);
                 }
                 else if (size != null)
                 {
-                    DicomLogger.Debug("WADO", "DICOMweb - 使用 size 参数: {Size}", size);
+                    DicomLogger.Debug("WADO", "DICOMweb - Using size parameter: {Size}", size);
                 }
                 else
                 {
-                    DicomLogger.Debug("WADO", "DICOMweb - 使用默认尺寸: 128");
+                    DicomLogger.Debug("WADO", "DICOMweb - Using default size: 128");
                 }
 
-                // 如果既没有 size 也没有 viewport，使用默认值
+                // If neither size nor viewport is provided, use default value
                 var thumbnailSize = size ?? 128;
 
-                // 获取序列中的第一个实例
+                // Get the first instance in the series
                 var instances = _repository.GetInstancesByStudyUid(studyInstanceUid);
-                var instance = instances.FirstOrDefault(i => 
+                var instance = instances.FirstOrDefault(i =>
                     i.SeriesInstanceUid == seriesInstanceUid);
 
                 if (instance == null)
                 {
-                    DicomLogger.Warning("WADO", "DICOMweb - 未找到序列: {SeriesInstanceUid}", seriesInstanceUid);
+                    DicomLogger.Warning("WADO", "DICOMweb - Series not found: {SeriesInstanceUid}", seriesInstanceUid);
                     return NotFound("Series not found");
                 }
 
                 var filePath = Path.Combine(_settings.StoragePath, instance.FilePath);
                 if (!System.IO.File.Exists(filePath))
                 {
-                    DicomLogger.Error("WADO", "DICOMweb - DICOM文件不存在: {FilePath}", filePath);
+                    DicomLogger.Error("WADO", "DICOMweb - DICOM file not found: {FilePath}", filePath);
                     return NotFound("DICOM file not found");
                 }
 
-                // 读取DICOM文件
+                // Read DICOM file
                 var dicomFile = await DicomFile.OpenAsync(filePath);
-                DicomLogger.Debug("WADO", "DICOMweb - 生成序列缩略图: {SeriesInstanceUid}, Size: {Size}", 
+                DicomLogger.Debug("WADO", "DICOMweb - Generating series thumbnail: {SeriesInstanceUid}, Size: {Size}",
                     seriesInstanceUid, thumbnailSize);
                 var dicomImage = new DicomImage(dicomFile.Dataset);
                 var renderedImage = dicomImage.RenderImage();
 
-                // 转换为JPEG缩略图
+                // Convert to JPEG thumbnail
                 byte[] jpegBytes;
                 using (var memoryStream = new MemoryStream())
                 {
                     using var image = Image.LoadPixelData<SixLabors.ImageSharp.PixelFormats.Rgba32>(
-                        renderedImage.AsBytes(),
-                        renderedImage.Width,
-                        renderedImage.Height);
+                    renderedImage.AsBytes(),
+                    renderedImage.Width,
+                    renderedImage.Height);
 
-                    // 计算缩略图尺寸，保持宽高比
+                    // Calculate thumbnail size, maintaining aspect ratio
                     var ratio = Math.Min((double)thumbnailSize / image.Width, (double)thumbnailSize / image.Height);
                     var newWidth = (int)(image.Width * ratio);
                     var newHeight = (int)(image.Height * ratio);
 
-                    DicomLogger.Debug("WADO", "DICOMweb - 序列缩略图尺寸: {SeriesInstanceUid}, Original: {OriginalWidth}x{OriginalHeight}, New: {NewWidth}x{NewHeight}", 
-                        seriesInstanceUid, image.Width, image.Height, newWidth, newHeight);
+                    DicomLogger.Debug("WADO", "DICOMweb - Series thumbnail size: {SeriesInstanceUid}, Original: {OriginalWidth}x{OriginalHeight}, New: {NewWidth}x{NewHeight}",
+                    seriesInstanceUid, image.Width, image.Height, newWidth, newHeight);
 
-                    // 调整图像大小
+                    // Resize image
                     image.Mutate(x => x.Resize(newWidth, newHeight));
 
-                    // 配置JPEG编码器选项 - 对缩略图使用较低的质量以减小文件大小
+                    // Configure JPEG encoder options - use lower quality for thumbnails to reduce file size
                     var encoder = new JpegEncoder
                     {
-                        Quality = 75  // 缩略图使用较低的质量
+                        Quality = 75  // Lower quality for thumbnails
                     };
 
-                    // 保存为JPEG
+                    // Save as JPEG
                     await image.SaveAsJpegAsync(memoryStream, encoder);
                     jpegBytes = memoryStream.ToArray();
                 }
 
-                DicomLogger.Debug("WADO", "DICOMweb - 返回序列缩略图: {SeriesInstanceUid}, Size: {Size} bytes", 
+                DicomLogger.Debug("WADO", "DICOMweb - Returning series thumbnail: {SeriesInstanceUid}, Size: {Size} bytes",
                     seriesInstanceUid, jpegBytes.Length);
 
                 return File(jpegBytes, JpegImageContentType, $"{seriesInstanceUid}_thumbnail.jpg");
             }
             catch (Exception ex)
             {
-                DicomLogger.Error("WADO", ex, "DICOMweb - 检索序列缩略图失败");
+                DicomLogger.Error("WADO", ex, "DICOMweb - Failed to retrieve series thumbnail");
                 return StatusCode(500, "Error retrieving series thumbnail");
             }
         }
 
         #endregion
     }
-} 
+}
