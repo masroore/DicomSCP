@@ -5,7 +5,7 @@ using ILogger = Serilog.ILogger;
 namespace DicomSCP.Services;
 
 /// <summary>
-/// 统一的DICOM日志服务
+/// Unified DICOM logging service
 /// </summary>
 public static class DicomLogger
 {
@@ -17,13 +17,13 @@ public static class DicomLogger
     private const string DefaultFileTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}";
 
     /// <summary>
-    /// 初始化日志服务
+    /// Initialize logging service
     /// </summary>
     public static void Initialize(LogSettings settings)
     {
         _settings = settings;
 
-        // 配置DicomServer的日志（只输出到控制台）
+        // Configure DicomServer logging (output to console only)
         var serverLogger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .WriteTo.Console(
@@ -32,7 +32,7 @@ public static class DicomLogger
 
         _loggers["DicomServer"] = serverLogger;
 
-        // 配置QR服务的日志
+        // Configure QR service logging
         if (settings.Services.QRSCP?.Enabled == true)
         {
             var qrConfig = settings.Services.QRSCP;
@@ -40,7 +40,7 @@ public static class DicomLogger
             _loggers["QRSCP"] = qrLogger;
         }
 
-        // 配置QueryRetrieveSCU的日志
+        // Configure QueryRetrieveSCU logging
         if (settings.Services.QueryRetrieveSCU.Enabled)
         {
             var qrConfig = settings.Services.QueryRetrieveSCU;
@@ -48,7 +48,7 @@ public static class DicomLogger
             _loggers["QueryRetrieveSCU"] = qrLogger;
         }
 
-        // 配置WorklistSCP的日志
+        // Configure WorklistSCP logging
         if (settings.Services.WorklistSCP?.Enabled == true)
         {
             var worklistConfig = settings.Services.WorklistSCP;
@@ -56,7 +56,7 @@ public static class DicomLogger
             _loggers["WorklistSCP"] = worklistLogger;
         }
 
-        // 配置StoreSCP的日志
+        // Configure StoreSCP logging
         if (settings.Services.StoreSCP?.Enabled == true)
         {
             var storeConfig = settings.Services.StoreSCP;
@@ -64,7 +64,7 @@ public static class DicomLogger
             _loggers["StoreSCP"] = storeLogger;
         }
 
-        // 配置StoreSCU的日志
+        // Configure StoreSCU logging
         if (settings.Services.StoreSCU?.Enabled == true)
         {
             var storeSCUConfig = settings.Services.StoreSCU;
@@ -72,7 +72,7 @@ public static class DicomLogger
             _loggers["StoreSCU"] = storeSCULogger;
         }
 
-        // 配置PrintSCP的日志
+        // Configure PrintSCP logging
         if (settings.Services.PrintSCP?.Enabled == true)
         {
             var printConfig = settings.Services.PrintSCP;
@@ -80,7 +80,7 @@ public static class DicomLogger
             _loggers["PrintSCP"] = printLogger;
         }
 
-        // 配置PrintSCU的日志
+        // Configure PrintSCU logging
         if (settings.Services.PrintSCU?.Enabled == true)
         {
             var printScuConfig = settings.Services.PrintSCU;
@@ -88,7 +88,7 @@ public static class DicomLogger
             _loggers["PrintSCU"] = printScuLogger;
         }
 
-        // 配置数据库日志
+        // Configure database logging
         if (settings.Database.Enabled)
         {
             var dbConfig = settings.Database;
@@ -114,7 +114,7 @@ public static class DicomLogger
             _loggers["Database"] = dbLogger.CreateLogger();
         }
 
-        // 配置API日志
+        // Configure API logging
         if (settings.Api.Enabled)
         {
             var apiConfig = settings.Api;
@@ -140,7 +140,7 @@ public static class DicomLogger
             _loggers["Api"] = apiLogger.CreateLogger();
         }
 
-        // 配置WADO服务的日志
+        // Configure WADO service logging
         if (settings.Services.WADO?.Enabled == true)
         {
             var wadoConfig = settings.Services.WADO;
@@ -150,7 +150,7 @@ public static class DicomLogger
             if (wadoConfig.EnableConsoleLog)
             {
                 wadoLogger.WriteTo.Console(
-                    outputTemplate: string.IsNullOrEmpty(wadoConfig.OutputTemplate) 
+                    outputTemplate: string.IsNullOrEmpty(wadoConfig.OutputTemplate)
                         ? (_settings?.OutputTemplate ?? DefaultConsoleTemplate)
                         : wadoConfig.OutputTemplate);
             }
@@ -173,10 +173,10 @@ public static class DicomLogger
             }
 
             _loggers["WADO"] = wadoLogger.CreateLogger();
-            
+
         }
 
-        // 设置默认日志记录器
+        // Set default logger
         _logger = serverLogger;
         Log.Logger = serverLogger;
     }
@@ -189,7 +189,7 @@ public static class DicomLogger
         if (config.EnableConsoleLog)
         {
             logConfig.WriteTo.Console(
-                outputTemplate: string.IsNullOrEmpty(config.OutputTemplate) 
+                outputTemplate: string.IsNullOrEmpty(config.OutputTemplate)
                     ? (_settings?.OutputTemplate ?? DefaultConsoleTemplate)
                     : config.OutputTemplate);
         }
@@ -200,7 +200,7 @@ public static class DicomLogger
                 ? Path.Combine(_settings?.LogPath ?? "logs", serviceName.ToLower())
                 : config.LogPath;
 
-            // 确保日志目录存在
+            // Ensure log directory exists
             Directory.CreateDirectory(logPath);
 
             logConfig.WriteTo.File(
@@ -219,8 +219,8 @@ public static class DicomLogger
     {
         if (_loggers.TryGetValue(service, out var logger))
             return logger;
-        
-        // 如果找不到特定服务的日志记录器，返回默认的日志记录器
+
+        // If a specific service logger is not found, return the default logger
         return _logger ?? CreateDefaultLogger();
     }
 
@@ -267,7 +267,7 @@ public static class DicomLogger
         => GetLogger(service).Error(messageTemplate, propertyValues);
 
     /// <summary>
-    /// 关闭日志服务
+    /// Close logging service
     /// </summary>
     public static void CloseAndFlush()
     {
@@ -278,4 +278,4 @@ public static class DicomLogger
         _loggers.Clear();
         Log.CloseAndFlush();
     }
-} 
+}
