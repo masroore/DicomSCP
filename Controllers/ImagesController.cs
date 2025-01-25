@@ -16,7 +16,7 @@ public class ImagesController : ControllerBase
     private readonly IWebHostEnvironment _environment;
 
     public ImagesController(
-        DicomRepository repository, 
+        DicomRepository repository,
         IConfiguration configuration,
         IWebHostEnvironment environment)
     {
@@ -24,7 +24,7 @@ public class ImagesController : ControllerBase
         _configuration = configuration;
         _environment = environment;
 
-        // 验证必要的配置是否存在
+        // Validate necessary configuration
         var storagePath = configuration["DicomSettings:StoragePath"];
         if (string.IsNullOrEmpty(storagePath))
         {
@@ -44,7 +44,7 @@ public class ImagesController : ControllerBase
     {
         try
         {
-            // 解析日期
+            // Parse date
             DateTime? searchDate = null;
             if (!string.IsNullOrEmpty(studyDate))
             {
@@ -55,21 +55,21 @@ public class ImagesController : ControllerBase
             }
 
             var result = await _repository.GetStudiesAsync(
-                page, 
-                pageSize, 
-                patientId, 
-                patientName, 
-                accessionNumber, 
-                modality, 
-                searchDate,    // 开始时间
-                searchDate?.AddDays(1).AddSeconds(-1)  // 结束时间设为当天最后一秒
+                page,
+                pageSize,
+                patientId,
+                patientName,
+                accessionNumber,
+                modality,
+                searchDate,    // Start time
+                searchDate?.AddDays(1).AddSeconds(-1)  // End time set to the last second of the day
             );
             return Ok(result);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 获取影像列表失败");
-            return StatusCode(500, "获取数据失败");
+            DicomLogger.Error("Api", ex, "[API] Failed to retrieve study list");
+            return StatusCode(500, "Failed to retrieve data");
         }
     }
 
@@ -92,8 +92,8 @@ public class ImagesController : ControllerBase
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 获取序列列表失败 - StudyUid: {StudyUid}", studyUid);
-            return StatusCode(500, "获取数据失败");
+            DicomLogger.Error("Api", ex, "[API] Failed to retrieve series list - StudyUid: {StudyUid}", studyUid);
+            return StatusCode(500, "Failed to retrieve data");
         }
     }
 
@@ -107,56 +107,56 @@ public class ImagesController : ControllerBase
 
         try
         {
-            // 1. 获取检查信息
+            // 1. Retrieve study information
             var study = await _repository.GetStudyAsync(studyInstanceUid);
             if (study == null)
             {
-                return NotFound("检查不存在");
+                return NotFound("Study not found");
             }
 
-            // 2. 删除文件系统中的文件
-            var storagePath = _configuration["DicomSettings:StoragePath"] 
+            // 2. Delete files from the file system
+            var storagePath = _configuration["DicomSettings:StoragePath"]
                 ?? throw new InvalidOperationException("DicomSettings:StoragePath is not configured");
 
-            // 构建检查目录路径，处理 StudyDate 为 null 的情况
+            // Construct study directory path, handle null StudyDate
             var studyPath = string.IsNullOrEmpty(study.StudyDate)
-                ? Path.Combine(storagePath, studyInstanceUid)  // 如果没有日期，直接用检查UID
-                : Path.Combine(storagePath, study.StudyDate.Substring(0, 4), 
-                    study.StudyDate.Substring(4, 2), 
-                    study.StudyDate.Substring(6, 2), 
-                    studyInstanceUid);  // 按年/月/日/检查UID组织
+                ? Path.Combine(storagePath, studyInstanceUid)  // If no date, use study UID directly
+                : Path.Combine(storagePath, study.StudyDate.Substring(0, 4),
+                    study.StudyDate.Substring(4, 2),
+                    study.StudyDate.Substring(6, 2),
+                    studyInstanceUid);  // Organize by year/month/day/study UID
 
             if (Directory.Exists(studyPath))
             {
                 try
                 {
-                    // 递归删除目录及其内容
+                    // Recursively delete directory and its contents
                     Directory.Delete(studyPath, true);
-                    DicomLogger.Information("Api", "删除检查目录成功 - 路径: {Path}", studyPath);
+                    DicomLogger.Information("Api", "Successfully deleted study directory - Path: {Path}", studyPath);
 
-                    // 3. 删除数据库记录
+                    // 3. Delete database record
                     await _repository.DeleteStudyAsync(studyInstanceUid);
 
-                    return Ok(new { message = "删除成功" });
+                    return Ok(new { message = "Successfully deleted" });
                 }
                 catch (Exception ex)
                 {
-                    DicomLogger.Error("Api", ex, "删除检查目录失败 - 路径: {Path}", studyPath);
-                    return StatusCode(500, new { error = "删除文件失败，请重试" });
+                    DicomLogger.Error("Api", ex, "Failed to delete study directory - Path: {Path}", studyPath);
+                    return StatusCode(500, new { error = "Failed to delete files, please try again" });
                 }
             }
             else
             {
-                // 如果目录不存在，只删除数据库记录
+                // If directory does not exist, only delete database record
                 await _repository.DeleteStudyAsync(studyInstanceUid);
-                DicomLogger.Warning("Api", "检查目录不存在 - 路径: {Path}", studyPath);
-                return Ok(new { message = "删除成功" });
+                DicomLogger.Warning("Api", "Study directory does not exist - Path: {Path}", studyPath);
+                return Ok(new { message = "Successfully deleted" });
             }
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 删除检查失败 - StudyUID: {StudyUID}", studyInstanceUid);
-            return StatusCode(500, new { error = "删除失败，请重试" });
+            DicomLogger.Error("Api", ex, "[API] Failed to delete study - StudyUID: {StudyUID}", studyInstanceUid);
+            return StatusCode(500, new { error = "Failed to delete, please try again" });
         }
     }
 
@@ -171,25 +171,25 @@ public class ImagesController : ControllerBase
                 sopInstanceUid = instance.SopInstanceUid,
                 instanceNumber = instance.InstanceNumber
             });
-            
+
             return Ok(result);
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 获取序列实例失败");
-            return StatusCode(500, "获取序列实例失败");
+            DicomLogger.Error("Api", ex, "[API] Failed to retrieve series instances");
+            return StatusCode(500, "Failed to retrieve series instances");
         }
     }
 
     private string GetStoragePath(string configPath)
     {
-        // 如果是绝对路径，直接返回
+        // If it is an absolute path, return it directly
         if (Path.IsPathRooted(configPath))
         {
             return configPath;
         }
 
-        // 使用 ContentRootPath 作为基准路径
+        // Use ContentRootPath as the base path
         return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configPath));
     }
 
@@ -201,47 +201,47 @@ public class ImagesController : ControllerBase
             var instance = await _repository.GetInstanceAsync(instanceUid);
             if (instance == null)
             {
-                DicomLogger.Warning("Api", "[API] 实例不存在 - InstanceUid: {InstanceUid}", instanceUid);
-                return NotFound("实例不存在");
+                DicomLogger.Warning("Api", "[API] Instance not found - InstanceUid: {InstanceUid}", instanceUid);
+                return NotFound("Instance not found");
             }
 
-            // 从配置获取存储根路径
-            var configPath = _configuration["DicomSettings:StoragePath"] 
+            // Get storage root path from configuration
+            var configPath = _configuration["DicomSettings:StoragePath"]
                 ?? throw new InvalidOperationException("DicomSettings:StoragePath is not configured");
-            
-            // 处理存储路径
+
+            // Handle storage path
             var storagePath = GetStoragePath(configPath);
-            DicomLogger.Debug("Api", "存储路径解析 - 配置路径: {ConfigPath}, 实际路径: {StoragePath}", 
+            DicomLogger.Debug("Api", "Storage path resolved - Config path: {ConfigPath}, Actual path: {StoragePath}",
                 configPath, storagePath);
 
-            // 拼接完整的文件路径并规范化
+            // Concatenate full file path and normalize
             var fullPath = Path.GetFullPath(Path.Combine(storagePath, instance.FilePath));
 
-            // 添加路径安全检查
+            // Add path security check
             if (!fullPath.StartsWith(storagePath))
             {
                 DicomLogger.Error("Api", null,
-                    "[API] 非法的文件路径 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
+                    "[API] Illegal file path - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}",
                     instanceUid,
                     storagePath,
                     fullPath);
-                return BadRequest("非法的文件路径");
+                return BadRequest("Illegal file path");
             }
 
             if (!System.IO.File.Exists(fullPath))
             {
                 DicomLogger.Error("Api", null,
-                    "[API] 文件不存在 - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}", 
+                    "[API] File not found - InstanceUid: {InstanceUid}, StoragePath: {StoragePath}, FullPath: {FullPath}",
                     instanceUid,
                     storagePath,
                     fullPath);
-                return NotFound("图像文件不存在");
+                return NotFound("Image file not found");
             }
 
-            // 读取DICOM文件
+            // Read DICOM file
             var file = await DicomFile.OpenAsync(fullPath);
 
-            // 如果指定了传输语法，进行转码
+            // If transfer syntax is specified, transcode
             if (!string.IsNullOrEmpty(transferSyntax))
             {
                 var currentSyntax = file.Dataset.InternalTransferSyntax;
@@ -251,8 +251,8 @@ public class ImagesController : ControllerBase
                 {
                     try
                     {
-                        DicomLogger.Information("Api", 
-                            "[API] 开始转码 - InstanceUid: {InstanceUid}, 原格式: {Original}, 目标格式: {Target}",
+                        DicomLogger.Information("Api",
+                            "[API] Starting transcoding - InstanceUid: {InstanceUid}, Original: {Original}, Target: {Target}",
                             instanceUid,
                             currentSyntax.UID.Name,
                             requestedSyntax.UID.Name);
@@ -260,38 +260,38 @@ public class ImagesController : ControllerBase
                         var transcoder = new DicomTranscoder(currentSyntax, requestedSyntax);
                         file = transcoder.Transcode(file);
 
-                        DicomLogger.Information("Api", "[API] 转码完成");
+                        DicomLogger.Information("Api", "[API] Transcoding completed");
                     }
                     catch (Exception ex)
                     {
-                        DicomLogger.Error("Api", ex, 
-                            "[API] 转码失败 - InstanceUid: {InstanceUid}, 原格式: {Original}, 目标格式: {Target}",
+                        DicomLogger.Error("Api", ex,
+                            "[API] Transcoding failed - InstanceUid: {InstanceUid}, Original: {Original}, Target: {Target}",
                             instanceUid,
                             currentSyntax.UID.Name,
                             requestedSyntax.UID.Name);
-                        // 转码失败时使用原始文件
+                        // Use original file if transcoding fails
                     }
                 }
             }
 
-            // 构造文件名
+            // Construct file name
             var fileName = $"{instance.SopInstanceUid}.dcm";
 
-            // 准备内存流
+            // Prepare memory stream
             var memoryStream = new MemoryStream();
             await file.SaveAsync(memoryStream);
             memoryStream.Position = 0;
 
-            // 设置响应头
+            // Set response headers
             Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{fileName}\"");
             Response.Headers.Append("X-Transfer-Syntax", file.Dataset.InternalTransferSyntax.UID.Name);
-            
+
             return File(memoryStream, "application/dicom");
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 下载文件失败 - InstanceUid: {InstanceUid}", instanceUid);
-            return StatusCode(500, "下载文件失败");
+            DicomLogger.Error("Api", ex, "[API] Failed to download file - InstanceUid: {InstanceUid}", instanceUid);
+            return StatusCode(500, "Failed to download file");
         }
     }
 
@@ -308,4 +308,4 @@ public class ImagesController : ControllerBase
             _ => DicomTransferSyntax.ExplicitVRLittleEndian
         };
     }
-} 
+}

@@ -31,29 +31,29 @@ public class DicomController : ControllerBase
     {
         var serverStatus = _server.GetServicesStatus();
         var process = Process.GetCurrentProcess();
-        
-        // 获取程序内存使用情况（MB）
+
+        // Get process memory usage (MB)
         var processMemory = process.WorkingSet64 / 1024.0 / 1024.0;
-        
-        // 获取系统信息
+
+        // Get system information
         double totalPhysicalMemory = 0;
         double availablePhysicalMemory = 0;
         string cpuModel = "Unknown";
         double cpuUsage = 0;
 
-        try 
+        try
         {
             if (OperatingSystem.IsWindows())
             {
-                // Windows 系统内存信息
-                var performanceInfo = PerformanceInfo.GetPerformanceInfo();
-                var physicalMemoryInBytes = performanceInfo.PhysicalTotal.ToInt64() * performanceInfo.PageSize.ToInt64();
-                totalPhysicalMemory = physicalMemoryInBytes / 1024.0 / 1024.0;  // 转换为 MB
-                
-                var availableMemoryInBytes = performanceInfo.PhysicalAvailable.ToInt64() * performanceInfo.PageSize.ToInt64();
-                availablePhysicalMemory = availableMemoryInBytes / 1024.0 / 1024.0;  // 转换为 MB
+            // Windows system memory information
+            var performanceInfo = PerformanceInfo.GetPerformanceInfo();
+            var physicalMemoryInBytes = performanceInfo.PhysicalTotal.ToInt64() * performanceInfo.PageSize.ToInt64();
+            totalPhysicalMemory = physicalMemoryInBytes / 1024.0 / 1024.0;  // Convert to MB
 
-                // Windows CPU 信息
+            var availableMemoryInBytes = performanceInfo.PhysicalAvailable.ToInt64() * performanceInfo.PageSize.ToInt64();
+            availablePhysicalMemory = availableMemoryInBytes / 1024.0 / 1024.0;  // Convert to MB
+
+            // Windows CPU information
                 #pragma warning disable CA1416
                 using var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Processor");
                 cpuModel = searcher.Get()
@@ -62,7 +62,7 @@ public class DicomController : ControllerBase
                     .FirstOrDefault() ?? "Unknown";
                 #pragma warning restore CA1416
 
-                // Windows CPU 使用率
+                // Windows CPU usage
                 using var counter = new PerformanceCounter("Processor", "% Processor Time", "_Total", true);
                 counter.NextValue();
                 Thread.Sleep(100);
@@ -70,28 +70,28 @@ public class DicomController : ControllerBase
             }
             else if (OperatingSystem.IsLinux())
             {
-                // Linux 内存信息
+                // Linux memory information
                 var memInfo = System.IO.File.ReadAllLines("/proc/meminfo");
                 foreach (var line in memInfo)
                 {
                     if (line.StartsWith("MemTotal:"))
                     {
-                        totalPhysicalMemory = ParseLinuxMemInfo(line) / 1024.0; // 转换为 MB
+                        totalPhysicalMemory = ParseLinuxMemInfo(line) / 1024.0; // Convert to MB
                     }
                     else if (line.StartsWith("MemAvailable:"))
                     {
-                        availablePhysicalMemory = ParseLinuxMemInfo(line) / 1024.0; // 转换为 MB
+                        availablePhysicalMemory = ParseLinuxMemInfo(line) / 1024.0; // Convert to MB
                     }
                 }
 
-                // Linux CPU 型号
+                // Linux CPU model
                 cpuModel = System.IO.File.ReadAllLines("/proc/cpuinfo")
                     .FirstOrDefault(line => line.StartsWith("model name"))
                     ?.Split(':')
                     .LastOrDefault()
                     ?.Trim() ?? "Unknown";
 
-                // Linux CPU 使用率
+                // Linux CPU usage
                 var startCpu = System.IO.File.ReadAllText("/proc/stat")
                     .Split('\n')[0]
                     .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -99,9 +99,9 @@ public class DicomController : ControllerBase
                     .Take(7)
                     .Select(x => long.Parse(x))
                     .ToArray();
-                
+
                 Thread.Sleep(100);
-                
+
                 var endCpu = System.IO.File.ReadAllText("/proc/stat")
                     .Split('\n')[0]
                     .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -122,7 +122,7 @@ public class DicomController : ControllerBase
             }
             else if (OperatingSystem.IsMacOS())
             {
-                // macOS 系统信息获取 (需要通过 sysctl 命令)
+                // macOS system information (using sysctl command)
                 totalPhysicalMemory = GetMacMemoryInfo();
                 availablePhysicalMemory = totalPhysicalMemory - GetMacMemoryUsage();
                 cpuModel = GetMacCpuInfo();
@@ -131,7 +131,7 @@ public class DicomController : ControllerBase
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "获取系统信息失败");
+            DicomLogger.Error("Api", ex, "Failed to retrieve system information");
         }
 
         var usedPhysicalMemory = totalPhysicalMemory - availablePhysicalMemory;
@@ -224,7 +224,7 @@ public class DicomController : ControllerBase
         {
             var output = ExecuteCommand("sysctl", "hw.memsize");
             var memSize = long.Parse(output.Split(':')[1].Trim());
-            return memSize / 1024.0 / 1024.0; // 转换为 MB
+            return memSize / 1024.0 / 1024.0; // Convert to MB
         }
         catch
         {
@@ -237,8 +237,8 @@ public class DicomController : ControllerBase
         try
         {
             var output = ExecuteCommand("vm_stat", "");
-            // 解析 vm_stat 输出获取内存使用情况
-            // ... 具体实现略
+            // Parse vm_stat output to get memory usage
+            // ... specific implementation omitted
             return 0;
         }
         catch
@@ -264,8 +264,8 @@ public class DicomController : ControllerBase
         try
         {
             var output = ExecuteCommand("top", "-l 1 -n 0");
-            // 解析 top 输出获 CPU 使用率
-            // ... 具体实现略
+            // Parse top output to get CPU usage
+            // ... specific implementation omitted
             return 0;
         }
         catch
@@ -299,11 +299,11 @@ public class DicomController : ControllerBase
             if (_server.IsRunning)
             {
                 DicomLogger.Warning("Api",
-                    "[API] 启动服务失败 - 原因: {Reason}", 
-                    "服务器已在运行");
+                    "[API] Failed to start service - Reason: {Reason}",
+                    "Server is already running");
                 return BadRequest(new
                 {
-                    Message = "服务器已在运行",
+                    Message = "Server is already running",
                     AeTitle = _settings.AeTitle,
                     StoreSCPPort = _settings.StoreSCPPort,
                     WorklistSCPPort = _settings.WorklistSCP.Port
@@ -314,10 +314,10 @@ public class DicomController : ControllerBase
 
             await _server.StartAsync();
             DicomLogger.Information("Api",
-                "[API] 启动服务成功");
+                "[API] Service started successfully");
             return Ok(new
             {
-                Message = "服务器已启动",
+                Message = "Server started",
                 AeTitle = _settings.AeTitle,
                 StoreSCPPort = _settings.StoreSCPPort,
                 WorklistSCPPort = _settings.WorklistSCP.Port
@@ -326,11 +326,10 @@ public class DicomController : ControllerBase
         catch (Exception ex)
         {
             DicomLogger.Error("Api", ex,
-                "[API] 启动服务异常");
-            return StatusCode(500, "启动服务器失败");
+                "[API] Exception occurred while starting service");
+            return StatusCode(500, "Failed to start server");
         }
     }
-
     [HttpPost("stop")]
     public async Task<IActionResult> Stop()
     {
@@ -339,21 +338,21 @@ public class DicomController : ControllerBase
             if (!_server.IsRunning)
             {
                 DicomLogger.Warning("Api",
-                    "[API] 停止服务失败 - 原因: {Reason}", 
-                    "服务器未运行");
-                return BadRequest("服务器未运行");
+                    "[API] Failed to stop service - Reason: {Reason}",
+                    "Server is not running");
+                return BadRequest("Server is not running");
             }
 
             await _server.StopAsync();
             DicomLogger.Information("Api",
-                "[API] 停止服务成功");
-            return Ok("服务器已停止");
+                "[API] Service stopped successfully");
+            return Ok("Server has stopped");
         }
         catch (Exception ex)
         {
             DicomLogger.Error("Api", ex,
-                "[API] 停止服务异常");
-            return StatusCode(500, "停止服务器失败");
+                "[API] Exception occurred while stopping service");
+            return StatusCode(500, "Failed to stop server");
         }
     }
 
@@ -362,13 +361,13 @@ public class DicomController : ControllerBase
     {
         try
         {
-            DicomLogger.Information("Api", "[API] 正在重启DICOM服务...");
+            DicomLogger.Information("Api", "[API] Restarting DICOM service...");
             await _server.RestartAllServices();
-            DicomLogger.Information("Api", "[API] DICOM服务重启完成");
+            DicomLogger.Information("Api", "[API] DICOM service restarted successfully");
 
             return Ok(new
             {
-                Message = "服务重成功",
+                Message = "Service restarted successfully",
                 AeTitle = _settings.AeTitle,
                 StoreSCPPort = _settings.StoreSCPPort,
                 WorklistSCPPort = _settings.WorklistSCP.Port,
@@ -377,13 +376,11 @@ public class DicomController : ControllerBase
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 重启DICOM服务失败");
-            return StatusCode(500, "重启服务失败");
+            DicomLogger.Error("Api", ex, "[API] Failed to restart DICOM service");
+            return StatusCode(500, "Failed to restart service");
         }
     }
 }
-
-// 添加 PerformanceInfo 结构体
 [StructLayout(LayoutKind.Sequential)]
 public struct PerformanceInfo
 {
@@ -411,4 +408,4 @@ public struct PerformanceInfo
 
     [DllImport("psapi.dll", SetLastError = true)]
     private static extern bool GetPerformanceInfo(out PerformanceInfo PerformanceInformation, int Size);
-} 
+}

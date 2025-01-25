@@ -18,7 +18,7 @@ public class PrintScuController : ControllerBase
     private readonly DicomSettings _settings;
 
     public PrintScuController(
-        IPrintSCU printSCU, 
+        IPrintSCU printSCU,
         DicomRepository repository,
         ILogger<PrintScuController> logger,
         IOptions<DicomSettings> settings)
@@ -30,7 +30,7 @@ public class PrintScuController : ControllerBase
     }
 
     /// <summary>
-    /// 获取打印机列表
+    /// Get the list of printers
     /// </summary>
     [HttpGet("printers")]
     public ActionResult<IEnumerable<Configuration.PrinterConfig>> GetPrinters()
@@ -40,10 +40,10 @@ public class PrintScuController : ControllerBase
     }
 
     /// <summary>
-    /// 发送打印请求
+    /// Send a print request
     /// </summary>
     /// <remarks>
-    /// 请求示例:
+    /// Example request:
     /// ```json
     /// {
     ///     "filePath": "D:/dicom/image.dcm",
@@ -66,10 +66,10 @@ public class PrintScuController : ControllerBase
     ///     "trim": "NO"
     /// }
     /// ```
-    /// 
-    /// 有效值说明：
-    /// - enableDpi: true/false，默认false
-    /// - dpi: 100-300，默认150，仅在enableDpi=true时生成
+    ///
+    /// Valid values:
+    /// - enableDpi: true/false, default false
+    /// - dpi: 100-300, default 150, only generated when enableDpi=true
     /// - printPriority: "HIGH", "MEDIUM", "LOW"
     /// - mediumType: "PAPER", "CLEAR FILM", "BLUE FILM"
     /// - filmDestination: "MAGAZINE", "PROCESSOR", "BIN_1", "BIN_2"
@@ -86,54 +86,54 @@ public class PrintScuController : ControllerBase
     {
         try
         {
-            // 验证打印份数
+            // Validate number of copies
             if (request.NumberOfCopies < 1)
             {
-                return BadRequest(new { message = "打印份数必须大于0" });
+                return BadRequest(new { message = "Number of copies must be greater than 0" });
             }
 
-            // 只在启用DPI时验证DPI值
+            // Validate DPI value only if DPI is enabled
             if (request.EnableDpi)
             {
                 if (!request.Dpi.HasValue)
                 {
-                    return BadRequest(new { message = "启用DPI时必须指定DPI值" });
+                    return BadRequest(new { message = "DPI value must be specified when DPI is enabled" });
                 }
                 if (request.Dpi.Value < 100 || request.Dpi.Value > 300)
                 {
-                    return BadRequest(new { message = "DPI值必须在100-300之间" });
+                    return BadRequest(new { message = "DPI value must be between 100 and 300" });
                 }
             }
             else
             {
-                // 如果没有启用DPI，清除DPI值
+                // Clear DPI value if DPI is not enabled
                 request.Dpi = null;
             }
 
-            _logger.LogInformation("发送打印请求 - AET: {AET}, Host: {Host}, Port: {Port}, DPI: {DPI}, Copies: {Copies}", 
-                request.CalledAE, 
-                request.HostName, 
+            _logger.LogInformation("Sending print request - AET: {AET}, Host: {Host}, Port: {Port}, DPI: {DPI}, Copies: {Copies}",
+                request.CalledAE,
+                request.HostName,
                 request.Port,
-                request.EnableDpi ? request.Dpi.ToString() : "未启用",
+                request.EnableDpi ? request.Dpi.ToString() : "Not enabled",
                 request.NumberOfCopies);
 
-            // 发送打印请求
+            // Send print request
             var success = await _printSCU.PrintAsync(request);
 
             if (success)
-                return Ok(new { message = "打印请求已发送" });
+                return Ok(new { message = "Print request sent" });
 
-            return StatusCode(500, new { message = "打印失败" });
+            return StatusCode(500, new { message = "Print failed" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理打印请求时发生错误");
-            return StatusCode(500, new { message = "打印失败", error = ex.Message });
+            _logger.LogError(ex, "Error processing print request");
+            return StatusCode(500, new { message = "Print failed", error = ex.Message });
         }
     }
 
     /// <summary>
-    /// 测试打印机连接
+    /// Test printer connection
     /// </summary>
     [HttpPost("printers/{name}/test")]
     public async Task<ActionResult> TestPrinter(string name)
@@ -141,10 +141,10 @@ public class PrintScuController : ControllerBase
         try
         {
             var printers = _repository.GetPrinters();
-            
+
             var printer = printers.FirstOrDefault(p => p.Name == name);
             if (printer == null)
-                return NotFound($"打印机 '{name}' 未找到");
+                return NotFound($"Printer '{name}' not found");
 
             var success = await _printSCU.VerifyAsync(
                 printer.HostName,
@@ -152,22 +152,22 @@ public class PrintScuController : ControllerBase
                 printer.AeTitle);
 
             if (success)
-                return Ok(new { 
+                return Ok(new {
                     success = true,
-                    message = "打印机连接测试成功" 
+                    message = "Printer connection test successful"
                 });
 
-            return Ok(new { 
+            return Ok(new {
                 success = false,
-                message = "打印机连接被拒绝，请检查打印机配置和状态" 
+                message = "Printer connection refused, please check printer configuration and status"
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "测试打印机连接时发生错误");
-            return Ok(new { 
+            _logger.LogError(ex, "Error testing printer connection");
+            return Ok(new {
                 success = false,
-                message = "连接打印机失败，请检查网络连接" 
+                message = "Failed to connect to printer, please check network connection"
             });
         }
     }
@@ -177,44 +177,44 @@ public class PrintScuController : ControllerBase
     {
         try
         {
-            // 获取打印作业
+            // Get print job
             var printJob = await _repository.GetPrintJobByIdAsync(request.JobId);
             if (printJob == null)
             {
-                return NotFound($"未找到打印作业: {request.JobId}");
+                return NotFound($"Print job not found: {request.JobId}");
             }
 
-            // 获取打印机配置
+            // Get printer configuration
             var printer = _repository.GetPrinterByName(request.PrinterName);
             if (printer == null)
             {
-                return NotFound($"未找到打印机: {request.PrinterName}");
+                return NotFound($"Printer not found: {request.PrinterName}");
             }
 
-            // 构建完整的文件路径
+            // Build full file path
             var fullPath = Path.Combine(_settings.StoragePath, printJob.ImagePath);
             if (!System.IO.File.Exists(fullPath))
             {
-                _logger.LogError("打印文件不存在: {FilePath}", fullPath);
-                return NotFound($"打印文件不存在: {fullPath}");
+                _logger.LogError("Print file not found: {FilePath}", fullPath);
+                return NotFound($"Print file not found: {fullPath}");
             }
 
-            // 构建打印请求
+            // Build print request
             var printRequest = new PrintRequest
             {
-                FilePath = fullPath,  // 使用完整路径
+                FilePath = fullPath,  // Use full path
                 HostName = printer.HostName,
                 Port = printer.Port,
                 CalledAE = printer.AeTitle,
-                
-                // 使用默认打印参数或从数据库获取
+
+                // Use default print parameters or get from database
                 PrintPriority = printJob.PrintPriority,
                 MediumType = printJob.MediumType,
                 FilmDestination = printJob.FilmDestination,
                 NumberOfCopies = printJob.NumberOfCopies,
                 FilmOrientation = printJob.FilmOrientation,
                 FilmSizeID = printJob.FilmSizeID,
-                ImageDisplayFormat = "STANDARD\\1,1",  // 固定为1,1布局
+                ImageDisplayFormat = "STANDARD\\1,1",  // Fixed to 1,1 layout
                 MagnificationType = printJob.MagnificationType,
                 SmoothingType = printJob.SmoothingType,
                 BorderDensity = printJob.BorderDensity,
@@ -222,27 +222,27 @@ public class PrintScuController : ControllerBase
                 Trim = printJob.Trim
             };
 
-            // 执行打印
+            // Execute print
             var result = await _printSCU.PrintAsync(printRequest);
             if (result)
             {
                 await _repository.UpdatePrintJobStatusAsync(request.JobId, PrintJobStatus.Completed);
-                return Ok(new { Message = "打印成功", JobId = request.JobId });
+                return Ok(new { Message = "Print successful", JobId = request.JobId });
             }
             else
             {
-                return BadRequest(new { Message = "打印失败", JobId = request.JobId });
+                return BadRequest(new { Message = "Print failed", JobId = request.JobId });
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "打印失败");
+            _logger.LogError(ex, "Print failed");
             return StatusCode(500, new { Message = ex.Message });
         }
     }
 }
 
-// 请求模型
+// Request model
 public class PrintByJobRequest
 {
     [Required]
@@ -250,4 +250,4 @@ public class PrintByJobRequest
 
     [Required]
     public string PrinterName { get; set; } = "";
-} 
+}

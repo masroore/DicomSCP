@@ -22,24 +22,24 @@ public class ConfigController : ControllerBase
         try
         {
             var jsonString = System.IO.File.ReadAllText(_configPath);
-            // 验证是否为有效的 JSON
+            // Validate if it is a valid JSON
             using var document = JsonDocument.Parse(jsonString);
-            
-            // 返回格式化的 JSON，保持中文字符
-            return Ok(JsonSerializer.Serialize(document, new JsonSerializerOptions 
-            { 
+
+            // Return formatted JSON, preserving Chinese characters
+            return Ok(JsonSerializer.Serialize(document, new JsonSerializerOptions
+            {
                 WriteIndented = true,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             }));
         }
         catch (JsonException)
         {
-            return StatusCode(500, "配置文件格式错误");
+            return StatusCode(500, "Configuration file format error");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "读取配置文件失败");
-            return StatusCode(500, "读取配置文件失败");
+            _logger.LogError(ex, "Failed to read configuration file");
+            return StatusCode(500, "Failed to read configuration file");
         }
     }
 
@@ -48,7 +48,7 @@ public class ConfigController : ControllerBase
     {
         try
         {
-            // 验证必要的配置项
+            // Validate necessary configuration items
             try
             {
                 var dicomSettings = config.GetProperty("DicomSettings");
@@ -58,29 +58,29 @@ public class ConfigController : ControllerBase
 
                 if (string.IsNullOrEmpty(aeTitle))
                 {
-                    return BadRequest("配置错误：AE Title 不能为空");
+                    return BadRequest("Configuration error: AE Title cannot be empty");
                 }
                 if (storeSCPPort <= 0 || storeSCPPort > 65535)
                 {
-                    return BadRequest("配置错误：StoreSCP 端口必须在 1-65535 之间");
+                    return BadRequest("Configuration error: StoreSCP port must be between 1-65535");
                 }
                 if (string.IsNullOrEmpty(storagePath))
                 {
-                    return BadRequest("配置错误：存储路径不能为空");
+                    return BadRequest("Configuration error: Storage path cannot be empty");
                 }
             }
             catch (KeyNotFoundException)
             {
-                return BadRequest("配置错误：缺少必要的配置项");
+                return BadRequest("Configuration error: Missing necessary configuration items");
             }
             catch (InvalidOperationException)
             {
-                return BadRequest("配置错误：配置项格式不正确");
+                return BadRequest("Configuration error: Configuration item format is incorrect");
             }
 
-            // 保存配置
-            var updatedJson = JsonSerializer.Serialize(config, new JsonSerializerOptions 
-            { 
+            // Save configuration
+            var updatedJson = JsonSerializer.Serialize(config, new JsonSerializerOptions
+            {
                 WriteIndented = true,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
@@ -90,8 +90,8 @@ public class ConfigController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "更新配置文件失败");
-            return StatusCode(500, "更新配置文件失败");
+            _logger.LogError(ex, "Failed to update configuration file");
+            return StatusCode(500, "Failed to update configuration file");
         }
     }
-} 
+}

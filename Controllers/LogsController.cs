@@ -25,7 +25,7 @@ public class LogsController : ControllerBase
                 return Ok(Array.Empty<string>());
             }
 
-            // 获取所有服务的日志类型
+            // Get all log types for services
             var types = new List<string>
             {
                 "QRSCP",
@@ -44,7 +44,7 @@ public class LogsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"获取日志类型失败: {ex.Message}");
+            return StatusCode(500, $"Failed to get log types: {ex.Message}");
         }
     }
 
@@ -56,10 +56,10 @@ public class LogsController : ControllerBase
             var logSettings = _configuration.GetSection("Logging").Get<LogSettings>();
             if (logSettings == null)
             {
-                return NotFound("未找到日志配置");
+                return NotFound("Log configuration not found");
             }
 
-            // 根据类型获取日志路径
+            // Get log path based on type
             string? logPath = type.ToLower() switch
             {
                 "qrscp" => logSettings.Services.QRSCP.LogPath,
@@ -77,7 +77,7 @@ public class LogsController : ControllerBase
 
             if (string.IsNullOrEmpty(logPath))
             {
-                return NotFound("未找到日志路径配置");
+                return NotFound("Log path configuration not found");
             }
 
             if (!Directory.Exists(logPath))
@@ -85,7 +85,7 @@ public class LogsController : ControllerBase
                 return Ok(Array.Empty<object>());
             }
 
-            // 获取日志文件列表
+            // Get list of log files
             var files = Directory.GetFiles(logPath, "*.log")
                 .Select(f => new FileInfo(f))
                 .Select(f => new
@@ -101,7 +101,7 @@ public class LogsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"获取日志文件列表失败: {ex.Message}");
+            return StatusCode(500, $"Failed to get log file list: {ex.Message}");
         }
     }
 
@@ -113,10 +113,10 @@ public class LogsController : ControllerBase
             var logSettings = _configuration.GetSection("Logging").Get<LogSettings>();
             if (logSettings == null)
             {
-                return NotFound("未找到日志配置");
+                return NotFound("Log configuration not found");
             }
 
-            // 根据类型获取日志路径
+            // Get log path based on type
             string? logPath = type.ToLower() switch
             {
                 "qrscp" => logSettings.Services.QRSCP.LogPath,
@@ -134,43 +134,43 @@ public class LogsController : ControllerBase
 
             if (string.IsNullOrEmpty(logPath))
             {
-                return NotFound("未找到日志路径配置");
+                return NotFound("Log path configuration not found");
             }
 
             var filePath = Path.Combine(logPath, filename);
 
-            // 验证文件名是否合法（只允许.log文件）
+            // Validate if the filename is valid (only .log files are allowed)
             if (!filename.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
                 filename.Contains("..") ||
                 !System.IO.File.Exists(filePath))
             {
-                return NotFound("文件不存在或不是有效的日志文件");
+                return NotFound("File does not exist or is not a valid log file");
             }
 
-            // 如果是当天的日志文件，不允许删除
+            // Do not allow deletion of today's log file
             if (filename.Contains(DateTime.Now.ToString("yyyyMMdd")))
             {
-                return BadRequest("当天的日志文件不能删除");
+                return BadRequest("Today's log file cannot be deleted");
             }
 
             try
             {
-                // 尝试重命名文件
+                // Try renaming the file
                 var tempPath = Path.Combine(logPath, $"{Guid.NewGuid()}.tmp");
                 System.IO.File.Move(filePath, tempPath);
 
-                // 如果重命名成功，删除临时文件
+                // If renaming is successful, delete the temporary file
                 System.IO.File.Delete(tempPath);
                 return Ok();
             }
-            catch (IOException ex) when ((ex.HResult & 0x0000FFFF) == 32) // 文件正在使用
+            catch (IOException ex) when ((ex.HResult & 0x0000FFFF) == 32) // File is in use
             {
-                return StatusCode(409, "文件正在使用中，无法删除");
+                return StatusCode(409, "File is in use and cannot be deleted");
             }
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"删除日志文件失败: {ex.Message}");
+            return StatusCode(500, $"Failed to delete log file: {ex.Message}");
         }
     }
 
@@ -182,10 +182,10 @@ public class LogsController : ControllerBase
             var logSettings = _configuration.GetSection("Logging").Get<LogSettings>();
             if (logSettings == null)
             {
-                return NotFound("未找到日志配置");
+                return NotFound("Log configuration not found");
             }
 
-            // 根据类型获取日志路径
+            // Get log path based on type
             string? logPath = type.ToLower() switch
             {
                 "qrscp" => logSettings.Services.QRSCP.LogPath,
@@ -203,20 +203,20 @@ public class LogsController : ControllerBase
 
             if (string.IsNullOrEmpty(logPath))
             {
-                return NotFound("未找到日志路径配置");
+                return NotFound("Log path configuration not found");
             }
 
             var filePath = Path.Combine(logPath, filename);
 
-            // 验证文件名是否合法
+            // Validate if the filename is valid
             if (!filename.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
                 filename.Contains("..") ||
                 !System.IO.File.Exists(filePath))
             {
-                return NotFound("文件不存在或不是有效的日志文件");
+                return NotFound("File does not exist or is not a valid log file");
             }
 
-            // 读取日志内容
+            // Read log content
             var lines = new List<string>();
             using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (var reader = new StreamReader(stream))
@@ -225,7 +225,7 @@ public class LogsController : ControllerBase
                 while ((line = reader.ReadLine()) != null)
                 {
                     lines.Add(line);
-                    // 如果超过最大行数，保留最后的行
+                    // If exceeding max lines, keep only the last lines
                     if (maxLines.HasValue && lines.Count > maxLines.Value)
                     {
                         lines.RemoveAt(0);
@@ -237,7 +237,7 @@ public class LogsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"读取日志内容失败: {ex.Message}");
+            return StatusCode(500, $"Failed to read log content: {ex.Message}");
         }
     }
-} 
+}

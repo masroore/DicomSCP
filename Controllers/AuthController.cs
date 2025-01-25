@@ -25,7 +25,7 @@ public class AuthController : ControllerBase
         var isValid = await _repository.ValidateUserAsync(request.Username, request.Password);
         if (!isValid)
         {
-            return Unauthorized("用户名或密码错误");
+            return Unauthorized("Invalid username or password");
         }
 
         var claims = new List<Claim>
@@ -54,14 +54,14 @@ public class AuthController : ControllerBase
         {
             var username = User.Identity?.Name ?? "unknown";
             await HttpContext.SignOutAsync("CustomAuth");
-            
-            DicomLogger.Information("Api", "[API] 用户登出 - 用户名: {Username}", username);
+
+            DicomLogger.Information("Api", "[API] User logged out - Username: {Username}", username);
             return Ok();
         }
         catch (Exception ex)
         {
-            DicomLogger.Error("Api", ex, "[API] 登出异常");
-            return StatusCode(500, "登出失败");
+            DicomLogger.Error("Api", ex, "[API] Logout exception");
+            return StatusCode(500, "Logout failed");
         }
     }
 
@@ -74,32 +74,32 @@ public class AuthController : ControllerBase
             var username = User.Identity?.Name;
             if (string.IsNullOrEmpty(username))
             {
-                DicomLogger.Warning("Api", "[API] 修改密码失败 - 原因: 未登录");
-                return Unauthorized("未登录");
+                DicomLogger.Warning("Api", "[API] Password change failed - Reason: Not logged in");
+                return Unauthorized("Not logged in");
             }
 
-            // 验证旧密码
+            // Validate old password
             var isValid = await _repository.ValidateUserAsync(username, request.OldPassword);
             if (!isValid)
             {
-                DicomLogger.Warning("Api", "[API] 修改密码失败 - 用户名: {Username}, 原因: 旧密码错误", username);
-                return BadRequest("旧密码错误");
+                DicomLogger.Warning("Api", "[API] Password change failed - Username: {Username}, Reason: Incorrect old password", username);
+                return BadRequest("Incorrect old password");
             }
 
-            // 修改密码
+            // Change password
             await _repository.ChangePasswordAsync(username, request.NewPassword);
 
-            // 清除登录状态
+            // Clear login status
             await HttpContext.SignOutAsync("CustomAuth");
-            
-            DicomLogger.Information("Api", "[API] 修改密码成功 - 用户名: {Username}", username);
+
+            DicomLogger.Information("Api", "[API] Password changed successfully - Username: {Username}", username);
             return Ok();
         }
         catch (Exception ex)
         {
             var username = User.Identity?.Name ?? "unknown";
-            DicomLogger.Error("Api", ex, "[API] 修改密码异常 - 用户名: {Username}", username);
-            return StatusCode(500, "修改密码失败");
+            DicomLogger.Error("Api", ex, "[API] Password change exception - Username: {Username}", username);
+            return StatusCode(500, "Password change failed");
         }
     }
 
@@ -107,7 +107,7 @@ public class AuthController : ControllerBase
     [HttpGet("check-session")]
     public IActionResult CheckSession()
     {
-        // 由于中间件已经处理了认证，这里只需要返回用户信息
+        // Since the middleware has already handled authentication, just return user information here
         return Ok(new { username = User.Identity?.Name });
     }
 }
@@ -122,4 +122,4 @@ public class ChangePasswordRequest
 {
     public string OldPassword { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
-} 
+}

@@ -21,7 +21,7 @@ public class PrintController : Controller
     private readonly DicomSettings _settings;
 
     public PrintController(
-        DicomRepository repository, 
+        DicomRepository repository,
         ILogger<PrintController> logger,
         IWebHostEnvironment environment,
         IConfiguration configuration)
@@ -29,7 +29,7 @@ public class PrintController : Controller
         _repository = repository;
         _logger = logger;
         _environment = environment;
-        _settings = configuration.GetSection("DicomSettings").Get<DicomSettings>() 
+        _settings = configuration.GetSection("DicomSettings").Get<DicomSettings>()
             ?? throw new InvalidOperationException("DicomSettings configuration is missing");
     }
 
@@ -56,8 +56,8 @@ public class PrintController : Controller
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取打印任务时发生错误");
-            return StatusCode(500, new { message = "获取打印任务失败" });
+            _logger.LogError(ex, "Error occurred while fetching print jobs");
+            return StatusCode(500, new { message = "Failed to fetch print jobs" });
         }
     }
 
@@ -69,10 +69,10 @@ public class PrintController : Controller
             var job = await _repository.GetPrintJobAsync(jobId);
             if (job == null)
             {
-                return NotFound(new { message = "打印任务不存在" });
+                return NotFound(new { message = "Print job not found" });
             }
 
-            // 转换为视图模型
+            // Convert to view model
             var jobView = new
             {
                 job.JobId,
@@ -81,12 +81,12 @@ public class PrintController : Controller
                 job.CallingAE,
                 job.Status,
                 job.ErrorMessage,
-                // Film Session 参数
+                // Film Session parameters
                 job.NumberOfCopies,
                 job.PrintPriority,
                 job.MediumType,
                 job.FilmDestination,
-                // Film Box 参数
+                // Film Box parameters
                 job.PrintInColor,
                 job.FilmOrientation,
                 job.FilmSizeID,
@@ -96,15 +96,15 @@ public class PrintController : Controller
                 job.BorderDensity,
                 job.EmptyImageDensity,
                 job.Trim,
-                // 图像信息
+                // Image information
                 job.ImagePath,
-                // 研究信息
+                // Study information
                 job.StudyInstanceUID,
-                // 时间戳
+                // Timestamps
                 job.CreateTime,
                 job.UpdateTime,
-                // 添加图像URL
-                ImageUrl = !string.IsNullOrEmpty(job.ImagePath) ? 
+                // Add image URL
+                ImageUrl = !string.IsNullOrEmpty(job.ImagePath) ?
                     $"/api/print/{job.JobId}/image" : null
             };
 
@@ -112,8 +112,8 @@ public class PrintController : Controller
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取打印任务详情时发生错误");
-            return StatusCode(500, new { message = "获取打印任务详情失败" });
+            _logger.LogError(ex, "Error occurred while fetching print job details");
+            return StatusCode(500, new { message = "Failed to fetch print job details" });
         }
     }
 
@@ -122,14 +122,14 @@ public class PrintController : Controller
     {
         try
         {
-            // 先获取任务信息
+            // First, get the job information
             var job = await _repository.GetPrintJobAsync(jobId);
             if (job == null)
             {
-                return NotFound(new { message = "打印任务不存在" });
+                return NotFound(new { message = "Print job not found" });
             }
 
-            // 如果有图像文件，删除图像
+            // If there is an image file, delete the image
             if (!string.IsNullOrEmpty(job.ImagePath))
             {
                 var fullPath = GetImageFullPath(job);
@@ -139,14 +139,14 @@ public class PrintController : Controller
                 }
             }
 
-            // 删除数据库记录
+            // Delete the database record
             var result = await _repository.DeletePrintJobAsync(jobId);
-            return Ok(new { message = "删除成功" });
+            return Ok(new { message = "Deleted successfully" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "删除打印任务时发生错误");
-            return StatusCode(500, new { message = "删除打印任务失败" });
+            _logger.LogError(ex, "Error occurred while deleting print job");
+            return StatusCode(500, new { message = "Failed to delete print job" });
         }
     }
 
@@ -155,37 +155,37 @@ public class PrintController : Controller
     {
         try
         {
-            // 参数验证
+            // Validate parameters
             if (width.HasValue && width.Value <= 0)
             {
-                return BadRequest(new { message = "宽度必须大于0" });
+                return BadRequest(new { message = "Width must be greater than 0" });
             }
             if (height.HasValue && height.Value <= 0)
             {
-                return BadRequest(new { message = "高度必须大于0" });
+                return BadRequest(new { message = "Height must be greater than 0" });
             }
 
-            // 获取打印任务
+            // Get the print job
             var job = await GetPrintJobAsync(jobId);
             if (job == null)
             {
-                return NotFound(new { message = "打印任务不存在" });
+                return NotFound(new { message = "Print job not found" });
             }
 
-            // 获取图像文件路径
+            // Get the image file path
             var fullPath = GetImageFullPath(job);
             if (!System.IO.File.Exists(fullPath))
             {
-                return NotFound(new { message = $"打印任务的图像文件不存在: {job.ImagePath}" });
+                return NotFound(new { message = $"Image file for print job not found: {job.ImagePath}" });
             }
 
-            // 转换图像并返回，支持指定尺寸
+            // Convert the image and return, supporting specified dimensions
             return await ConvertDicomToImageAsync(fullPath, width, height);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "获取打印任务图像时发生错误: {Message}", ex.Message);
-            return StatusCode(500, new { message = "获取打印任务图像失败" });
+            _logger.LogError(ex, "Error occurred while fetching print job image: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Failed to fetch print job image" });
         }
     }
 
@@ -211,14 +211,14 @@ public class PrintController : Controller
 
     private async Task<IActionResult> ConvertDicomToImageAsync(string dicomFilePath, int? width = null, int? height = null)
     {
-        // 读取DICOM文件
+        // Read the DICOM file
         var dicomFile = await DicomFile.OpenAsync(dicomFilePath);
         var dicomImage = new DicomImage(dicomFile.Dataset);
-        
-        // 获取原始图像数据
+
+        // Get the original image data
         var image = dicomImage.RenderImage();
-        
-        // 计算目标尺寸
+
+        // Calculate the target size
         var (targetWidth, targetHeight) = CalculateTargetSize(
             originalWidth: image.Width,
             originalHeight: image.Height,
@@ -227,30 +227,30 @@ public class PrintController : Controller
 
         using var memoryStream = new MemoryStream();
         using (var outputImage = Image.LoadPixelData<Rgba32>(
-            image.AsBytes(), 
-            image.Width, 
+            image.AsBytes(),
+            image.Width,
             image.Height))
         {
-            // 调整图像大小
+            // Resize the image
             if (targetWidth != image.Width || targetHeight != image.Height)
             {
                 outputImage.Mutate(x => x.Resize(new ResizeOptions
                 {
                     Size = new Size(targetWidth, targetHeight),
-                    Mode = ResizeMode.Max,  // 保持宽高比
-                    Sampler = KnownResamplers.Lanczos3  // 使用Lanczos算法提供更好的质量
+                    Mode = ResizeMode.Max,  // Maintain aspect ratio
+                    Sampler = KnownResamplers.Lanczos3  // Use Lanczos algorithm for better quality
                 }));
             }
 
-            // 配置PNG编码器选项，优化输出大小
+            // Configure PNG encoder options to optimize output size
             var encoder = new PngEncoder
             {
-                CompressionLevel = PngCompressionLevel.BestSpeed,  // 使用最快的压缩方式
-                FilterMethod = PngFilterMethod.None,  // 不使用过滤，提高性能
-                ColorType = PngColorType.Rgb  // 使用RGB格式，不包含Alpha通道
+                CompressionLevel = PngCompressionLevel.BestSpeed,  // Use the fastest compression method
+                FilterMethod = PngFilterMethod.None,  // No filtering to improve performance
+                ColorType = PngColorType.Rgb  // Use RGB format without alpha channel
             };
 
-            // 保存为PNG
+            // Save as PNG
             await outputImage.SaveAsPngAsync(memoryStream, encoder);
         }
 
@@ -259,15 +259,15 @@ public class PrintController : Controller
     }
 
     /// <summary>
-    /// 计算目标图像尺寸
+    /// Calculate the target image size
     /// </summary>
     private (int width, int height) CalculateTargetSize(
-        int originalWidth, 
+        int originalWidth,
         int originalHeight,
         int? requestedWidth,
         int? requestedHeight)
     {
-        // 如果没有指定任何尺寸，返回原始尺寸
+        // If no dimensions are specified, return the original size
         if (!requestedWidth.HasValue && !requestedHeight.HasValue)
         {
             return (originalWidth, originalHeight);
@@ -275,21 +275,21 @@ public class PrintController : Controller
 
         float originalRatio = (float)originalWidth / originalHeight;
 
-        // 同时指定宽度和高度
+        // Both width and height specified
         if (requestedWidth.HasValue && requestedHeight.HasValue)
         {
             return (requestedWidth.Value, requestedHeight.Value);
         }
 
-        // 只指定宽度
+        // Only width specified
         if (requestedWidth.HasValue)
         {
             int height = (int)(requestedWidth.Value / originalRatio);
             return (requestedWidth.Value, height);
         }
 
-        // 只指定高度
+        // Only height specified
         int width = (int)(requestedHeight!.Value * originalRatio);
         return (width, requestedHeight.Value);
     }
-} 
+}
