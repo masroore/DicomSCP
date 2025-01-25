@@ -14,14 +14,14 @@ using Microsoft.AspNetCore.Rewrite;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 配置控制台（跨平台支持）
+// Configure console (cross-platform support)
 if (Environment.UserInteractive)
 {
     try
     {
         if (OperatingSystem.IsWindows())
         {
-            // Windows平台禁用快速编辑模式
+            // Disable quick edit mode on Windows
             var handle = ConsoleHelper.GetStdHandle(-10);
             if (handle != IntPtr.Zero && ConsoleHelper.GetConsoleMode(handle, out uint mode))
             {
@@ -31,23 +31,23 @@ if (Environment.UserInteractive)
         }
         else
         {
-            // Unix/Linux/MacOS 平台设置
+            // Unix/Linux/MacOS settings
             Console.TreatControlCAsInput = true;
         }
     }
     catch
     {
-        // 忽略控制台配置错误
+        // Ignore console configuration errors
     }
 }
 
-// 注册编码提供程序
+// Register encoding provider
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-// 注册 DICOM 编码
+// Register DICOM encoding
 DicomEncoding.RegisterEncoding("GB2312", "GB2312");
 
-// 配置 Kestrel
+// Configure Kestrel
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(2);
@@ -57,32 +57,32 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 52428800; // 50MB
 });
 
-// 取配置
-var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>() 
+// Get configuration
+var settings = builder.Configuration.GetSection("DicomSettings").Get<DicomSettings>()
     ?? new DicomSettings();
-// 获取 Swagger 配置
+// Get Swagger configuration
 var swaggerSettings = builder.Configuration.GetSection("Swagger").Get<SwaggerSettings>()
     ?? new SwaggerSettings();
 
-// 配置日志
+// Configure logging
 var logSettings = builder.Configuration
     .GetSection("Logging")
     .Get<LogSettings>() ?? new LogSettings();
 
-// 初始化DICOM日志
+// Initialize DICOM logging
 DicomLogger.Initialize(logSettings);
 
-// 初始化数据库日志
+// Initialize database logging
 BaseRepository.ConfigureLogging(logSettings);
 
-// 初始化API日志
+// Initialize API logging
 ApiLoggingMiddleware.ConfigureLogging(logSettings);
 
-// 配置框架日志
+// Configure framework logging
 var logConfig = new LoggerConfiguration()
-    .MinimumLevel.Warning()  // 只记录警告以上的日志
-    .Filter.ByExcluding(e => 
-        e.Properties.ContainsKey("SourceContext") && 
+    .MinimumLevel.Warning()  // Log only warnings and above
+    .Filter.ByExcluding(e =>
+        e.Properties.ContainsKey("SourceContext") &&
         e.Properties["SourceContext"].ToString().Contains("FellowOakDicom.Network") &&
         (e.MessageTemplate.Text.Contains("No accepted presentation context found") ||
          e.MessageTemplate.Text.Contains("Study Root Query/Retrieve Information Model - FIND") ||
@@ -104,21 +104,21 @@ var logConfig = new LoggerConfiguration()
 Log.Logger = logConfig.CreateLogger();
 builder.Host.UseSerilog();
 
-// 添加日志服务
+// Add logging services
 builder.Services.AddLogging(loggingBuilder =>
     loggingBuilder.AddSerilog(dispose: true));
 
-// 添加服务
+// Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// 配置 Swagger
+// Configure Swagger
 if (swaggerSettings.Enabled)
 {
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc(swaggerSettings.Version, new OpenApiInfo 
-        { 
+        c.SwaggerDoc(swaggerSettings.Version, new OpenApiInfo
+        {
             Title = swaggerSettings.Title,
             Version = swaggerSettings.Version,
             Description = swaggerSettings.Description
@@ -126,7 +126,7 @@ if (swaggerSettings.Enabled)
     });
 }
 
-// DICOM服务注册
+// Register DICOM services
 builder.Services
     .AddFellowOakDicom()
     .AddTranscoderManager<NativeTranscoderManager>();
@@ -137,11 +137,11 @@ builder.Services.AddSingleton<WorklistRepository>();
 builder.Services.AddSingleton<IStoreSCU, StoreSCU>();
 builder.Services.AddSingleton<IPrintSCU, PrintSCU>();
 
-// 确保配置服务正确注册
+// Ensure configuration services are registered correctly
 builder.Services.Configure<DicomSettings>(builder.Configuration.GetSection("DicomSettings"));
 builder.Services.Configure<QueryRetrieveConfig>(builder.Configuration.GetSection("QueryRetrieveConfig"));
 builder.Services.AddScoped<IQueryRetrieveSCU, QueryRetrieveSCU>();
-// 注册 Swagger 配置
+// Register Swagger configuration
 builder.Services.Configure<SwaggerSettings>(builder.Configuration.GetSection("Swagger"));
 
 builder.Services.AddAuthentication("CustomAuth")
@@ -149,18 +149,18 @@ builder.Services.AddAuthentication("CustomAuth")
     {
         options.Cookie.Name = "auth";
         options.LoginPath = "/login.html";
-        // cookies过期时间
+        // Cookie expiration time
         options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
-        options.SlidingExpiration = false;  // 禁用默认的滑动过期
+        options.SlidingExpiration = false;  // Disable default sliding expiration
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.Path = "/";
-        //启用最大有效期后下发的是请求的时间戳，不打开就是请求的时间戳+30分钟。
-        //如果设置的大于30分钟，则每次请求都会更新过期时间，导致过期时间不准确。
-        //options.Cookie.MaxAge = TimeSpan.FromHours(12);
+        // Enable max age, otherwise it will be the request timestamp + 30 minutes.
+        // If set to more than 30 minutes, each request will update the expiration time, causing inaccurate expiration time.
+        // options.Cookie.MaxAge = TimeSpan.FromHours(12);
 
-        // 添加验证票据过期处理
+        // Add validation ticket expiration handling
         options.Events = new CookieAuthenticationEvents
         {
             OnRedirectToLogin = context =>
@@ -173,10 +173,10 @@ builder.Services.AddAuthentication("CustomAuth")
                 context.Response.Redirect(context.RedirectUri);
                 return Task.CompletedTask;
             },
-            // 修改验证处理
+            // Modify validation handling
             OnValidatePrincipal = async context =>
             {
-                // 检查是否已过期
+                // Check if expired
                 if (context.Properties?.ExpiresUtc <= DateTimeOffset.UtcNow)
                 {
                     context.RejectPrincipal();
@@ -184,8 +184,8 @@ builder.Services.AddAuthentication("CustomAuth")
                     return;
                 }
 
-                // 如果不是 status 接口，手动更新过期时间
-                if (!context.HttpContext.Request.Path.StartsWithSegments("/api/dicom/status") && 
+                // If not status endpoint, manually update expiration time
+                if (!context.HttpContext.Request.Path.StartsWithSegments("/api/dicom/status") &&
                     context.Properties is not null)
                 {
                     context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.Add(options.ExpireTimeSpan);
@@ -195,23 +195,23 @@ builder.Services.AddAuthentication("CustomAuth")
         };
     });
 
-// 添加授权但不设置默认策略
+// Add authorization without setting default policy
 builder.Services.AddAuthorization();
 
-// 配置转发头
+// Configure forwarded headers
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
                               Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
-    // 清除默认网络，否则会因为安全检查而被忽略
+    // Clear default networks, otherwise they will be ignored due to security checks
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
-// 在 ConfigureServices 部分添加
+// Add CORS policy
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", 
+    options.AddPolicy("AllowAll",
         builder =>
         {
             builder.AllowAnyOrigin()
@@ -220,48 +220,48 @@ builder.Services.AddCors(options =>
         });
 });
 
-// 配置 URL 重写规则
+// Configure URL rewrite rules
 var rewriteOptions = new RewriteOptions()
-    //将dicomviewer路径下非直接文件的访问重写到dicomviewer/index.html上，解决spa单应用路由问题
+    // Rewrite non-direct file access under dicomviewer path to dicomviewer/index.html to solve SPA single application routing issue
     .AddRewrite(
-        @"^dicomviewer/(?!.*\.(js|css|png|jpe?g|gif|ico|svg|woff2?|ttf|otf|eot|map|json|mp[34]|webm|mkv|avi|mov|pdf|docx?|xlsx?|pptx?|zip|rar|tar|gz|7z|ts|sh|bat|py|xml|ya?ml|ini|wasm|aac)).*$", 
-        "/dicomviewer/index.html", 
+        @"^dicomviewer/(?!.*\.(js|css|png|jpe?g|gif|ico|svg|woff2?|ttf|otf|eot|map|json|mp[34]|webm|mkv|avi|mov|pdf|docx?|xlsx?|pptx?|zip|rar|tar|gz|7z|ts|sh|bat|py|xml|ya?ml|ini|wasm|aac)).*$",
+        "/dicomviewer/index.html",
         skipRemainingRules: true
     );
 
 var app = builder.Build();
 
-// 初始化服务提供者
+// Initialize service provider
 DicomServiceProvider.Initialize(app.Services);
 
-// 获取服务
+// Get services
 var dicomRepository = app.Services.GetRequiredService<DicomRepository>();
 
-// 配置 DICOM
+// Configure DICOM
 DicomSetupBuilder.UseServiceProvider(app.Services);
 
 CStoreSCP.Configure(settings, dicomRepository);
 
-// 启动 DICOM 服务器
+// Start DICOM server
 var dicomServer = app.Services.GetRequiredService<DicomServer>();
 await dicomServer.StartAsync();
 app.Lifetime.ApplicationStopping.Register(() => dicomServer.StopAsync().GetAwaiter().GetResult());
 
-// 优化线程池 - 基于CPU核心数
+// Optimize thread pool - based on CPU core count
 int processorCount = Environment.ProcessorCount;
-ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // 最小线程数
-ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // 最大线程数
+ThreadPool.SetMinThreads(processorCount * 4, processorCount * 2);    // Minimum thread count
+ThreadPool.SetMaxThreads(processorCount * 8, processorCount * 4);    // Maximum thread count
 
-// 1. 转发头中间件（最先）
+// 1. Forwarded headers middleware (first)
 app.UseForwardedHeaders();
 
-// 2. API 日志中间件
+// 2. API logging middleware
 app.UseMiddleware<ApiLoggingMiddleware>();
 
-// 3. URL 重写（在静态文件之前）
+// 3. URL rewrite (before static files)
 app.UseRewriter(rewriteOptions);
 
-// 4. 静态文件处理
+// 4. Static file handling
 app.UseDefaultFiles(new DefaultFilesOptions
 {
     DefaultFileNames = new List<string> { "index.html", "login.html" }
@@ -275,33 +275,33 @@ if (swaggerSettings.Enabled)
     app.UseSwaggerUI();
 }
 
-// 6. 路由和认证
+// 6. Routing and authentication
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseCors("AllowAll");  // CORS 应该在这里
+app.UseCors("AllowAll");  // CORS should be here
 
-// 7. API 认证中间件
+// 7. API authentication middleware
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value?.ToLower();
-    
-    // 只检查 API 路径的认证
-    if (path?.StartsWith("/api/") == true && 
-        !path.StartsWith("/api/auth/login") && 
+
+    // Check authentication only for API paths
+    if (path?.StartsWith("/api/") == true &&
+        !path.StartsWith("/api/auth/login") &&
         !context.User.Identity?.IsAuthenticated == true)
     {
         context.Response.StatusCode = 401;
         return;
     }
-    
+
     await next();
 });
 
-// 8. 控制器
+// 8. Controllers
 app.MapControllers();
 
-// 9. 根路径处理
+// 9. Root path handling
 app.MapGet("/", context =>
 {
     if (!context.User.Identity?.IsAuthenticated == true)
@@ -315,9 +315,9 @@ app.MapGet("/", context =>
     return Task.CompletedTask;
 });
 
-app.Run(); 
+app.Run();
 
-// Windows控制台API定义
+// Windows console API definitions
 internal static class ConsoleHelper
 {
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -328,4 +328,4 @@ internal static class ConsoleHelper
 
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
-} 
+}
